@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -11,6 +13,8 @@ import 'core/hardware/scanner_service.dart';
 import 'core/hardware/sunmi_printer_service.dart';
 import 'core/hardware/sunmi_scanner_service.dart';
 import 'core/supabase/supabase_service.dart';
+import 'core/sync/reachability_service.dart';
+import 'core/sync/sync_service.dart';
 
 /// The [ScannerService] appropriate for this device, chosen once at app
 /// start based on [HardwareDetector] and injected via [ProviderScope]
@@ -35,16 +39,35 @@ Future<void> main() async {
 
   final isSunmi = HardwareDetector.isSunmiDevice();
 
+  final container = ProviderContainer(
+    overrides: [
+      scannerServiceProvider.overrideWithValue(
+        isSunmi ? SunmiScannerService() : CameraScannerService(),
+      ),
+      printerServiceProvider.overrideWithValue(
+        isSunmi ? SunmiPrinterService() : NoopPrinterService(),
+      ),
+    ],
+  );
+
+  final syncService = container.read(syncServiceProvider);
+
+  final reachabilityService = ReachabilityService(
+    supabaseUrl: SupabaseService.url,
+    supabaseAnonKey: SupabaseService.anonKey,
+  );
+  await reachabilityService.init();
+  reachabilityService.isReachable.listen((reachable) {
+    if (reachable) {
+      unawaited(syncService.sync());
+    }
+    // When unreachable, do nothing - the next confirmed-reachable ping
+    // triggers the next sync attempt.
+  });
+
   runApp(
-    ProviderScope(
-      overrides: [
-        scannerServiceProvider.overrideWithValue(
-          isSunmi ? SunmiScannerService() : CameraScannerService(),
-        ),
-        printerServiceProvider.overrideWithValue(
-          isSunmi ? SunmiPrinterService() : NoopPrinterService(),
-        ),
-      ],
+    UncontrolledProviderScope(
+      container: container,
       child: const PocketTillApp(),
     ),
   );
