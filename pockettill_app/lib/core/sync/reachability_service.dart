@@ -8,21 +8,34 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 ///
 /// Most stores run a hotspot without mobile data, so `connectivity_plus`
 /// reporting a connection does not mean the internet - or Supabase - is
-/// actually reachable. A network change only triggers a health-check ping;
-/// [isReachable] only ever emits `true` once that ping returns `200 OK`.
+/// actually reachable. A network change only triggers a health-check ping to
+/// `{SUPABASE_URL}/rest/v1/`; [isReachable] only ever emits `true` once that
+/// ping returns `200 OK`. While network is present, the ping repeats every
+/// 30 seconds; it stops entirely when the network drops.
 class ReachabilityService {
-  ReachabilityService({required String healthCheckUrl})
-    : _healthCheckUri = Uri.parse(healthCheckUrl);
+  ReachabilityService({
+    required String supabaseUrl,
+    required String supabaseAnonKey,
+  }) : _healthCheckUri = Uri.parse('$supabaseUrl/rest/v1/'),
+       _apiKey = supabaseAnonKey;
+
+  static const _pingInterval = Duration(seconds: 30);
 
   final Uri _healthCheckUri;
+  final String _apiKey;
   final Connectivity _connectivity = Connectivity();
   final StreamController<bool> _controller = StreamController<bool>.broadcast();
   StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
+  Timer? _pingTimer;
+  bool _currentlyReachable = false;
 
   /// Emits `true` only after a confirmed 200 OK from the Supabase health
   /// endpoint; emits `false` when there is no network signal or the ping
   /// fails.
   Stream<bool> get isReachable => _controller.stream;
+
+  /// The most recently determined reachability state.
+  bool get currentlyReachable => _currentlyReachable;
 
   /// Starts listening for connectivity changes and runs an initial check.
   Future<void> init() async {
@@ -36,31 +49,46 @@ class ReachabilityService {
     final hasNetworkSignal = results.any(
       (result) => result != ConnectivityResult.none,
     );
+
     if (!hasNetworkSignal) {
-      _controller.add(false);
+      _pingTimer?.cancel();
+      _pingTimer = null;
+      _setReachable(false);
       return;
     }
+
     unawaited(_pingHealthEndpoint());
+    _pingTimer ??= Timer.periodic(
+      _pingInterval,
+      (_) => unawaited(_pingHealthEndpoint()),
+    );
   }
 
   Future<void> _pingHealthEndpoint() async {
     final client = HttpClient()..connectionTimeout = const Duration(seconds: 5);
     try {
       final request = await client.getUrl(_healthCheckUri);
+      request.headers.set('apikey', _apiKey);
       final response = await request.close().timeout(
         const Duration(seconds: 5),
       );
       await response.drain<void>();
-      _controller.add(response.statusCode == 200);
+      _setReachable(response.statusCode == 200);
     } catch (_) {
-      _controller.add(false);
+      _setReachable(false);
     } finally {
       client.close(force: true);
     }
   }
 
+  void _setReachable(bool reachable) {
+    _currentlyReachable = reachable;
+    _controller.add(reachable);
+  }
+
   /// Releases the connectivity subscription and closes [isReachable].
   Future<void> dispose() async {
+    _pingTimer?.cancel();
     await _connectivitySubscription?.cancel();
     await _controller.close();
   }
