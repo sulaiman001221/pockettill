@@ -1,0 +1,36 @@
+name: pockettill_app
+description: "PocketTill - offline-first POS app for South African spaza shops."
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.12.2
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  flutter_riverpod: ^2.6.1
+  riverpod_annotation: ^2.6.1
+  isar: ^3.1.0+1
+  isar_flutter_libs: ^3.1.0+1
+  supabase_flutter: ^2.16.0
+  connectivity_plus: ^7.2.0
+  sunmi_scanner: ^0.0.7
+  sunmi_printer_plus: ^4.1.1
+  mobile_scanner: ^7.2.0
+  device_info_plus: ^13.2.0
+  uuid: ^4.5.3
+  intl: ^0.20.3
+  path_provider: ^2.1.6
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+  isar_generator: ^3.1.0+1
+  build_runner: ^2.4.13
+
+flutter:
+  uses-material-design: true
