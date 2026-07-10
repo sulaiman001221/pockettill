@@ -1,14 +1,18 @@
 import 'package:flutter/material.dart';
 
-import '../analytics/analytics_screen.dart';
-import '../credit/credit_screen.dart';
-import '../history/history_screen.dart';
+import '../../shared/theme/app_theme.dart';
+import '../../shared/widgets/pockettill_app_bar.dart';
 import '../sales/sales_screen.dart';
-import '../settings/settings_screen.dart';
-import '../stock/stock_screen.dart';
+import 'app_drawer.dart';
 
-/// The app's main navigation shell: a bottom-tab bar over the 5 primary
-/// screens, plus a settings icon that pushes [SettingsScreen] on top.
+/// The app's root screen - always the base of the navigation stack. Shows
+/// the drawer navigation shell wrapping [SalesScreen].
+///
+/// Owns the drawer's active-route tracking itself (rather than leaving it in
+/// [AppDrawer]'s own state): Flutter's [Drawer] disposes its child's State
+/// once its close animation finishes, so anything stored there is lost the
+/// next time the drawer opens. [ShellScreen] persists for the app's whole
+/// lifetime, so state lives here instead.
 class ShellScreen extends StatefulWidget {
   const ShellScreen({super.key});
 
@@ -17,66 +21,42 @@ class ShellScreen extends StatefulWidget {
 }
 
 class _ShellScreenState extends State<ShellScreen> {
-  int _selectedIndex = 0;
+  String _activeRoute = 'stock';
 
-  static const _tabs = [
-    _ShellTab(label: 'Sales', icon: Icons.point_of_sale, screen: SalesScreen()),
-    _ShellTab(label: 'Stock', icon: Icons.inventory_2, screen: StockScreen()),
-    _ShellTab(label: 'Credit', icon: Icons.people, screen: CreditScreen()),
-    _ShellTab(
-      label: 'History',
-      icon: Icons.receipt_long,
-      screen: HistoryScreen(),
-    ),
-    _ShellTab(
-      label: 'Analytics',
-      icon: Icons.bar_chart,
-      screen: AnalyticsScreen(),
-    ),
-  ];
+  void _navigateTo(String route, Widget screen) {
+    setState(() => _activeRoute = route);
+    Navigator.of(context).pop();
+    Navigator.of(context).push(MaterialPageRoute(builder: (_) => screen));
+  }
 
-  void _openSettings() {
-    Navigator.of(
-      context,
-    ).push(MaterialPageRoute(builder: (_) => const SettingsScreen()));
+  /// Settings and Logout never track as the active drawer item, so this
+  /// leaves [_activeRoute] untouched.
+  void _navigateWithoutTrackingActive(Widget screen) {
+    Navigator.of(context).pop();
+    Navigator.of(context).push(MaterialPageRoute(builder: (_) => screen));
+  }
+
+  void _goHome() {
+    Navigator.of(context).pop();
+    Navigator.of(context).popUntil((route) => route.isFirst);
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('PocketTill'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.settings),
-            onPressed: _openSettings,
-          ),
-        ],
+      appBar: const CustomAppBar(showMenuIcon: true),
+      drawer: AppDrawer(
+        activeRoute: _activeRoute,
+        onNavigate: _navigateTo,
+        onNavigateWithoutTrackingActive: _navigateWithoutTrackingActive,
+        onGoHome: _goHome,
       ),
-      body: IndexedStack(
-        index: _selectedIndex,
-        children: [for (final tab in _tabs) tab.screen],
-      ),
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _selectedIndex,
-        onTap: (index) => setState(() => _selectedIndex = index),
-        items: [
-          for (final tab in _tabs)
-            BottomNavigationBarItem(icon: Icon(tab.icon), label: tab.label),
-        ],
-      ),
+      backgroundColor: AppTheme.background,
+      // SalesScreen's fixed-height sections (scan card, search bar, checkout
+      // bar) don't leave room to shrink when the keyboard appears; avoid
+      // resizing the body for it rather than overflowing.
+      resizeToAvoidBottomInset: false,
+      body: const SalesScreen(),
     );
   }
-}
-
-class _ShellTab {
-  const _ShellTab({
-    required this.label,
-    required this.icon,
-    required this.screen,
-  });
-
-  final String label;
-  final IconData icon;
-  final Widget screen;
 }

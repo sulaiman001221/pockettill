@@ -4,11 +4,54 @@ import 'package:flutter/material.dart';
 class AppTheme {
   AppTheme._();
 
-  static const Color primary = Color(0xFF5170FF);
-  static const Color background = Color(0xFFF7FAFC);
+  // Brand colours
+  static const Color primary = Color(0xFF5170FF); // drawer active states, badges, scan button
+  static const Color background = Color(0xFFF4F7FA);
   static const Color surface = Color(0xFFFFFFFF);
-  static const Color text = Color(0xFF1A202C);
-  static const Color subtleText = Color(0xFF4A5568);
+  static const Color textPrimary = Color(0xFF1A1C1E);
+  static const Color textSecondary = Color(0xFF787B86);
+  static const Color iconBorder = Color(0xFF6B7280);
+  static const Color actionDark = Color(0xFF374151);
+  static const Color checkoutButtonBackground = Color(0xFFD1D5DB);
+  static const Color searchPlaceholder = Color(0xFF9CA3AF);
+  static const Color logoutRed = Color(0xFFE53E3E);
+  static const Color syncGreen = Color(0xFF38A169);
+  static const Color syncAmber = Color(0xFFD69E2E);
+  static const Color syncGrey = Color(0xFFA0AEC0);
+  static const Color divider = Color(0xFFE2E8F0);
+  static const Color drawerActiveBackground = Color(0xFFEEF1FF);
+
+  // Typography
+  static const TextStyle mainTitle = TextStyle(
+    fontSize: 22,
+    fontWeight: FontWeight.w600,
+    color: textPrimary,
+  );
+  static const TextStyle bodySubtitle = TextStyle(
+    fontSize: 15,
+    fontWeight: FontWeight.normal,
+    color: textSecondary,
+  );
+  static const TextStyle searchPlaceholderStyle = TextStyle(
+    fontSize: 16,
+    fontWeight: FontWeight.normal,
+    color: searchPlaceholder,
+  );
+  static const TextStyle buttonText = TextStyle(
+    fontSize: 18,
+    fontWeight: FontWeight.bold,
+    color: Colors.white,
+  );
+  static const TextStyle totalLabel = TextStyle(
+    fontSize: 16,
+    fontWeight: FontWeight.normal,
+    color: iconBorder,
+  );
+  static const TextStyle totalValue = TextStyle(
+    fontSize: 24,
+    fontWeight: FontWeight.bold,
+    color: textPrimary,
+  );
 
   static ThemeData get light {
     final colorScheme = ColorScheme.fromSeed(
@@ -23,28 +66,20 @@ class AppTheme {
       colorScheme: colorScheme,
       scaffoldBackgroundColor: background,
       textTheme: const TextTheme(
-        bodyLarge: TextStyle(color: text),
-        bodyMedium: TextStyle(color: text),
-        bodySmall: TextStyle(color: subtleText),
+        bodyLarge: TextStyle(color: textPrimary),
+        bodyMedium: TextStyle(color: textPrimary),
+        bodySmall: TextStyle(color: textSecondary),
       ),
       appBarTheme: const AppBarTheme(
-        backgroundColor: primary,
-        foregroundColor: Colors.white,
+        backgroundColor: surface,
+        foregroundColor: textPrimary,
         elevation: 0,
         titleTextStyle: TextStyle(
-          color: Colors.white,
+          color: textPrimary,
           fontWeight: FontWeight.bold,
           fontSize: 20,
         ),
-        iconTheme: IconThemeData(color: Colors.white),
-      ),
-      bottomNavigationBarTheme: const BottomNavigationBarThemeData(
-        type: BottomNavigationBarType.fixed,
-        backgroundColor: surface,
-        selectedItemColor: primary,
-        unselectedItemColor: subtleText,
-        showSelectedLabels: true,
-        showUnselectedLabels: false,
+        iconTheme: IconThemeData(color: textPrimary),
       ),
       cardTheme: CardThemeData(
         color: surface,
@@ -73,6 +108,7 @@ class AppTheme {
           borderSide: const BorderSide(color: primary),
         ),
       ),
+      dividerTheme: const DividerThemeData(color: divider, thickness: 1),
     );
   }
 }
