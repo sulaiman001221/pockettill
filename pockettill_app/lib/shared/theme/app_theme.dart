@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 class AppTheme {
   AppTheme._();
 
-  static const Color primary = Color(0xFF2B6CB0);
+  static const Color primary = Color(0xFF5B6FE0);
   static const Color background = Color(0xFFF7FAFC);
   static const Color surface = Color(0xFFFFFFFF);
   static const Color text = Color(0xFF1A202C);
@@ -28,9 +28,50 @@ class AppTheme {
         bodySmall: TextStyle(color: subtleText),
       ),
       appBarTheme: const AppBarTheme(
-        backgroundColor: surface,
-        foregroundColor: text,
+        backgroundColor: primary,
+        foregroundColor: Colors.white,
         elevation: 0,
+        titleTextStyle: TextStyle(
+          color: Colors.white,
+          fontWeight: FontWeight.bold,
+          fontSize: 20,
+        ),
+        iconTheme: IconThemeData(color: Colors.white),
+      ),
+      bottomNavigationBarTheme: const BottomNavigationBarThemeData(
+        type: BottomNavigationBarType.fixed,
+        backgroundColor: surface,
+        selectedItemColor: primary,
+        unselectedItemColor: subtleText,
+        showSelectedLabels: true,
+        showUnselectedLabels: false,
+      ),
+      cardTheme: CardThemeData(
+        color: surface,
+        elevation: 2,
+        shadowColor: Colors.black.withValues(alpha: 0.1),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+        ),
+      ),
+      elevatedButtonTheme: ElevatedButtonThemeData(
+        style: ElevatedButton.styleFrom(
+          backgroundColor: primary,
+          foregroundColor: Colors.white,
+          minimumSize: const Size.fromHeight(48),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
+          ),
+        ),
+      ),
+      inputDecorationTheme: InputDecorationTheme(
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: const BorderSide(color: primary),
+        ),
       ),
     );
   }
