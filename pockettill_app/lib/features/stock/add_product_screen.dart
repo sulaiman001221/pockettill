@@ -15,9 +15,13 @@ const List<String> _categoryOptions = ['Drinks', 'Snacks', 'Groceries', 'Other']
 /// Add/edit product form. Create mode when [existingProduct] is null, edit
 /// mode otherwise. All writes go through [productRepositoryProvider].
 class AddProductScreen extends ConsumerStatefulWidget {
-  const AddProductScreen({super.key, this.existingProduct});
+  const AddProductScreen({super.key, this.existingProduct, this.initialBarcode});
 
   final Product? existingProduct;
+
+  /// Pre-fills the barcode field in create mode - e.g. when arriving here
+  /// from a sale-screen scan that didn't match any existing product.
+  final String? initialBarcode;
 
   @override
   ConsumerState<AddProductScreen> createState() => _AddProductScreenState();
@@ -55,6 +59,9 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
       if (existing.category != null) {
         _applyCategory(existing.category!);
       }
+    } else if (widget.initialBarcode != null &&
+        widget.initialBarcode!.isNotEmpty) {
+      _barcodeController.text = widget.initialBarcode!;
     }
 
     for (final controller in [
@@ -67,6 +74,12 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
       _customCategoryController,
     ]) {
       controller.addListener(_onFormChanged);
+    }
+
+    if (existing == null &&
+        widget.initialBarcode != null &&
+        widget.initialBarcode!.isNotEmpty) {
+      _lookupCatalogue(widget.initialBarcode!);
     }
   }
 

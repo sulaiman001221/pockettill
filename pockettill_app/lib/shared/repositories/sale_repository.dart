@@ -3,32 +3,20 @@ import 'dart:convert';
 import 'package:isar/isar.dart';
 import 'package:uuid/uuid.dart';
 
-import '../../core/sync/event_queue.dart';
+import '../models/credit_customer.dart';
+import '../models/credit_transaction.dart';
 import '../models/product.dart';
 import '../models/sale.dart';
 import '../models/sale_item.dart';
 import '../models/sync_event.dart';
-import 'credit_repository.dart';
-import 'product_repository.dart';
 
 /// Business logic for sales and sale line items, plus the daily/weekly
 /// analytics derived from them. Sits between the UI and Isar - screens never
 /// touch Isar directly.
 class SaleRepository {
-  SaleRepository({
-    required Isar isar,
-    required EventQueue eventQueue,
-    required ProductRepository productRepository,
-    required CreditRepository creditRepository,
-  }) : _isar = isar,
-       _eventQueue = eventQueue,
-       _productRepository = productRepository,
-       _creditRepository = creditRepository;
+  SaleRepository({required Isar isar}) : _isar = isar;
 
   final Isar _isar;
-  final EventQueue _eventQueue;
-  final ProductRepository _productRepository;
-  final CreditRepository _creditRepository;
   final _uuid = const Uuid();
 
   /// Sales newest first, paginated.
@@ -89,6 +77,10 @@ class SaleRepository {
     String? customerId,
     required String deviceId,
   }) async {
+    if (paymentType == 'credit' && customerId == null) {
+      throw ArgumentError('customerId is required for credit sales.');
+    }
+
     final saleUuid = _uuid.v4();
     final now = DateTime.now();
 
@@ -119,6 +111,29 @@ class SaleRepository {
         ..subtotal = product.price * quantity;
     }).toList();
 
+    final events = <SyncEvent>[
+      _buildEvent(
+        entityType: 'sale',
+        entityUuid: saleUuid,
+        operation: 'create',
+        deviceId: deviceId,
+        payload: _saleToPayload(sale),
+      ),
+      for (final item in saleItems)
+        _buildEvent(
+          entityType: 'sale_item',
+          entityUuid: '${item.saleUuid}:${item.productUuid}',
+          operation: 'create',
+          deviceId: deviceId,
+          payload: _saleItemToPayload(item),
+        ),
+    ];
+
+    // Isar doesn't support nested write transactions, so every write this
+    // sale needs - the sale, its line items, stock adjustments, the credit
+    // ledger, and the sync events - happens directly here in one
+    // transaction, rather than through repository methods that would each
+    // try to open their own.
     await _isar.writeTxn(() async {
       await _isar.sales.put(sale);
       await _isar.saleItems.putAll(saleItems);
@@ -126,41 +141,45 @@ class SaleRepository {
       for (final item in cartItems) {
         final product = item['product'] as Product;
         final quantity = item['quantity'] as int;
-        await _productRepository.adjustStock(product.uuid, -quantity);
+        product.stock -= quantity;
+        product.updatedAt = now;
+        await _isar.products.put(product);
       }
 
       if (paymentType == 'credit') {
-        if (customerId == null) {
-          throw ArgumentError('customerId is required for credit sales.');
+        final customer = await _isar.creditCustomers
+            .filter()
+            .uuidEqualTo(customerId!)
+            .findFirst();
+        if (customer == null) {
+          throw StateError('Credit customer $customerId not found.');
         }
-        await _creditRepository.addPurchase(
-          customerUuid: customerId,
-          amount: total,
-          saleUuid: saleUuid,
-        );
-      }
 
-      await _eventQueue.enqueue(
-        _buildEvent(
-          entityType: 'sale',
-          entityUuid: saleUuid,
-          operation: 'create',
-          deviceId: deviceId,
-          payload: _saleToPayload(sale),
-        ),
-      );
+        customer.balance += total;
+        customer.lastActivityAt = now;
+        await _isar.creditCustomers.put(customer);
 
-      for (final item in saleItems) {
-        await _eventQueue.enqueue(
+        final transaction = CreditTransaction()
+          ..uuid = _uuid.v4()
+          ..customerId = customerId
+          ..amount = total
+          ..type = 'purchase'
+          ..saleUuid = saleUuid
+          ..createdAt = now;
+        await _isar.creditTransactions.put(transaction);
+
+        events.add(
           _buildEvent(
-            entityType: 'sale_item',
-            entityUuid: '${item.saleUuid}:${item.productUuid}',
+            entityType: 'credit_tx',
+            entityUuid: transaction.uuid,
             operation: 'create',
             deviceId: deviceId,
-            payload: _saleItemToPayload(item),
+            payload: _creditTransactionToPayload(transaction),
           ),
         );
       }
+
+      await _isar.syncEvents.putAll(events);
     });
   }
 
@@ -371,5 +390,17 @@ class SaleRepository {
     'unitPrice': item.unitPrice,
     'quantity': item.quantity,
     'subtotal': item.subtotal,
+  };
+
+  Map<String, dynamic> _creditTransactionToPayload(
+    CreditTransaction transaction,
+  ) => {
+    'uuid': transaction.uuid,
+    'customerId': transaction.customerId,
+    'amount': transaction.amount,
+    'type': transaction.type,
+    'saleUuid': transaction.saleUuid,
+    'note': transaction.note,
+    'createdAt': transaction.createdAt.toIso8601String(),
   };
 }

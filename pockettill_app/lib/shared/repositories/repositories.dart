@@ -37,12 +37,7 @@ final creditRepositoryProvider = Provider<CreditRepository>((ref) {
 
 /// [SaleRepository] singleton.
 final saleRepositoryProvider = Provider<SaleRepository>((ref) {
-  return SaleRepository(
-    isar: ref.watch(isarServiceProvider),
-    eventQueue: ref.watch(eventQueueProvider),
-    productRepository: ref.watch(productRepositoryProvider),
-    creditRepository: ref.watch(creditRepositoryProvider),
-  );
+  return SaleRepository(isar: ref.watch(isarServiceProvider));
 });
 
 /// [StoreConfigRepository] singleton.
