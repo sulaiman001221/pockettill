@@ -23,7 +23,7 @@ class AppDrawer extends StatelessWidget {
     required this.onGoHome,
   });
 
-  /// The currently active route ('stock', 'history', 'customers',
+  /// The currently active route ('sales', 'stock', 'history', 'customers',
   /// 'analytics'), or anything else for no active highlight.
   final String activeRoute;
 
@@ -55,6 +55,12 @@ class AppDrawer extends StatelessWidget {
                 padding: const EdgeInsets.only(left: 12, right: 12, top: 8),
                 child: Column(
                   children: [
+                    _MenuItem(
+                      icon: Icons.storefront_outlined,
+                      label: 'Sales',
+                      isActive: activeRoute == 'sales',
+                      onTap: onGoHome,
+                    ),
                     _MenuItem(
                       icon: Icons.inventory_2_outlined,
                       label: 'Stock',

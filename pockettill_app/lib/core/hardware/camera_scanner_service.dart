@@ -21,6 +21,11 @@ class CameraScannerService implements ScannerService {
 
   @override
   Future<void> init() async {
+    // Don't start() here: the controller isn't attached to a MobileScanner
+    // widget yet (that only happens once one is actually built), and
+    // starting an unattached controller throws MobileScannerException
+    // (controllerNotAttached). The MobileScanner widget starts/stops the
+    // controller itself via its own autoStart lifecycle once it's built.
     _subscription = _controller.barcodes.listen((capture) {
       for (final barcode in capture.barcodes) {
         final value = barcode.rawValue;
@@ -29,7 +34,6 @@ class CameraScannerService implements ScannerService {
         }
       }
     });
-    await _controller.start();
   }
 
   @override

@@ -21,7 +21,7 @@ class ShellScreen extends StatefulWidget {
 }
 
 class _ShellScreenState extends State<ShellScreen> {
-  String _activeRoute = 'stock';
+  String _activeRoute = 'sales';
 
   void _navigateTo(String route, Widget screen) {
     setState(() => _activeRoute = route);
@@ -37,6 +37,7 @@ class _ShellScreenState extends State<ShellScreen> {
   }
 
   void _goHome() {
+    setState(() => _activeRoute = 'sales');
     Navigator.of(context).pop();
     Navigator.of(context).popUntil((route) => route.isFirst);
   }

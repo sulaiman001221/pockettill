@@ -89,10 +89,12 @@ class ProductRepository {
   /// preserved); otherwise a uuid is generated if needed and this is a
   /// create.
   Future<void> save(Product product) async {
-    final existing = await _isar.products
-        .filter()
-        .uuidEqualTo(product.uuid)
-        .findFirst();
+    // An empty uuid always means "not yet created" - never match it against
+    // another row (a stray empty-uuid row in the data would otherwise get
+    // silently overwritten by every subsequent new product).
+    final existing = product.uuid.isEmpty
+        ? null
+        : await _isar.products.filter().uuidEqualTo(product.uuid).findFirst();
     final isNew = existing == null;
     final now = DateTime.now();
 
@@ -139,16 +141,13 @@ class ProductRepository {
     );
   }
 
-  /// Soft-deletes a product: zeroes its stock rather than removing the row.
+  /// Deletes a product row outright.
   Future<void> delete(String productUuid) async {
     final product = await getByUuid(productUuid);
     if (product == null) return;
 
-    product.stock = 0;
-    product.updatedAt = DateTime.now();
-
     await _isar.writeTxn(() async {
-      await _isar.products.put(product);
+      await _isar.products.delete(product.id);
     });
 
     await _enqueueEvent(
@@ -179,9 +178,11 @@ class ProductRepository {
     'uuid': product.uuid,
     'barcode': product.barcode,
     'name': product.name,
+    'mass': product.mass,
     'category': product.category,
     'unit': product.unit,
     'price': product.price,
+    'costPrice': product.costPrice,
     'stock': product.stock,
     'lowStockThreshold': product.lowStockThreshold,
     'isVerified': product.isVerified,
