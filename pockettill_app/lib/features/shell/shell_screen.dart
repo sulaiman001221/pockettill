@@ -23,10 +23,14 @@ class ShellScreen extends StatefulWidget {
 class _ShellScreenState extends State<ShellScreen> {
   String _activeRoute = 'sales';
 
-  void _navigateTo(String route, Widget screen) {
+  Future<void> _navigateTo(String route, Widget screen) async {
     setState(() => _activeRoute = route);
     Navigator.of(context).pop();
-    Navigator.of(context).push(MaterialPageRoute(builder: (_) => screen));
+    await Navigator.of(context).push(MaterialPageRoute(builder: (_) => screen));
+    // Whatever popped us back here - the screen's own back arrow, the
+    // hardware/gesture back button, or anything else - we're looking at
+    // Sales again, so the drawer's highlight should match that.
+    if (mounted) setState(() => _activeRoute = 'sales');
   }
 
   /// Settings and Logout never track as the active drawer item, so this
