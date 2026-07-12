@@ -58,10 +58,15 @@ class CreditRepository {
   /// is preserved); otherwise a uuid is generated if needed and this is a
   /// create.
   Future<void> saveCustomer(CreditCustomer customer) async {
-    final existing = await _isar.creditCustomers
-        .filter()
-        .uuidEqualTo(customer.uuid)
-        .findFirst();
+    // An empty uuid always means "not yet created" - never match it against
+    // another row (a stray empty-uuid row in the data would otherwise get
+    // silently overwritten by every subsequent new customer).
+    final existing = customer.uuid.isEmpty
+        ? null
+        : await _isar.creditCustomers
+              .filter()
+              .uuidEqualTo(customer.uuid)
+              .findFirst();
     final isNew = existing == null;
     final now = DateTime.now();
 
