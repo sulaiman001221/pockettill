@@ -9,18 +9,23 @@ import '../stock/stock_ui.dart';
 import 'cart_item.dart';
 import 'sales_providers.dart';
 
-/// Shown after a sale completes successfully. Clears the cart before any
-/// path back to [ShellScreen], so the next sale always starts fresh.
+/// Shown after a sale or credit repayment completes successfully. By
+/// default clears the cart before returning to [ShellScreen] - pass
+/// [onReturnHome] to go elsewhere instead (e.g. a credit repayment returns
+/// to `CustomerDetailScreen`).
 class PaymentSuccessScreen extends ConsumerStatefulWidget {
   const PaymentSuccessScreen({
     super.key,
-    required this.cartItems,
+    this.cartItems = const [],
     required this.total,
     required this.paymentMethod,
     required this.saleNumber,
     required this.createdAt,
+    this.customerName,
+    this.onReturnHome,
   });
 
+  /// Empty for non-cart payments (e.g. a credit repayment).
   final List<CartItem> cartItems;
   final double total;
 
@@ -28,6 +33,15 @@ class PaymentSuccessScreen extends ConsumerStatefulWidget {
   final String paymentMethod;
   final int saleNumber;
   final DateTime createdAt;
+
+  /// Shown in place of the transaction ID row when this is a credit
+  /// repayment rather than a cart sale.
+  final String? customerName;
+
+  /// Replaces the default clear-cart-and-return-to-Shell behaviour. Takes
+  /// the current context since by the time this fires the screen that
+  /// pushed this one may already be gone (replaced, not just covered).
+  final void Function(BuildContext context)? onReturnHome;
 
   @override
   ConsumerState<PaymentSuccessScreen> createState() =>
@@ -102,10 +116,15 @@ class _PaymentSuccessScreenState extends ConsumerState<PaymentSuccessScreen>
       'paymentMethod': _paymentLabel,
       'transactionNumber': widget.saleNumber,
       'date': widget.createdAt,
+      if (widget.customerName != null) 'customerName': widget.customerName,
     });
   }
 
   void _returnHome() {
+    if (widget.onReturnHome != null) {
+      widget.onReturnHome!(context);
+      return;
+    }
     ref.read(salesNotifierProvider.notifier).clearCart();
     Navigator.of(context).popUntil((route) => route.isFirst);
   }
@@ -164,6 +183,7 @@ class _PaymentSuccessScreenState extends ConsumerState<PaymentSuccessScreen>
                 paymentLabel: _paymentLabel,
                 saleNumber: widget.saleNumber,
                 total: widget.total,
+                customerName: widget.customerName,
               ),
               const Spacer(),
               SizedBox(
@@ -198,12 +218,14 @@ class _DetailsCard extends StatelessWidget {
     required this.paymentLabel,
     required this.saleNumber,
     required this.total,
+    this.customerName,
   });
 
   final String dateText;
   final String paymentLabel;
   final int saleNumber;
   final double total;
+  final String? customerName;
 
   @override
   Widget build(BuildContext context) {
@@ -245,11 +267,17 @@ class _DetailsCard extends StatelessWidget {
             value: paymentLabel,
           ),
           const SizedBox(height: 12),
-          _DetailRow(
-            icon: Icons.tag,
-            label: 'Transaction ID',
-            value: '#$saleNumber',
-          ),
+          customerName != null
+              ? _DetailRow(
+                  icon: Icons.person_outline,
+                  label: 'Customer',
+                  value: customerName!,
+                )
+              : _DetailRow(
+                  icon: Icons.tag,
+                  label: 'Transaction ID',
+                  value: '#$saleNumber',
+                ),
           const SizedBox(height: 12),
           Row(
             children: [

@@ -27,6 +27,7 @@ class SunmiPrinterService implements PrinterService {
     final paymentMethod = saleData['paymentMethod'] as String? ?? 'Cash';
     final transactionNumber = saleData['transactionNumber'];
     final date = saleData['date'] as DateTime? ?? DateTime.now();
+    final customerName = saleData['customerName'] as String?;
 
     await _printer.printText(
       text: storeName,
@@ -40,6 +41,9 @@ class SunmiPrinterService implements PrinterService {
 
     await _printer.printText(text: DateFormat('dd/MM/yy HH:mm').format(date));
     await _printer.printText(text: 'Transaction: #$transactionNumber');
+    if (customerName != null && customerName.isNotEmpty) {
+      await _printer.printText(text: 'Customer: $customerName');
+    }
     await _printer.line();
 
     for (final item in items) {

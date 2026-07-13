@@ -41,9 +41,15 @@ class _ProductSuccessScreenState extends State<ProductSuccessScreen>
   }
 
   void _addAnother() {
-    Navigator.of(context).pushReplacement(
-      MaterialPageRoute(builder: (_) => const AddProductScreen()),
-    );
+    // pushReplacement only swaps out this Success screen - the AddProduct
+    // screen that led here would still sit underneath, stale form data and
+    // all. Pop both, then push a genuinely fresh form.
+    Navigator.of(context)
+      ..pop()
+      ..pop();
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const AddProductScreen()));
   }
 
   void _goToStock() {

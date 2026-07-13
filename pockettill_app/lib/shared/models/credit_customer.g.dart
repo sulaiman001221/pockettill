@@ -27,28 +27,33 @@ const CreditCustomerSchema = CollectionSchema(
       name: r'createdAt',
       type: IsarType.dateTime,
     ),
-    r'lastActivityAt': PropertySchema(
+    r'creditLimit': PropertySchema(
       id: 2,
+      name: r'creditLimit',
+      type: IsarType.double,
+    ),
+    r'lastActivityAt': PropertySchema(
+      id: 3,
       name: r'lastActivityAt',
       type: IsarType.dateTime,
     ),
     r'name': PropertySchema(
-      id: 3,
+      id: 4,
       name: r'name',
       type: IsarType.string,
     ),
     r'phone': PropertySchema(
-      id: 4,
+      id: 5,
       name: r'phone',
       type: IsarType.string,
     ),
     r'synced': PropertySchema(
-      id: 5,
+      id: 6,
       name: r'synced',
       type: IsarType.bool,
     ),
     r'uuid': PropertySchema(
-      id: 6,
+      id: 7,
       name: r'uuid',
       type: IsarType.string,
     )
@@ -92,11 +97,12 @@ void _creditCustomerSerialize(
 ) {
   writer.writeDouble(offsets[0], object.balance);
   writer.writeDateTime(offsets[1], object.createdAt);
-  writer.writeDateTime(offsets[2], object.lastActivityAt);
-  writer.writeString(offsets[3], object.name);
-  writer.writeString(offsets[4], object.phone);
-  writer.writeBool(offsets[5], object.synced);
-  writer.writeString(offsets[6], object.uuid);
+  writer.writeDouble(offsets[2], object.creditLimit);
+  writer.writeDateTime(offsets[3], object.lastActivityAt);
+  writer.writeString(offsets[4], object.name);
+  writer.writeString(offsets[5], object.phone);
+  writer.writeBool(offsets[6], object.synced);
+  writer.writeString(offsets[7], object.uuid);
 }
 
 CreditCustomer _creditCustomerDeserialize(
@@ -108,12 +114,13 @@ CreditCustomer _creditCustomerDeserialize(
   final object = CreditCustomer();
   object.balance = reader.readDouble(offsets[0]);
   object.createdAt = reader.readDateTime(offsets[1]);
+  object.creditLimit = reader.readDoubleOrNull(offsets[2]);
   object.id = id;
-  object.lastActivityAt = reader.readDateTimeOrNull(offsets[2]);
-  object.name = reader.readString(offsets[3]);
-  object.phone = reader.readStringOrNull(offsets[4]);
-  object.synced = reader.readBool(offsets[5]);
-  object.uuid = reader.readString(offsets[6]);
+  object.lastActivityAt = reader.readDateTimeOrNull(offsets[3]);
+  object.name = reader.readString(offsets[4]);
+  object.phone = reader.readStringOrNull(offsets[5]);
+  object.synced = reader.readBool(offsets[6]);
+  object.uuid = reader.readString(offsets[7]);
   return object;
 }
 
@@ -129,14 +136,16 @@ P _creditCustomerDeserializeProp<P>(
     case 1:
       return (reader.readDateTime(offset)) as P;
     case 2:
-      return (reader.readDateTimeOrNull(offset)) as P;
+      return (reader.readDoubleOrNull(offset)) as P;
     case 3:
-      return (reader.readString(offset)) as P;
+      return (reader.readDateTimeOrNull(offset)) as P;
     case 4:
-      return (reader.readStringOrNull(offset)) as P;
+      return (reader.readString(offset)) as P;
     case 5:
-      return (reader.readBool(offset)) as P;
+      return (reader.readStringOrNull(offset)) as P;
     case 6:
+      return (reader.readBool(offset)) as P;
+    case 7:
       return (reader.readString(offset)) as P;
     default:
       throw IsarError('Unknown property with id $propertyId');
@@ -357,6 +366,90 @@ extension CreditCustomerQueryFilter
         includeLower: includeLower,
         upper: upper,
         includeUpper: includeUpper,
+      ));
+    });
+  }
+
+  QueryBuilder<CreditCustomer, CreditCustomer, QAfterFilterCondition>
+      creditLimitIsNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(const FilterCondition.isNull(
+        property: r'creditLimit',
+      ));
+    });
+  }
+
+  QueryBuilder<CreditCustomer, CreditCustomer, QAfterFilterCondition>
+      creditLimitIsNotNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(const FilterCondition.isNotNull(
+        property: r'creditLimit',
+      ));
+    });
+  }
+
+  QueryBuilder<CreditCustomer, CreditCustomer, QAfterFilterCondition>
+      creditLimitEqualTo(
+    double? value, {
+    double epsilon = Query.epsilon,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'creditLimit',
+        value: value,
+        epsilon: epsilon,
+      ));
+    });
+  }
+
+  QueryBuilder<CreditCustomer, CreditCustomer, QAfterFilterCondition>
+      creditLimitGreaterThan(
+    double? value, {
+    bool include = false,
+    double epsilon = Query.epsilon,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'creditLimit',
+        value: value,
+        epsilon: epsilon,
+      ));
+    });
+  }
+
+  QueryBuilder<CreditCustomer, CreditCustomer, QAfterFilterCondition>
+      creditLimitLessThan(
+    double? value, {
+    bool include = false,
+    double epsilon = Query.epsilon,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'creditLimit',
+        value: value,
+        epsilon: epsilon,
+      ));
+    });
+  }
+
+  QueryBuilder<CreditCustomer, CreditCustomer, QAfterFilterCondition>
+      creditLimitBetween(
+    double? lower,
+    double? upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    double epsilon = Query.epsilon,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'creditLimit',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+        epsilon: epsilon,
       ));
     });
   }
@@ -962,6 +1055,20 @@ extension CreditCustomerQuerySortBy
   }
 
   QueryBuilder<CreditCustomer, CreditCustomer, QAfterSortBy>
+      sortByCreditLimit() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'creditLimit', Sort.asc);
+    });
+  }
+
+  QueryBuilder<CreditCustomer, CreditCustomer, QAfterSortBy>
+      sortByCreditLimitDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'creditLimit', Sort.desc);
+    });
+  }
+
+  QueryBuilder<CreditCustomer, CreditCustomer, QAfterSortBy>
       sortByLastActivityAt() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'lastActivityAt', Sort.asc);
@@ -1050,6 +1157,20 @@ extension CreditCustomerQuerySortThenBy
       thenByCreatedAtDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'createdAt', Sort.desc);
+    });
+  }
+
+  QueryBuilder<CreditCustomer, CreditCustomer, QAfterSortBy>
+      thenByCreditLimit() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'creditLimit', Sort.asc);
+    });
+  }
+
+  QueryBuilder<CreditCustomer, CreditCustomer, QAfterSortBy>
+      thenByCreditLimitDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'creditLimit', Sort.desc);
     });
   }
 
@@ -1145,6 +1266,13 @@ extension CreditCustomerQueryWhereDistinct
   }
 
   QueryBuilder<CreditCustomer, CreditCustomer, QDistinct>
+      distinctByCreditLimit() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'creditLimit');
+    });
+  }
+
+  QueryBuilder<CreditCustomer, CreditCustomer, QDistinct>
       distinctByLastActivityAt() {
     return QueryBuilder.apply(this, (query) {
       return query.addDistinctBy(r'lastActivityAt');
@@ -1196,6 +1324,13 @@ extension CreditCustomerQueryProperty
   QueryBuilder<CreditCustomer, DateTime, QQueryOperations> createdAtProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'createdAt');
+    });
+  }
+
+  QueryBuilder<CreditCustomer, double?, QQueryOperations>
+      creditLimitProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'creditLimit');
     });
   }
 
