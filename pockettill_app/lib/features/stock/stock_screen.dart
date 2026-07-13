@@ -23,6 +23,7 @@ class StockScreen extends ConsumerStatefulWidget {
 
 class _StockScreenState extends ConsumerState<StockScreen> {
   final TextEditingController _searchController = TextEditingController();
+  final FocusNode _searchFocusNode = FocusNode(debugLabel: 'search');
 
   List<Product> _products = [];
   bool _loading = true;
@@ -38,6 +39,7 @@ class _StockScreenState extends ConsumerState<StockScreen> {
   @override
   void dispose() {
     _searchController.dispose();
+    _searchFocusNode.dispose();
     super.dispose();
   }
 
@@ -131,64 +133,71 @@ class _StockScreenState extends ConsumerState<StockScreen> {
   Widget build(BuildContext context) {
     final filtered = _filteredProducts;
 
-    return Scaffold(
-      appBar: const CustomAppBar(showMenuIcon: false, title: 'Stock'),
-      backgroundColor: AppTheme.background,
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _openAddProduct(),
-        backgroundColor: AppTheme.primary,
-        icon: const Icon(Icons.add, color: Colors.white),
-        label: const Text(
-          'Add Product',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+    return GestureDetector(
+      // Tapping anywhere outside the search field dismisses its focus -
+      // without this, once focused it never lets go, even on an outside tap.
+      onTap: () =>
+          _searchFocusNode.unfocus(disposition: UnfocusDisposition.scope),
+      behavior: HitTestBehavior.opaque,
+      child: Scaffold(
+        appBar: const CustomAppBar(showMenuIcon: false, title: 'Stock'),
+        backgroundColor: AppTheme.background,
+        floatingActionButton: FloatingActionButton.extended(
+          onPressed: () => _openAddProduct(),
+          backgroundColor: AppTheme.primary,
+          icon: const Icon(Icons.add, color: Colors.white),
+          label: const Text(
+            'Add Product',
+            style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+          ),
         ),
-      ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : RefreshIndicator(
-              onRefresh: _loadProducts,
-              child: CustomScrollView(
-                slivers: [
-                  SliverToBoxAdapter(child: _buildSearchBar()),
-                  SliverToBoxAdapter(child: _buildFilterChips()),
-                  SliverToBoxAdapter(child: _buildSummaryCards()),
-                  const SliverToBoxAdapter(child: _SectionLabel('PRODUCTS')),
-                  if (_products.isEmpty)
-                    SliverFillRemaining(
-                      hasScrollBody: false,
-                      child: _EmptyState(
-                        icon: Icons.inventory_2_outlined,
-                        title: 'No products yet',
-                        subtitle: 'Tap Add Product to get started',
+        body: _loading
+            ? const Center(child: CircularProgressIndicator())
+            : RefreshIndicator(
+                onRefresh: _loadProducts,
+                child: CustomScrollView(
+                  slivers: [
+                    SliverToBoxAdapter(child: _buildSearchBar()),
+                    SliverToBoxAdapter(child: _buildFilterChips()),
+                    SliverToBoxAdapter(child: _buildSummaryCards()),
+                    const SliverToBoxAdapter(child: _SectionLabel('PRODUCTS')),
+                    if (_products.isEmpty)
+                      SliverFillRemaining(
+                        hasScrollBody: false,
+                        child: _EmptyState(
+                          icon: Icons.inventory_2_outlined,
+                          title: 'No products yet',
+                          subtitle: 'Tap Add Product to get started',
+                        ),
+                      )
+                    else if (filtered.isEmpty)
+                      SliverFillRemaining(
+                        hasScrollBody: false,
+                        child: _EmptyState(
+                          icon: Icons.search_off,
+                          title: 'No matching products',
+                          subtitle: 'Try a different search or filter',
+                        ),
+                      )
+                    else
+                      SliverList(
+                        delegate: SliverChildBuilderDelegate(
+                          (context, index) {
+                            final product = filtered[index];
+                            return _ProductListItem(
+                              product: product,
+                              onQuickAdd: () => _quickAddStock(product),
+                              onEdit: () => _openAddProduct(existing: product),
+                            );
+                          },
+                          childCount: filtered.length,
+                        ),
                       ),
-                    )
-                  else if (filtered.isEmpty)
-                    SliverFillRemaining(
-                      hasScrollBody: false,
-                      child: _EmptyState(
-                        icon: Icons.search_off,
-                        title: 'No matching products',
-                        subtitle: 'Try a different search or filter',
-                      ),
-                    )
-                  else
-                    SliverList(
-                      delegate: SliverChildBuilderDelegate(
-                        (context, index) {
-                          final product = filtered[index];
-                          return _ProductListItem(
-                            product: product,
-                            onQuickAdd: () => _quickAddStock(product),
-                            onEdit: () => _openAddProduct(existing: product),
-                          );
-                        },
-                        childCount: filtered.length,
-                      ),
-                    ),
-                  const SliverToBoxAdapter(child: SizedBox(height: 96)),
-                ],
+                    const SliverToBoxAdapter(child: SizedBox(height: 96)),
+                  ],
+                ),
               ),
-            ),
+      ),
     );
   }
 
@@ -210,6 +219,7 @@ class _StockScreenState extends ConsumerState<StockScreen> {
         ),
         child: TextField(
           controller: _searchController,
+          focusNode: _searchFocusNode,
           onChanged: (value) => setState(() => _searchQuery = value),
           decoration: InputDecoration(
             prefixIcon: const Icon(

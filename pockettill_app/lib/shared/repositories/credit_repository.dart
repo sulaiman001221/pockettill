@@ -100,6 +100,7 @@ class CreditRepository {
     required String saleUuid,
   }) async {
     final now = DateTime.now();
+    late final CreditTransaction transaction;
 
     await _isar.writeTxn(() async {
       final customer = await _isar.creditCustomers
@@ -110,26 +111,31 @@ class CreditRepository {
         throw StateError('Credit customer $customerUuid not found.');
       }
 
+      final balanceBefore = customer.balance;
       customer.balance += amount;
       customer.lastActivityAt = now;
       await _isar.creditCustomers.put(customer);
 
-      final transaction = CreditTransaction()
+      transaction = CreditTransaction()
         ..uuid = _uuid.v4()
         ..customerId = customerUuid
         ..amount = amount
         ..type = 'purchase'
         ..saleUuid = saleUuid
+        ..balanceBefore = balanceBefore
+        ..balanceAfter = customer.balance
         ..createdAt = now;
       await _isar.creditTransactions.put(transaction);
-
-      await _enqueueEvent(
-        entityType: 'credit_tx',
-        entityUuid: transaction.uuid,
-        operation: 'create',
-        payload: _transactionToPayload(transaction),
-      );
     });
+
+    // Isar doesn't support nested transactions - EventQueue.enqueue opens
+    // its own writeTxn, so this must run after the one above has closed.
+    await _enqueueEvent(
+      entityType: 'credit_tx',
+      entityUuid: transaction.uuid,
+      operation: 'create',
+      payload: _transactionToPayload(transaction),
+    );
   }
 
   /// Records a repayment against a customer's balance. Throws if [amount]
@@ -141,6 +147,7 @@ class CreditRepository {
     String? note,
   }) async {
     final now = DateTime.now();
+    late final CreditTransaction transaction;
 
     await _isar.writeTxn(() async {
       final customer = await _isar.creditCustomers
@@ -156,26 +163,75 @@ class CreditRepository {
         );
       }
 
+      final balanceBefore = customer.balance;
       customer.balance -= amount;
       customer.lastActivityAt = now;
       await _isar.creditCustomers.put(customer);
 
-      final transaction = CreditTransaction()
+      transaction = CreditTransaction()
         ..uuid = _uuid.v4()
         ..customerId = customerUuid
         ..amount = amount
         ..type = 'repayment'
         ..note = note
+        ..balanceBefore = balanceBefore
+        ..balanceAfter = customer.balance
         ..createdAt = now;
       await _isar.creditTransactions.put(transaction);
-
-      await _enqueueEvent(
-        entityType: 'credit_tx',
-        entityUuid: transaction.uuid,
-        operation: 'create',
-        payload: _transactionToPayload(transaction),
-      );
     });
+
+    // Isar doesn't support nested transactions - EventQueue.enqueue opens
+    // its own writeTxn, so this must run after the one above has closed.
+    await _enqueueEvent(
+      entityType: 'credit_tx',
+      entityUuid: transaction.uuid,
+      operation: 'create',
+      payload: _transactionToPayload(transaction),
+    );
+  }
+
+  /// Updates just a customer's credit limit (null clears it).
+  Future<void> updateCreditLimit(String customerUuid, double? creditLimit) async {
+    final customer = await getByUuid(customerUuid);
+    if (customer == null) return;
+
+    customer.creditLimit = creditLimit;
+
+    await _isar.writeTxn(() async {
+      await _isar.creditCustomers.put(customer);
+    });
+
+    await _enqueueEvent(
+      entityType: 'credit_customer',
+      entityUuid: customer.uuid,
+      operation: 'update',
+      payload: _customerToPayload(customer),
+    );
+  }
+
+  /// Deletes a customer outright, along with their transaction history.
+  Future<void> deleteCustomer(String customerUuid) async {
+    final customer = await getByUuid(customerUuid);
+    if (customer == null) return;
+
+    await _isar.writeTxn(() async {
+      final txIds = await _isar.creditTransactions
+          .filter()
+          .customerIdEqualTo(customerUuid)
+          .idProperty()
+          .findAll();
+      if (txIds.isNotEmpty) {
+        await _isar.creditTransactions.deleteAll(txIds);
+      }
+      await _isar.creditCustomers.delete(customer.id);
+    });
+
+    await _enqueueEvent(
+      entityType: 'credit_customer',
+      entityUuid: customer.uuid,
+      operation: 'delete',
+      payload: _customerToPayload(customer),
+    );
   }
 
   /// Transactions for [customerUuid], newest first.
@@ -214,6 +270,7 @@ class CreditRepository {
     'name': customer.name,
     'phone': customer.phone,
     'balance': customer.balance,
+    'creditLimit': customer.creditLimit,
     'createdAt': customer.createdAt.toIso8601String(),
     'lastActivityAt': customer.lastActivityAt?.toIso8601String(),
   };
@@ -225,6 +282,8 @@ class CreditRepository {
     'type': transaction.type,
     'saleUuid': transaction.saleUuid,
     'note': transaction.note,
+    'balanceBefore': transaction.balanceBefore,
+    'balanceAfter': transaction.balanceAfter,
     'createdAt': transaction.createdAt.toIso8601String(),
   };
 }

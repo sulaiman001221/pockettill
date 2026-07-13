@@ -10,6 +10,7 @@ class CreditCustomer {
   late String name;
   String? phone;
   late double balance; // running total owed
+  double? creditLimit; // optional max amount this customer can owe
   bool synced = false;
   late DateTime createdAt;
   DateTime? lastActivityAt;

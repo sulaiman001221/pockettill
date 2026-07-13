@@ -22,38 +22,48 @@ const CreditTransactionSchema = CollectionSchema(
       name: r'amount',
       type: IsarType.double,
     ),
-    r'createdAt': PropertySchema(
+    r'balanceAfter': PropertySchema(
       id: 1,
+      name: r'balanceAfter',
+      type: IsarType.double,
+    ),
+    r'balanceBefore': PropertySchema(
+      id: 2,
+      name: r'balanceBefore',
+      type: IsarType.double,
+    ),
+    r'createdAt': PropertySchema(
+      id: 3,
       name: r'createdAt',
       type: IsarType.dateTime,
     ),
     r'customerId': PropertySchema(
-      id: 2,
+      id: 4,
       name: r'customerId',
       type: IsarType.string,
     ),
     r'note': PropertySchema(
-      id: 3,
+      id: 5,
       name: r'note',
       type: IsarType.string,
     ),
     r'saleUuid': PropertySchema(
-      id: 4,
+      id: 6,
       name: r'saleUuid',
       type: IsarType.string,
     ),
     r'synced': PropertySchema(
-      id: 5,
+      id: 7,
       name: r'synced',
       type: IsarType.bool,
     ),
     r'type': PropertySchema(
-      id: 6,
+      id: 8,
       name: r'type',
       type: IsarType.string,
     ),
     r'uuid': PropertySchema(
-      id: 7,
+      id: 9,
       name: r'uuid',
       type: IsarType.string,
     )
@@ -103,13 +113,15 @@ void _creditTransactionSerialize(
   Map<Type, List<int>> allOffsets,
 ) {
   writer.writeDouble(offsets[0], object.amount);
-  writer.writeDateTime(offsets[1], object.createdAt);
-  writer.writeString(offsets[2], object.customerId);
-  writer.writeString(offsets[3], object.note);
-  writer.writeString(offsets[4], object.saleUuid);
-  writer.writeBool(offsets[5], object.synced);
-  writer.writeString(offsets[6], object.type);
-  writer.writeString(offsets[7], object.uuid);
+  writer.writeDouble(offsets[1], object.balanceAfter);
+  writer.writeDouble(offsets[2], object.balanceBefore);
+  writer.writeDateTime(offsets[3], object.createdAt);
+  writer.writeString(offsets[4], object.customerId);
+  writer.writeString(offsets[5], object.note);
+  writer.writeString(offsets[6], object.saleUuid);
+  writer.writeBool(offsets[7], object.synced);
+  writer.writeString(offsets[8], object.type);
+  writer.writeString(offsets[9], object.uuid);
 }
 
 CreditTransaction _creditTransactionDeserialize(
@@ -120,14 +132,16 @@ CreditTransaction _creditTransactionDeserialize(
 ) {
   final object = CreditTransaction();
   object.amount = reader.readDouble(offsets[0]);
-  object.createdAt = reader.readDateTime(offsets[1]);
-  object.customerId = reader.readString(offsets[2]);
+  object.balanceAfter = reader.readDoubleOrNull(offsets[1]);
+  object.balanceBefore = reader.readDoubleOrNull(offsets[2]);
+  object.createdAt = reader.readDateTime(offsets[3]);
+  object.customerId = reader.readString(offsets[4]);
   object.id = id;
-  object.note = reader.readStringOrNull(offsets[3]);
-  object.saleUuid = reader.readStringOrNull(offsets[4]);
-  object.synced = reader.readBool(offsets[5]);
-  object.type = reader.readString(offsets[6]);
-  object.uuid = reader.readString(offsets[7]);
+  object.note = reader.readStringOrNull(offsets[5]);
+  object.saleUuid = reader.readStringOrNull(offsets[6]);
+  object.synced = reader.readBool(offsets[7]);
+  object.type = reader.readString(offsets[8]);
+  object.uuid = reader.readString(offsets[9]);
   return object;
 }
 
@@ -141,18 +155,22 @@ P _creditTransactionDeserializeProp<P>(
     case 0:
       return (reader.readDouble(offset)) as P;
     case 1:
-      return (reader.readDateTime(offset)) as P;
+      return (reader.readDoubleOrNull(offset)) as P;
     case 2:
-      return (reader.readString(offset)) as P;
+      return (reader.readDoubleOrNull(offset)) as P;
     case 3:
-      return (reader.readStringOrNull(offset)) as P;
+      return (reader.readDateTime(offset)) as P;
     case 4:
-      return (reader.readStringOrNull(offset)) as P;
-    case 5:
-      return (reader.readBool(offset)) as P;
-    case 6:
       return (reader.readString(offset)) as P;
+    case 5:
+      return (reader.readStringOrNull(offset)) as P;
+    case 6:
+      return (reader.readStringOrNull(offset)) as P;
     case 7:
+      return (reader.readBool(offset)) as P;
+    case 8:
+      return (reader.readString(offset)) as P;
+    case 9:
       return (reader.readString(offset)) as P;
     default:
       throw IsarError('Unknown property with id $propertyId');
@@ -312,6 +330,174 @@ extension CreditTransactionQueryFilter
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.between(
         property: r'amount',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+        epsilon: epsilon,
+      ));
+    });
+  }
+
+  QueryBuilder<CreditTransaction, CreditTransaction, QAfterFilterCondition>
+      balanceAfterIsNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(const FilterCondition.isNull(
+        property: r'balanceAfter',
+      ));
+    });
+  }
+
+  QueryBuilder<CreditTransaction, CreditTransaction, QAfterFilterCondition>
+      balanceAfterIsNotNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(const FilterCondition.isNotNull(
+        property: r'balanceAfter',
+      ));
+    });
+  }
+
+  QueryBuilder<CreditTransaction, CreditTransaction, QAfterFilterCondition>
+      balanceAfterEqualTo(
+    double? value, {
+    double epsilon = Query.epsilon,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'balanceAfter',
+        value: value,
+        epsilon: epsilon,
+      ));
+    });
+  }
+
+  QueryBuilder<CreditTransaction, CreditTransaction, QAfterFilterCondition>
+      balanceAfterGreaterThan(
+    double? value, {
+    bool include = false,
+    double epsilon = Query.epsilon,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'balanceAfter',
+        value: value,
+        epsilon: epsilon,
+      ));
+    });
+  }
+
+  QueryBuilder<CreditTransaction, CreditTransaction, QAfterFilterCondition>
+      balanceAfterLessThan(
+    double? value, {
+    bool include = false,
+    double epsilon = Query.epsilon,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'balanceAfter',
+        value: value,
+        epsilon: epsilon,
+      ));
+    });
+  }
+
+  QueryBuilder<CreditTransaction, CreditTransaction, QAfterFilterCondition>
+      balanceAfterBetween(
+    double? lower,
+    double? upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    double epsilon = Query.epsilon,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'balanceAfter',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+        epsilon: epsilon,
+      ));
+    });
+  }
+
+  QueryBuilder<CreditTransaction, CreditTransaction, QAfterFilterCondition>
+      balanceBeforeIsNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(const FilterCondition.isNull(
+        property: r'balanceBefore',
+      ));
+    });
+  }
+
+  QueryBuilder<CreditTransaction, CreditTransaction, QAfterFilterCondition>
+      balanceBeforeIsNotNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(const FilterCondition.isNotNull(
+        property: r'balanceBefore',
+      ));
+    });
+  }
+
+  QueryBuilder<CreditTransaction, CreditTransaction, QAfterFilterCondition>
+      balanceBeforeEqualTo(
+    double? value, {
+    double epsilon = Query.epsilon,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'balanceBefore',
+        value: value,
+        epsilon: epsilon,
+      ));
+    });
+  }
+
+  QueryBuilder<CreditTransaction, CreditTransaction, QAfterFilterCondition>
+      balanceBeforeGreaterThan(
+    double? value, {
+    bool include = false,
+    double epsilon = Query.epsilon,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'balanceBefore',
+        value: value,
+        epsilon: epsilon,
+      ));
+    });
+  }
+
+  QueryBuilder<CreditTransaction, CreditTransaction, QAfterFilterCondition>
+      balanceBeforeLessThan(
+    double? value, {
+    bool include = false,
+    double epsilon = Query.epsilon,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'balanceBefore',
+        value: value,
+        epsilon: epsilon,
+      ));
+    });
+  }
+
+  QueryBuilder<CreditTransaction, CreditTransaction, QAfterFilterCondition>
+      balanceBeforeBetween(
+    double? lower,
+    double? upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    double epsilon = Query.epsilon,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'balanceBefore',
         lower: lower,
         includeLower: includeLower,
         upper: upper,
@@ -1183,6 +1369,34 @@ extension CreditTransactionQuerySortBy
   }
 
   QueryBuilder<CreditTransaction, CreditTransaction, QAfterSortBy>
+      sortByBalanceAfter() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'balanceAfter', Sort.asc);
+    });
+  }
+
+  QueryBuilder<CreditTransaction, CreditTransaction, QAfterSortBy>
+      sortByBalanceAfterDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'balanceAfter', Sort.desc);
+    });
+  }
+
+  QueryBuilder<CreditTransaction, CreditTransaction, QAfterSortBy>
+      sortByBalanceBefore() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'balanceBefore', Sort.asc);
+    });
+  }
+
+  QueryBuilder<CreditTransaction, CreditTransaction, QAfterSortBy>
+      sortByBalanceBeforeDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'balanceBefore', Sort.desc);
+    });
+  }
+
+  QueryBuilder<CreditTransaction, CreditTransaction, QAfterSortBy>
       sortByCreatedAt() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'createdAt', Sort.asc);
@@ -1294,6 +1508,34 @@ extension CreditTransactionQuerySortThenBy
       thenByAmountDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'amount', Sort.desc);
+    });
+  }
+
+  QueryBuilder<CreditTransaction, CreditTransaction, QAfterSortBy>
+      thenByBalanceAfter() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'balanceAfter', Sort.asc);
+    });
+  }
+
+  QueryBuilder<CreditTransaction, CreditTransaction, QAfterSortBy>
+      thenByBalanceAfterDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'balanceAfter', Sort.desc);
+    });
+  }
+
+  QueryBuilder<CreditTransaction, CreditTransaction, QAfterSortBy>
+      thenByBalanceBefore() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'balanceBefore', Sort.asc);
+    });
+  }
+
+  QueryBuilder<CreditTransaction, CreditTransaction, QAfterSortBy>
+      thenByBalanceBeforeDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'balanceBefore', Sort.desc);
     });
   }
 
@@ -1419,6 +1661,20 @@ extension CreditTransactionQueryWhereDistinct
   }
 
   QueryBuilder<CreditTransaction, CreditTransaction, QDistinct>
+      distinctByBalanceAfter() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'balanceAfter');
+    });
+  }
+
+  QueryBuilder<CreditTransaction, CreditTransaction, QDistinct>
+      distinctByBalanceBefore() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'balanceBefore');
+    });
+  }
+
+  QueryBuilder<CreditTransaction, CreditTransaction, QDistinct>
       distinctByCreatedAt() {
     return QueryBuilder.apply(this, (query) {
       return query.addDistinctBy(r'createdAt');
@@ -1479,6 +1735,20 @@ extension CreditTransactionQueryProperty
   QueryBuilder<CreditTransaction, double, QQueryOperations> amountProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'amount');
+    });
+  }
+
+  QueryBuilder<CreditTransaction, double?, QQueryOperations>
+      balanceAfterProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'balanceAfter');
+    });
+  }
+
+  QueryBuilder<CreditTransaction, double?, QQueryOperations>
+      balanceBeforeProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'balanceBefore');
     });
   }
 

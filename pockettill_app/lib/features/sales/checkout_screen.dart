@@ -37,9 +37,13 @@ class CheckoutScreen extends ConsumerStatefulWidget {
 class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
   late final int _saleNumber = 100 + Random().nextInt(900);
   final FocusNode _cashFocusNode = FocusNode(debugLabel: 'cashReceived');
+  final FocusNode _customerSearchFocusNode = FocusNode(
+    debugLabel: 'customerSearch',
+  );
   final TextEditingController _cashController = TextEditingController();
   final TextEditingController _customerSearchController =
       TextEditingController();
+  final GlobalKey _customerSectionKey = GlobalKey();
 
   String _paymentMethod = 'cash';
   CreditCustomer? _selectedCustomer;
@@ -52,7 +56,25 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _cashFocusNode.requestFocus();
     });
+    _customerSearchFocusNode.addListener(_onCustomerSearchFocus);
     _loadCustomers();
+  }
+
+  /// The customer list sits below the search field, so once the keyboard is
+  /// up the results are hidden behind it. Scroll the SELECT CUSTOMER section
+  /// to the top of the viewport (after the keyboard animation settles) so
+  /// the visible area above the keyboard shows the field plus results.
+  void _onCustomerSearchFocus() {
+    if (!_customerSearchFocusNode.hasFocus) return;
+    Future.delayed(const Duration(milliseconds: 350), () {
+      final ctx = _customerSectionKey.currentContext;
+      if (!mounted || ctx == null) return;
+      Scrollable.ensureVisible(
+        ctx,
+        alignment: 0,
+        duration: const Duration(milliseconds: 200),
+      );
+    });
   }
 
   Future<void> _loadCustomers() async {
@@ -64,12 +86,22 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
   @override
   void dispose() {
     _cashFocusNode.dispose();
+    _customerSearchFocusNode.dispose();
     _cashController.dispose();
     _customerSearchController.dispose();
     super.dispose();
   }
 
   double get _cashReceived => double.tryParse(_cashController.text.trim()) ?? 0;
+
+  /// Whether adding this sale to the selected customer's balance would put
+  /// them over their credit limit (always false if they have no limit set).
+  bool get _wouldExceedLimit {
+    final customer = _selectedCustomer;
+    final limit = customer?.creditLimit;
+    if (customer == null || limit == null) return false;
+    return (customer.balance + widget.cartTotal) > limit;
+  }
 
   bool get _canConfirm {
     switch (_paymentMethod) {
@@ -78,7 +110,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
       case 'card':
         return true;
       case 'credit':
-        return _selectedCustomer != null;
+        return _selectedCustomer != null && !_wouldExceedLimit;
       default:
         return false;
     }
@@ -273,7 +305,16 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
           children: [
             Expanded(
               child: ListView(
-                padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
+                // The body doesn't resize for the keyboard, so pad the list
+                // bottom by the keyboard height instead - that's what lets
+                // the customer search results scroll up into view while the
+                // keyboard is open.
+                padding: EdgeInsets.fromLTRB(
+                  20,
+                  16,
+                  20,
+                  16 + MediaQuery.viewInsetsOf(context).bottom,
+                ),
                 children: [
                   _TotalDueCard(total: widget.cartTotal),
                   const SizedBox(height: 20),
@@ -441,6 +482,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
+          key: _customerSectionKey,
           children: [
             const Text('SELECT CUSTOMER', style: _sectionLabelStyle),
             const Spacer(),
@@ -464,6 +506,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
         const SizedBox(height: 12),
         TextField(
           controller: _customerSearchController,
+          focusNode: _customerSearchFocusNode,
           decoration: const InputDecoration(
             prefixIcon: Icon(Icons.search),
             hintText: 'Search customer...',
@@ -478,6 +521,39 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
             onTap: () => setState(() => _selectedCustomer = customer),
           ),
         ),
+        if (_wouldExceedLimit) ...[
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(12),
+            margin: const EdgeInsets.only(bottom: 12),
+            decoration: BoxDecoration(
+              color: AppTheme.logoutRed.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Row(
+              children: [
+                const Icon(
+                  Icons.block,
+                  color: AppTheme.logoutRed,
+                  size: 18,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    '${_selectedCustomer!.name} would exceed their credit '
+                    'limit of R${_selectedCustomer!.creditLimit!.toStringAsFixed(2)} '
+                    'with this sale.',
+                    style: const TextStyle(
+                      color: AppTheme.logoutRed,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
         InkWell(
           onTap: _openNewCustomerSheet,
           borderRadius: BorderRadius.circular(12),
