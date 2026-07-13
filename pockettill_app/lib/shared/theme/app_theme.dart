@@ -20,6 +20,8 @@ class AppTheme {
   static const Color syncGrey = Color(0xFFA0AEC0);
   static const Color divider = Color(0xFFE2E8F0);
   static const Color drawerActiveBackground = Color(0xFFEEF1FF);
+  static const Color cardBlue = Color(0xFF3B82F6); // Card payment type
+  static const Color creditPurple = Color(0xFF8B5CF6); // Credit payment type
 
   // Typography
   static const TextStyle mainTitle = TextStyle(
