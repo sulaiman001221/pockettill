@@ -273,7 +273,7 @@ class _CreditScreenState extends ConsumerState<CreditScreen> {
           const SizedBox(width: 10),
           Expanded(
             child: _SummaryCard(
-              label: 'Settled',
+              label: 'Settled Customers',
               value: '${_countFor(_CreditFilter.settled)}',
               color: AppTheme.syncGreen,
               background: AppTheme.syncGreen.withValues(alpha: 0.12),
