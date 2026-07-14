@@ -66,6 +66,10 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
   /// the visible area above the keyboard shows the field plus results.
   void _onCustomerSearchFocus() {
     if (!_customerSearchFocusNode.hasFocus) return;
+    // Deselect whoever was previously selected the moment the user starts
+    // looking for someone else - otherwise a stale credit-limit warning for
+    // the old selection lingers until a new customer is actually tapped.
+    if (_selectedCustomer != null) setState(() => _selectedCustomer = null);
     Future.delayed(const Duration(milliseconds: 350), () {
       final ctx = _customerSectionKey.currentContext;
       if (!mounted || ctx == null) return;
@@ -511,7 +515,9 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
             prefixIcon: Icon(Icons.search),
             hintText: 'Search customer...',
           ),
-          onChanged: (_) => setState(() {}),
+          // Same reasoning as the focus listener above - a new search
+          // shouldn't keep showing a warning for the previous selection.
+          onChanged: (_) => setState(() => _selectedCustomer = null),
         ),
         const SizedBox(height: 12),
         ...filtered.map(

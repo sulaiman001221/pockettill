@@ -103,7 +103,12 @@ class _AddPaymentScreenState extends ConsumerState<AddPaymentScreen> {
             saleNumber: 100 + Random().nextInt(900),
             createdAt: DateTime.now(),
             customerName: widget.customer.name,
-            onReturnHome: (ctx) => Navigator.of(ctx).pop(),
+            // "Return to Customer" pops straight back to CustomerDetailScreen
+            // (this screen replaced AddPaymentScreen via pushReplacement, so
+            // it's directly underneath); "Return Home" keeps the default
+            // clear-and-pop-to-Shell behaviour.
+            primaryActionLabel: 'Return to Customer',
+            onPrimaryAction: (ctx) => Navigator.of(ctx).pop(),
           ),
         ),
       );

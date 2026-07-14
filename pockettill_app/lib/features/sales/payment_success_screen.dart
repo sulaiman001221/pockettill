@@ -23,6 +23,8 @@ class PaymentSuccessScreen extends ConsumerStatefulWidget {
     required this.createdAt,
     this.customerName,
     this.onReturnHome,
+    this.primaryActionLabel,
+    this.onPrimaryAction,
   });
 
   /// Empty for non-cart payments (e.g. a credit repayment).
@@ -42,6 +44,12 @@ class PaymentSuccessScreen extends ConsumerStatefulWidget {
   /// the current context since by the time this fires the screen that
   /// pushed this one may already be gone (replaced, not just covered).
   final void Function(BuildContext context)? onReturnHome;
+
+  /// Replaces the default "Print Receipt" primary button (e.g. a credit
+  /// repayment offers "Return to Customer" instead). Both must be provided
+  /// together, or neither.
+  final String? primaryActionLabel;
+  final void Function(BuildContext context)? onPrimaryAction;
 
   @override
   ConsumerState<PaymentSuccessScreen> createState() =>
@@ -190,8 +198,10 @@ class _PaymentSuccessScreenState extends ConsumerState<PaymentSuccessScreen>
                 width: double.infinity,
                 height: 52,
                 child: ElevatedButton(
-                  onPressed: _printReceipt,
-                  child: const Text('Print Receipt'),
+                  onPressed: widget.onPrimaryAction != null
+                      ? () => widget.onPrimaryAction!(context)
+                      : _printReceipt,
+                  child: Text(widget.primaryActionLabel ?? 'Print Receipt'),
                 ),
               ),
               const SizedBox(height: 12),

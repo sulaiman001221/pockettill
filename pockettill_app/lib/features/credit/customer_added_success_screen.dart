@@ -59,6 +59,10 @@ class _CustomerAddedSuccessScreenState
       ..pop();
   }
 
+  void _returnHome() {
+    Navigator.of(context).popUntil((route) => route.isFirst);
+  }
+
   @override
   Widget build(BuildContext context) {
     final customer = widget.customer;
@@ -124,6 +128,14 @@ class _CustomerAddedSuccessScreenState
                 child: OutlinedButton(
                   onPressed: _goToCustomers,
                   child: const Text('Go to Customers'),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextButton(
+                onPressed: _returnHome,
+                child: const Text(
+                  'Return Home',
+                  style: TextStyle(color: AppTheme.textSecondary),
                 ),
               ),
               const SizedBox(height: 24),

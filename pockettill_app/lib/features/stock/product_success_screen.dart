@@ -59,7 +59,7 @@ class _ProductSuccessScreenState extends State<ProductSuccessScreen>
       ..pop();
   }
 
-  void _goToSales() {
+  void _returnHome() {
     Navigator.of(context).popUntil((route) => route.isFirst);
   }
 
@@ -156,8 +156,11 @@ class _ProductSuccessScreenState extends State<ProductSuccessScreen>
               ),
               const SizedBox(height: 12),
               TextButton(
-                onPressed: _goToSales,
-                child: const Text('Go to Sales'),
+                onPressed: _returnHome,
+                child: const Text(
+                  'Return Home',
+                  style: TextStyle(color: AppTheme.textSecondary),
+                ),
               ),
               const SizedBox(height: 12),
             ],
