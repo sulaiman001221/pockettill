@@ -39,6 +39,14 @@ Future<void> main() async {
 
   final isSunmi = HardwareDetector.isSunmiDevice();
 
+  // Constructed before the container so its ready instance can be injected
+  // via an override below, the same way as the hardware services.
+  final reachabilityService = ReachabilityService(
+    supabaseUrl: SupabaseService.url,
+    supabaseAnonKey: SupabaseService.anonKey,
+  );
+  await reachabilityService.init();
+
   final container = ProviderContainer(
     overrides: [
       scannerServiceProvider.overrideWithValue(
@@ -47,16 +55,12 @@ Future<void> main() async {
       printerServiceProvider.overrideWithValue(
         isSunmi ? SunmiPrinterService() : NoopPrinterService(),
       ),
+      reachabilityServiceProvider.overrideWithValue(reachabilityService),
     ],
   );
 
   final syncService = container.read(syncServiceProvider);
 
-  final reachabilityService = ReachabilityService(
-    supabaseUrl: SupabaseService.url,
-    supabaseAnonKey: SupabaseService.anonKey,
-  );
-  await reachabilityService.init();
   reachabilityService.isReachable.listen((reachable) {
     if (reachable) {
       unawaited(syncService.sync());

@@ -4,6 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/hardware/camera_scanner_service.dart';
+import '../../core/sync/reachability_service.dart';
+import '../../core/sync/sync_service.dart';
+import '../../core/sync/sync_status_provider.dart';
 import '../../main.dart';
 import '../../shared/models/product.dart';
 import '../../shared/theme/app_theme.dart';
@@ -13,6 +16,24 @@ import '../stock/stock_ui.dart';
 import 'cart_item.dart';
 import 'checkout_screen.dart';
 import 'sales_providers.dart';
+
+enum _SyncNudgeLevel { none, blue3Day, amber7Day, modal30Day }
+
+/// Never-synced counts as "worse than 30 days" - the most urgent tier -
+/// since a store that's never backed up anything needs the strongest nudge.
+_SyncNudgeLevel _computeNudgeLevel(
+  SyncIndicatorStatus status,
+  DateTime? lastSyncedAt,
+) {
+  if (status == SyncIndicatorStatus.offline) return _SyncNudgeLevel.none;
+  if (lastSyncedAt == null) return _SyncNudgeLevel.modal30Day;
+
+  final days = DateTime.now().difference(lastSyncedAt).inDays;
+  if (days > 30) return _SyncNudgeLevel.modal30Day;
+  if (days > 7) return _SyncNudgeLevel.amber7Day;
+  if (days > 3) return _SyncNudgeLevel.blue3Day;
+  return _SyncNudgeLevel.none;
+}
 
 /// Sales screen - the core POS screen. Owns the scan button, search bar,
 /// cart, and checkout hand-off; used only as the [ShellScreen]'s body, not a
@@ -30,11 +51,72 @@ class _SalesScreenState extends ConsumerState<SalesScreen> {
   final LayerLink _searchBarLink = LayerLink();
   StreamSubscription<String>? _scanSubscription;
   bool _showingNotFoundSheet = false;
+  bool _bannerDismissed = false;
+
+  // Static so it survives this State object being recreated (e.g. hot
+  // reload) - the 30-day warning should still only ever appear once per
+  // app process, not once per SalesScreen mount.
+  static bool _hasShownSyncWarningThisSession = false;
 
   @override
   void initState() {
     super.initState();
     _listenForHardwareScans();
+    _checkSyncWarning();
+  }
+
+  /// Shows the 30-days-without-sync modal at most once per app session.
+  /// Awaits [SyncStatusNotifier.ensureLoaded] first so this never fires off
+  /// the notifier's initial placeholder state before real data has loaded -
+  /// without that, every fresh app launch would flash the dialog for a
+  /// perfectly healthy store for the split second before the real status
+  /// resolves.
+  Future<void> _checkSyncWarning() async {
+    final notifier = ref.read(syncStatusProvider.notifier);
+    await notifier.ensureLoaded();
+    if (!mounted || _hasShownSyncWarningThisSession) return;
+
+    final status = ref.read(syncStatusProvider);
+    final level = _computeNudgeLevel(status, notifier.lastSyncedAt);
+    if (level == _SyncNudgeLevel.modal30Day) {
+      _hasShownSyncWarningThisSession = true;
+      _showSyncWarningDialog();
+    }
+  }
+
+  Future<void> _showSyncWarningDialog() async {
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => AlertDialog(
+        icon: const Icon(
+          Icons.sync_problem,
+          color: AppTheme.logoutRed,
+          size: 48,
+        ),
+        title: const Text('Data not backed up in 30 days'),
+        content: const Text(
+          "Your data hasn't synced in over a month. We strongly recommend "
+          'connecting before continuing.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Continue Anyway'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              if (ref.read(reachabilityServiceProvider).currentlyReachable) {
+                await ref.read(syncServiceProvider).sync();
+                await ref.read(syncStatusProvider.notifier).refresh();
+              }
+              if (dialogContext.mounted) Navigator.of(dialogContext).pop();
+            },
+            child: const Text('Connect & Sync'),
+          ),
+        ],
+      ),
+    );
   }
 
   /// Hardware (Sunmi) scanners emit continuously once bound, independent of
@@ -123,9 +205,50 @@ class _SalesScreenState extends ConsumerState<SalesScreen> {
     super.dispose();
   }
 
+  Widget? _buildSyncBanner(_SyncNudgeLevel level) {
+    if (_bannerDismissed) return null;
+
+    switch (level) {
+      case _SyncNudgeLevel.blue3Day:
+        return _SyncBanner(
+          background: const Color(0xFFEBF8FF),
+          borderColor: const Color(0xFF3182CE),
+          icon: Icons.sync,
+          iconColor: const Color(0xFF3182CE),
+          title: 'Not synced in 3 days',
+          subtitle: 'Connect to internet to back up your data',
+          onSyncNow: _syncNowFromBanner,
+          onDismiss: () => setState(() => _bannerDismissed = true),
+        );
+      case _SyncNudgeLevel.amber7Day:
+        return _SyncBanner(
+          background: const Color(0xFFFFFBEB),
+          borderColor: AppTheme.syncAmber,
+          icon: Icons.warning_amber_outlined,
+          iconColor: AppTheme.syncAmber,
+          title: 'Not synced in 7 days',
+          subtitle: "Your data hasn't backed up in a week",
+          onSyncNow: _syncNowFromBanner,
+          onDismiss: () => setState(() => _bannerDismissed = true),
+        );
+      case _SyncNudgeLevel.modal30Day:
+      case _SyncNudgeLevel.none:
+        // 30+ days shows as the one-time modal dialog instead of a banner.
+        return null;
+    }
+  }
+
+  Future<void> _syncNowFromBanner() async {
+    await ref.read(syncServiceProvider).sync();
+    ref.read(syncStatusProvider.notifier).refresh();
+  }
+
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(salesNotifierProvider);
+    final syncStatus = ref.watch(syncStatusProvider);
+    final lastSyncedAt = ref.watch(syncStatusProvider.notifier).lastSyncedAt;
+    final banner = _buildSyncBanner(_computeNudgeLevel(syncStatus, lastSyncedAt));
 
     return GestureDetector(
       // Tapping anywhere outside the search field dismisses its focus -
@@ -137,6 +260,7 @@ class _SalesScreenState extends ConsumerState<SalesScreen> {
         children: [
           Column(
             children: [
+              if (banner != null) banner,
               _ScanProductCard(onTap: _onScanProductTap),
               CompositedTransformTarget(
                 link: _searchBarLink,
@@ -175,6 +299,97 @@ class _SalesScreenState extends ConsumerState<SalesScreen> {
                 ),
               ),
             ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SyncBanner extends StatelessWidget {
+  const _SyncBanner({
+    required this.background,
+    required this.borderColor,
+    required this.icon,
+    required this.iconColor,
+    required this.title,
+    required this.subtitle,
+    required this.onSyncNow,
+    required this.onDismiss,
+  });
+
+  final Color background;
+  final Color borderColor;
+  final IconData icon;
+  final Color iconColor;
+  final String title;
+  final String subtitle;
+  final VoidCallback onSyncNow;
+  final VoidCallback onDismiss;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: background,
+        borderRadius: BorderRadius.circular(12),
+        border: Border(left: BorderSide(color: borderColor, width: 4)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, color: iconColor, size: 20),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 13,
+                    color: AppTheme.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  subtitle,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: AppTheme.textSecondary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              InkWell(
+                onTap: onDismiss,
+                child: const Icon(
+                  Icons.close,
+                  size: 16,
+                  color: AppTheme.iconBorder,
+                ),
+              ),
+              const SizedBox(height: 10),
+              GestureDetector(
+                onTap: onSyncNow,
+                child: const Text(
+                  'Sync Now',
+                  style: TextStyle(
+                    color: AppTheme.primary,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 12,
+                  ),
+                ),
+              ),
+            ],
+          ),
         ],
       ),
     );

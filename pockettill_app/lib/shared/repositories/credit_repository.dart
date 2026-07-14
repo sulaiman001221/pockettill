@@ -270,20 +270,20 @@ class CreditRepository {
     'name': customer.name,
     'phone': customer.phone,
     'balance': customer.balance,
-    'creditLimit': customer.creditLimit,
-    'createdAt': customer.createdAt.toIso8601String(),
-    'lastActivityAt': customer.lastActivityAt?.toIso8601String(),
+    'credit_limit': customer.creditLimit,
+    'created_at': customer.createdAt.toIso8601String(),
+    'last_activity_at': customer.lastActivityAt?.toIso8601String(),
   };
 
   Map<String, dynamic> _transactionToPayload(CreditTransaction transaction) => {
     'uuid': transaction.uuid,
-    'customerId': transaction.customerId,
+    'customer_id': transaction.customerId,
     'amount': transaction.amount,
     'type': transaction.type,
-    'saleUuid': transaction.saleUuid,
+    'sale_uuid': transaction.saleUuid,
     'note': transaction.note,
-    'balanceBefore': transaction.balanceBefore,
-    'balanceAfter': transaction.balanceAfter,
-    'createdAt': transaction.createdAt.toIso8601String(),
+    'balance_before': transaction.balanceBefore,
+    'balance_after': transaction.balanceAfter,
+    'created_at': transaction.createdAt.toIso8601String(),
   };
 }

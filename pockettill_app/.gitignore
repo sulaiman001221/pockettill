@@ -43,3 +43,7 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Real Supabase credentials - see dart_define.example.json for the shape.
+# Never committed; fill in dart_define.json locally with the real values.
+/dart_define.json

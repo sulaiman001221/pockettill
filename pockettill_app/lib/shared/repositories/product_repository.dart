@@ -182,11 +182,11 @@ class ProductRepository {
     'category': product.category,
     'unit': product.unit,
     'price': product.price,
-    'costPrice': product.costPrice,
+    'cost_price': product.costPrice,
     'stock': product.stock,
-    'lowStockThreshold': product.lowStockThreshold,
-    'isVerified': product.isVerified,
-    'createdAt': product.createdAt.toIso8601String(),
-    'updatedAt': product.updatedAt?.toIso8601String(),
+    'low_stock_threshold': product.lowStockThreshold,
+    'is_verified': product.isVerified,
+    'created_at': product.createdAt.toIso8601String(),
+    'updated_at': product.updatedAt?.toIso8601String(),
   };
 }
