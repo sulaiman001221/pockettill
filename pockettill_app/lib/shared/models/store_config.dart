@@ -9,6 +9,8 @@ class StoreConfig {
   late String storeId;
   late String storeName;
   late String deviceId;
+  String? ownerName;
   String? ownerPhone;
+  String? address;
   DateTime? lastSyncedAt;
 }
