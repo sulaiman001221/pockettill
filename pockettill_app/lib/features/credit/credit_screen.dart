@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -91,18 +93,68 @@ class _CreditScreenState extends ConsumerState<CreditScreen> {
   }
 
   Future<void> _openCustomerDetail(CreditCustomer customer) async {
-    // 'deleted' from CustomerDetailScreen's overflow menu, or null for
-    // anything else (just backing out, editing in place, etc).
-    final result = await Navigator.of(context).push<String>(
+    // The deleted customer object from CustomerDetailScreen's overflow menu,
+    // or null for anything else (just backing out, editing in place, etc).
+    final deleted = await Navigator.of(context).push<CreditCustomer>(
       MaterialPageRoute(
         builder: (_) => CustomerDetailScreen(customerUuid: customer.uuid),
       ),
     );
     await _loadCustomers();
-    if (!mounted || result != 'deleted') return;
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('Customer deleted')));
+    if (!mounted || deleted == null) return;
+    _handleCustomerDeleted(deleted);
+  }
+
+  /// Soft-delete: removes [customer] from the list immediately and shows an
+  /// Undo snackbar. The customer isn't actually removed from Isar until that
+  /// snackbar closes without Undo having been tapped - so tapping Undo never
+  /// needs to "restore" anything to Isar, since it was never deleted there
+  /// in the first place.
+  void _handleCustomerDeleted(CreditCustomer customer) {
+    // Capture the repository now rather than reading it from `ref` inside
+    // the delayed callback below - `ref` stops being usable if this screen
+    // gets disposed before the undo window elapses, but a plain repository
+    // reference doesn't care about this widget's lifecycle.
+    final repo = ref.read(creditRepositoryProvider);
+
+    setState(() {
+      _customers = _customers.where((c) => c.uuid != customer.uuid).toList();
+    });
+
+    var restored = false;
+
+    final messenger = ScaffoldMessenger.of(context)..clearSnackBars();
+    final snackBar = messenger.showSnackBar(
+      SnackBar(
+        content: const Text('Customer deleted'),
+        duration: const Duration(seconds: 4),
+        action: SnackBarAction(
+          label: 'Undo',
+          onPressed: () {
+            restored = true;
+            if (!mounted) return;
+            setState(() {
+              _customers = [..._customers, customer]
+                ..sort((a, b) => a.name.compareTo(b.name));
+            });
+          },
+        ),
+      ),
+    );
+
+    // A snackbar with an action never auto-dismisses while an accessibility
+    // service is running (Flutter ignores `duration` then, to keep the
+    // action reachable) - so close it manually. `closed` fires either way,
+    // which is also our cue to actually commit the delete if Undo wasn't
+    // tapped.
+    var closed = false;
+    snackBar.closed.whenComplete(() {
+      closed = true;
+      if (!restored) repo.deleteCustomer(customer.uuid);
+    });
+    Timer(const Duration(seconds: 4), () {
+      if (!closed) snackBar.close();
+    });
   }
 
   @override

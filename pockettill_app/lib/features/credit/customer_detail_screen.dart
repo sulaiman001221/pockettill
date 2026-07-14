@@ -229,7 +229,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
         title: const Text('Delete Customer?'),
         content: Text(
           'This removes "${customer.name}" and their transaction history '
-          "from your customer list. This can't be undone."
+          'from your customer list.'
           '${customer.balance > 0 ? '\n\nThis customer still owes R${customer.balance.toStringAsFixed(2)}.' : ''}',
         ),
         actions: [
@@ -249,9 +249,10 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
     );
     if (confirmed != true || !mounted) return;
 
-    await ref.read(creditRepositoryProvider).deleteCustomer(customer.uuid);
-    if (!mounted) return;
-    Navigator.of(context).pop('deleted');
+    // The actual delete (with its own Undo window) happens back on
+    // CreditScreen, not here - this screen is about to be popped since it's
+    // showing the very customer being removed.
+    Navigator.of(context).pop(customer);
   }
 
   @override

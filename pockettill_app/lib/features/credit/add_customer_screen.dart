@@ -25,8 +25,14 @@ class _AddCustomerScreenState extends ConsumerState<AddCustomerScreen> {
   final _phoneController = TextEditingController();
   final _creditLimitController = TextEditingController();
   bool _saving = false;
+  bool _nameTouched = false;
 
   bool get _isEditMode => widget.existingCustomer != null;
+
+  /// Only flags an error once the user has actually interacted with the
+  /// field and then left it empty - never on first load, and clears the
+  /// instant they type anything.
+  bool get _nameHasError => _nameTouched && _nameController.text.trim().isEmpty;
 
   @override
   void initState() {
@@ -41,7 +47,8 @@ class _AddCustomerScreenState extends ConsumerState<AddCustomerScreen> {
   }
 
   void _onFormChanged() {
-    if (mounted) setState(() {});
+    if (!mounted) return;
+    setState(() => _nameTouched = true);
   }
 
   @override
@@ -132,10 +139,11 @@ class _AddCustomerScreenState extends ConsumerState<AddCustomerScreen> {
             const SizedBox(height: 8),
             TextFormField(
               controller: _nameController,
-              decoration: const InputDecoration(
-                prefixIcon: Icon(Icons.person_outline),
+              decoration: InputDecoration(
+                prefixIcon: const Icon(Icons.person_outline),
                 hintText: 'Enter customer name',
                 helperText: 'Required - used to identify this customer',
+                errorText: _nameHasError ? 'Full name is required' : null,
               ),
               validator: (value) => (value == null || value.trim().length < 2)
                   ? 'Enter at least 2 characters'
