@@ -247,8 +247,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
       builder: (dialogContext) => AlertDialog(
         title: const Text('Delete Product?'),
         content: Text(
-          'This removes "${productDisplayName(product)}" from your stock. '
-          "This can't be undone.",
+          'This removes "${productDisplayName(product)}" from your stock.',
         ),
         actions: [
           TextButton(
@@ -267,10 +266,10 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
     );
     if (confirmed != true || !mounted) return;
 
-    setState(() => _saving = true);
-    await ref.read(productRepositoryProvider).delete(product.uuid);
-    if (!mounted) return;
-    Navigator.of(context).pop('deleted');
+    // The actual delete (with its own Undo window) happens back on
+    // StockScreen, not here - this screen is about to be popped since it's
+    // showing the very product being removed.
+    Navigator.of(context).pop(product);
   }
 
   @override

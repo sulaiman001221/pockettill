@@ -44,5 +44,12 @@
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>
         </intent>
+        <!-- Required so url_launcher can find a browser/WhatsApp to open
+             https:// links (e.g. Contact Support) - see
+             https://pub.dev/packages/url_launcher#android-setup -->
+        <intent>
+            <action android:name="android.intent.action.VIEW"/>
+            <data android:scheme="https"/>
+        </intent>
     </queries>
 </manifest>

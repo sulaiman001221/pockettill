@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -95,19 +97,61 @@ class _StockScreenState extends ConsumerState<StockScreen> {
   }
 
   Future<void> _openAddProduct({Product? existing}) async {
-    // 'updated' or 'deleted' from AddProductScreen's edit-mode actions, or
-    // null if the user just backed out without saving.
-    final result = await Navigator.of(context).push<String>(
+    // The deleted Product from AddProductScreen's delete flow, 'updated' from
+    // its edit-mode save, or null if the user just backed out without saving.
+    final result = await Navigator.of(context).push<Object>(
       MaterialPageRoute(
         builder: (_) => AddProductScreen(existingProduct: existing),
       ),
     );
     await _loadProducts();
     if (!mounted || result == null) return;
-    final message = result == 'deleted' ? 'Product deleted' : 'Product updated';
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(message)));
+
+    if (result is Product) {
+      _handleProductDeleted(result);
+    } else if (result == 'updated') {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Product updated')));
+    }
+  }
+
+  /// Deletes [product] immediately (removing it from the list and Isar) and
+  /// shows an Undo snackbar. Undo recreates it via [ProductRepository.save];
+  /// if the snackbar closes without Undo, nothing more is needed - the
+  /// delete already happened.
+  Future<void> _handleProductDeleted(Product product) async {
+    final repo = ref.read(productRepositoryProvider);
+
+    setState(() {
+      _products = _products.where((p) => p.uuid != product.uuid).toList();
+    });
+    await repo.delete(product.uuid);
+    if (!mounted) return;
+
+    final messenger = ScaffoldMessenger.of(context)..clearSnackBars();
+    final snackBar = messenger.showSnackBar(
+      SnackBar(
+        content: const Text('Product deleted'),
+        duration: const Duration(seconds: 4),
+        action: SnackBarAction(
+          label: 'Undo',
+          onPressed: () async {
+            await repo.save(product);
+            if (mounted) await _loadProducts();
+          },
+        ),
+      ),
+    );
+
+    // A snackbar with an action never auto-dismisses while an accessibility
+    // service is running (Flutter ignores `duration` then, to keep the
+    // action reachable) - so close it manually.
+    var closed = false;
+    snackBar.closed.whenComplete(() => closed = true);
+    Timer(const Duration(seconds: 4), () {
+      if (!closed) snackBar.close();
+    });
   }
 
   Future<void> _quickAddStock(Product product) async {
