@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/sync/sync_status_provider.dart';
 import '../../shared/theme/app_theme.dart';
 import '../analytics/analytics_screen.dart';
 import '../credit/credit_screen.dart';
@@ -248,11 +250,15 @@ class _CreditBadge extends StatelessWidget {
   }
 }
 
-class _SyncStatusRow extends StatelessWidget {
+class _SyncStatusRow extends ConsumerWidget {
   const _SyncStatusRow();
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final status = ref.watch(syncStatusProvider);
+    final lastSyncedAt = ref.watch(syncStatusProvider.notifier).lastSyncedAt;
+    final (color, text) = syncIndicatorDisplay(status, lastSyncedAt: lastSyncedAt);
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
       child: Row(
@@ -261,17 +267,12 @@ class _SyncStatusRow extends StatelessWidget {
           Container(
             width: 8,
             height: 8,
-            decoration: const BoxDecoration(
-              // Hardcoded grey for now - Stage 12 wires this to SyncService.
-              color: AppTheme.syncGrey,
-              shape: BoxShape.circle,
-            ),
+            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
           ),
           const SizedBox(width: 6),
-          const Text(
-            'Not yet synced',
-            style: TextStyle(fontSize: 12, color: AppTheme.syncGrey),
-          ),
+          // The dot is colour-coded, but the drawer keeps its text a
+          // consistent, calm grey regardless of status.
+          Text(text, style: const TextStyle(fontSize: 12, color: AppTheme.syncGrey)),
         ],
       ),
     );

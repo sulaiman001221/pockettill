@@ -376,18 +376,18 @@ class SaleRepository {
 
   Map<String, dynamic> _saleToPayload(Sale sale) => {
     'uuid': sale.uuid,
-    'deviceId': sale.deviceId,
+    'device_id': sale.deviceId,
     'total': sale.total,
-    'paymentType': sale.paymentType,
-    'customerId': sale.customerId,
-    'createdAt': sale.createdAt.toIso8601String(),
+    'payment_type': sale.paymentType,
+    'customer_id': sale.customerId,
+    'created_at': sale.createdAt.toIso8601String(),
   };
 
   Map<String, dynamic> _saleItemToPayload(SaleItem item) => {
-    'saleUuid': item.saleUuid,
-    'productUuid': item.productUuid,
-    'productName': item.productName,
-    'unitPrice': item.unitPrice,
+    'sale_uuid': item.saleUuid,
+    'product_uuid': item.productUuid,
+    'product_name': item.productName,
+    'unit_price': item.unitPrice,
     'quantity': item.quantity,
     'subtotal': item.subtotal,
   };
@@ -396,11 +396,11 @@ class SaleRepository {
     CreditTransaction transaction,
   ) => {
     'uuid': transaction.uuid,
-    'customerId': transaction.customerId,
+    'customer_id': transaction.customerId,
     'amount': transaction.amount,
     'type': transaction.type,
-    'saleUuid': transaction.saleUuid,
+    'sale_uuid': transaction.saleUuid,
     'note': transaction.note,
-    'createdAt': transaction.createdAt.toIso8601String(),
+    'created_at': transaction.createdAt.toIso8601String(),
   };
 }

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 /// Determines whether Supabase is actually reachable, not just whether the
 /// device has a network signal.
@@ -9,14 +10,21 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 /// Most stores run a hotspot without mobile data, so `connectivity_plus`
 /// reporting a connection does not mean the internet - or Supabase - is
 /// actually reachable. A network change only triggers a health-check ping to
-/// `{SUPABASE_URL}/rest/v1/`; [isReachable] only ever emits `true` once that
-/// ping returns `200 OK`. While network is present, the ping repeats every
-/// 30 seconds; it stops entirely when the network drops.
+/// `{SUPABASE_URL}/auth/v1/health`; [isReachable] only ever emits `true` once
+/// that ping returns `200 OK`. While network is present, the ping repeats
+/// every 30 seconds; it stops entirely when the network drops.
+///
+/// The health check hits `/auth/v1/health` rather than the bare `/rest/v1/`
+/// root: newer Supabase projects issue `sb_publishable_...`-format API keys,
+/// and those keys get a `401 "Secret API key required"` from the `/rest/v1/`
+/// root/spec route specifically (real table queries under `/rest/v1/<table>`
+/// work fine with them) - so `/rest/v1/` never reported reachable even with
+/// a valid key and working internet.
 class ReachabilityService {
   ReachabilityService({
     required String supabaseUrl,
     required String supabaseAnonKey,
-  }) : _healthCheckUri = Uri.parse('$supabaseUrl/rest/v1/'),
+  }) : _healthCheckUri = Uri.parse('$supabaseUrl/auth/v1/health'),
        _apiKey = supabaseAnonKey;
 
   static const _pingInterval = Duration(seconds: 30);
@@ -93,3 +101,9 @@ class ReachabilityService {
     await _controller.close();
   }
 }
+
+/// The app-wide [ReachabilityService] singleton, constructed and
+/// initialized once in main() and injected via [ProviderScope] overrides.
+final reachabilityServiceProvider = Provider<ReachabilityService>((ref) {
+  throw UnimplementedError('reachabilityServiceProvider must be overridden.');
+});

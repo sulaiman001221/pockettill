@@ -7,35 +7,34 @@ import 'package:uuid/uuid.dart';
 
 import '../../core/hardware/hardware_detector.dart';
 import '../../core/sync/sync_service.dart';
+import '../../core/sync/sync_status_provider.dart';
 import '../../shared/models/store_config.dart';
 import '../../shared/repositories/repositories.dart';
 import '../../shared/theme/app_theme.dart';
+import '../../shared/utils/sync_status.dart';
 import '../../shared/widgets/pockettill_app_bar.dart';
 
 // Placeholder until the real support number is available.
 const String _supportWhatsAppNumber = '27000000000';
 
-enum _SyncStatusKind { neverSynced, synced, pending, overdue }
+/// "Today, 09:41 AM" / "Yesterday, 09:41 AM" / "12 Oct, 09:41 AM" / "Never".
+String _formatLastSynced(DateTime? lastSyncedAt) {
+  if (lastSyncedAt == null) return 'Never';
 
-_SyncStatusKind _syncStatusFor(DateTime? lastSyncedAt) {
-  if (lastSyncedAt == null) return _SyncStatusKind.neverSynced;
-  final elapsed = DateTime.now().difference(lastSyncedAt);
-  if (elapsed < const Duration(hours: 1)) return _SyncStatusKind.synced;
-  if (elapsed < const Duration(hours: 24)) return _SyncStatusKind.pending;
-  return _SyncStatusKind.overdue;
-}
+  final now = DateTime.now();
+  final today = DateTime(now.year, now.month, now.day);
+  final syncedDay = DateTime(
+    lastSyncedAt.year,
+    lastSyncedAt.month,
+    lastSyncedAt.day,
+  );
+  final timeText = DateFormat('hh:mm a').format(lastSyncedAt);
 
-(Color, String) _syncStatusDisplay(_SyncStatusKind kind) {
-  switch (kind) {
-    case _SyncStatusKind.neverSynced:
-      return (AppTheme.syncGrey, 'Not yet synced');
-    case _SyncStatusKind.synced:
-      return (AppTheme.syncGreen, 'Synced');
-    case _SyncStatusKind.pending:
-      return (AppTheme.syncAmber, 'Pending');
-    case _SyncStatusKind.overdue:
-      return (AppTheme.logoutRed, 'Overdue');
+  if (syncedDay == today) return 'Today, $timeText';
+  if (syncedDay == today.subtract(const Duration(days: 1))) {
+    return 'Yesterday, $timeText';
   }
+  return '${DateFormat('dd MMM').format(lastSyncedAt)}, $timeText';
 }
 
 /// Store profile, sync, device info, and support. All store-profile writes
@@ -50,7 +49,6 @@ class SettingsScreen extends ConsumerStatefulWidget {
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   StoreConfig? _config;
   bool _loading = true;
-  bool _syncing = false;
 
   @override
   void initState() {
@@ -144,10 +142,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   }
 
   Future<void> _syncNow() async {
-    setState(() => _syncing = true);
     await ref.read(syncServiceProvider).sync();
+    await ref.read(syncStatusProvider.notifier).refresh();
     await _load();
-    if (mounted) setState(() => _syncing = false);
+    // syncStatusProvider only notifies watchers when its enum bucket
+    // actually changes (e.g. overdue -> synced) - a sync that doesn't cross
+    // a bucket boundary wouldn't otherwise repaint the Last Synced text, so
+    // force it here regardless.
+    if (mounted) setState(() {});
   }
 
   Future<void> _copyDeviceId() async {
@@ -368,12 +370,15 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   }
 
   Widget _buildSyncCard() {
-    final config = _config;
-    final status = _syncStatusFor(config?.lastSyncedAt);
-    final (statusColor, statusLabel) = _syncStatusDisplay(status);
-    final lastSyncedText = config?.lastSyncedAt == null
-        ? 'Never'
-        : DateFormat('dd/MM/yy, hh:mm a').format(config!.lastSyncedAt!);
+    final status = ref.watch(syncStatusProvider);
+    final lastSyncedAt = ref.watch(syncStatusProvider.notifier).lastSyncedAt;
+    final (statusColor, statusLabel) = syncIndicatorDisplay(
+      status,
+      lastSyncedAt: lastSyncedAt,
+    );
+    final lastSyncedText = _formatLastSynced(lastSyncedAt);
+    final cycleStatus = ref.watch(syncCycleStatusProvider).valueOrNull;
+    final isSyncing = cycleStatus == SyncStatus.syncing;
 
     return _SettingsCard(
       child: Column(
@@ -435,7 +440,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 style: TextStyle(color: AppTheme.textPrimary, fontSize: 14),
               ),
               const Spacer(),
-              _syncing
+              isSyncing
                   ? const SizedBox(
                       width: 18,
                       height: 18,

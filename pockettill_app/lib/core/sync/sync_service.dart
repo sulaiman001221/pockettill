@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:isar/isar.dart';
 
@@ -15,6 +16,7 @@ import 'event_queue.dart';
 const List<String> _entityTypePriority = [
   'credit_tx',
   'sale',
+  'sale_item',
   'product',
   'credit_customer',
 ];
@@ -57,27 +59,23 @@ class SyncService {
 
       final pending = await _eventQueue.getPending();
 
-      if (pending.isEmpty) {
-        await _pullCatalogueUpdates(storeConfig.lastSyncedAt);
-        _statusController.add(SyncStatus.success);
-        return;
-      }
+      if (pending.isNotEmpty) {
+        final eventsByType = <String, List<SyncEvent>>{};
+        for (final event in pending) {
+          (eventsByType[event.entityType] ??= []).add(event);
+        }
 
-      final eventsByType = <String, List<SyncEvent>>{};
-      for (final event in pending) {
-        (eventsByType[event.entityType] ??= []).add(event);
-      }
+        for (final entityType in _entityTypePriority) {
+          final events = eventsByType[entityType];
+          if (events == null || events.isEmpty) continue;
 
-      for (final entityType in _entityTypePriority) {
-        final events = eventsByType[entityType];
-        if (events == null || events.isEmpty) continue;
-
-        for (var offset = 0; offset < events.length; offset += _batchSize) {
-          final batch = events.skip(offset).take(_batchSize).toList();
-          await SupabaseService.pushEvents(batch.map(_toEventMap).toList());
-          await _eventQueue.markPushed(
-            batch.map((event) => event.uuid).toList(),
-          );
+          for (var offset = 0; offset < events.length; offset += _batchSize) {
+            final batch = events.skip(offset).take(_batchSize).toList();
+            await SupabaseService.pushEvents(batch.map(_toEventMap).toList());
+            await _eventQueue.markPushed(
+              batch.map((event) => event.uuid).toList(),
+            );
+          }
         }
       }
 
@@ -98,7 +96,8 @@ class SyncService {
       });
 
       _statusController.add(SyncStatus.success);
-    } catch (_) {
+    } catch (error) {
+      debugPrint('SyncService: sync cycle failed: $error');
       _statusController.add(SyncStatus.error);
     } finally {
       _isSyncing = false;
@@ -135,4 +134,11 @@ class SyncService {
 final syncServiceProvider = Provider<SyncService>((ref) {
   final isar = ref.watch(isarProvider);
   return SyncService(isar: isar, eventQueue: EventQueue(isar));
+});
+
+/// The current phase of [SyncService]'s sync cycle, for UI that needs to
+/// show a "syncing" state regardless of what triggered the sync (a manual
+/// "Sync Now" tap, or the background reachability-triggered sync in main()).
+final syncCycleStatusProvider = StreamProvider<SyncStatus>((ref) {
+  return ref.watch(syncServiceProvider).syncStatus;
 });
