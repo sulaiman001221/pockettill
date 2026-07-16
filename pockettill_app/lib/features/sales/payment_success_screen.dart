@@ -144,7 +144,7 @@ class _PaymentSuccessScreenState extends ConsumerState<PaymentSuccessScreen>
     return Scaffold(
       backgroundColor: AppTheme.background,
       body: SafeArea(
-        child: Padding(
+        child: SingleChildScrollView(
           padding: const EdgeInsets.symmetric(horizontal: 24),
           child: Column(
             children: [
@@ -193,7 +193,10 @@ class _PaymentSuccessScreenState extends ConsumerState<PaymentSuccessScreen>
                 total: widget.total,
                 customerName: widget.customerName,
               ),
-              const Spacer(),
+              // A fixed gap, not Spacer - Spacer needs a bounded height to
+              // distribute, which this Column no longer has now that it
+              // sits inside a SingleChildScrollView.
+              const SizedBox(height: 32),
               SizedBox(
                 width: double.infinity,
                 height: 52,

@@ -109,6 +109,11 @@ class _AddCustomerScreenState extends ConsumerState<AddCustomerScreen> {
     if (!mounted) return;
     setState(() => _saving = false);
 
+    // Pushing a new route doesn't reliably dismiss the keyboard on its own -
+    // without this, a still-focused field's keyboard stays open over
+    // CustomerAddedSuccessScreen, shrinking its viewport enough to overflow.
+    FocusScope.of(context).unfocus();
+
     if (_isEditMode) {
       Navigator.of(context).pop('updated');
     } else {

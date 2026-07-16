@@ -70,7 +70,7 @@ class _CustomerAddedSuccessScreenState
     return Scaffold(
       backgroundColor: AppTheme.background,
       body: SafeArea(
-        child: Padding(
+        child: SingleChildScrollView(
           padding: const EdgeInsets.symmetric(horizontal: 24),
           child: Column(
             children: [
@@ -111,7 +111,10 @@ class _CustomerAddedSuccessScreenState
               ),
               const SizedBox(height: 24),
               _CustomerSummaryCard(customer: customer),
-              const Spacer(),
+              // A fixed gap, not Spacer - Spacer needs a bounded height to
+              // distribute, which this Column no longer has now that it
+              // sits inside a SingleChildScrollView.
+              const SizedBox(height: 32),
               SizedBox(
                 width: double.infinity,
                 height: 52,
