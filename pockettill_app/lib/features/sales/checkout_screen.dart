@@ -170,6 +170,11 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
           );
 
       if (!mounted) return;
+      // Pushing a new route doesn't reliably dismiss the keyboard on its
+      // own - without this, a still-focused field (e.g. Cash Received)
+      // stays open over PaymentSuccessScreen, shrinking its viewport
+      // enough to overflow.
+      FocusScope.of(context).unfocus();
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(
           builder: (_) => PaymentSuccessScreen(

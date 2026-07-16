@@ -93,8 +93,16 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       );
       await ref.read(storeConfigProvider.notifier).refresh();
       if (!mounted) return;
-      Navigator.of(context).pushReplacement(
+      // pushAndRemoveUntil, not pushReplacement - Login was pushed on top
+      // of WelcomeScreen, and pushReplacement only swaps out the topmost
+      // route, leaving WelcomeScreen stranded underneath. Every "Return
+      // Home" success screen (add product, complete sale, etc.) calls
+      // Navigator.popUntil((route) => route.isFirst) to get back to
+      // ShellScreen - with Welcome left in the stack, that popped all the
+      // way back to Welcome/Login instead of stopping at ShellScreen.
+      Navigator.of(context).pushAndRemoveUntil(
         MaterialPageRoute(builder: (_) => const ShellScreen()),
+        (route) => false,
       );
     } on AuthRetryableFetchException catch (_) {
       // A network-level failure (offline, timeout, DNS, etc.) - this is a

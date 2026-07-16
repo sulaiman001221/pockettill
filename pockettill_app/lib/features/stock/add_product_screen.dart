@@ -229,6 +229,11 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
     if (!mounted) return;
     setState(() => _saving = false);
 
+    // Pushing a new route doesn't reliably dismiss the keyboard on its own -
+    // without this, a still-focused field's keyboard stays open over
+    // ProductSuccessScreen, shrinking its viewport enough to overflow.
+    FocusScope.of(context).unfocus();
+
     if (_isEditMode) {
       Navigator.of(context).pop('updated');
     } else {
@@ -295,6 +300,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
             const _SectionLabel('PRODUCT DETAILS'),
             TextFormField(
               controller: _nameController,
+              autovalidateMode: AutovalidateMode.onUserInteraction,
               decoration: const InputDecoration(
                 labelText: 'Product Name *',
                 hintText: 'e.g. Coca Cola',
@@ -332,6 +338,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
                     keyboardType: const TextInputType.numberWithOptions(
                       decimal: true,
                     ),
+                    autovalidateMode: AutovalidateMode.onUserInteraction,
                     decoration: const InputDecoration(
                       labelText: 'Selling Price *',
                       prefixText: 'R ',
@@ -350,6 +357,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
                     keyboardType: const TextInputType.numberWithOptions(
                       decimal: true,
                     ),
+                    autovalidateMode: AutovalidateMode.onUserInteraction,
                     decoration: const InputDecoration(
                       labelText: 'Cost Price',
                       prefixText: 'R ',
@@ -377,6 +385,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
             TextFormField(
               controller: _stockController,
               keyboardType: TextInputType.number,
+              autovalidateMode: AutovalidateMode.onUserInteraction,
               decoration: const InputDecoration(labelText: 'Stock Quantity *'),
               validator: (value) {
                 final v = int.tryParse(value?.trim() ?? '');
@@ -388,6 +397,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
             TextFormField(
               controller: _lowStockController,
               keyboardType: TextInputType.number,
+              autovalidateMode: AutovalidateMode.onUserInteraction,
               decoration: const InputDecoration(
                 labelText: 'Low Stock Alert',
                 helperText: 'Alert when stock drops to this number',
