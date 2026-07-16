@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/auth/auth_service.dart';
 import '../../core/sync/sync_status_provider.dart';
+import '../../shared/repositories/store_config_provider.dart';
 import '../../shared/theme/app_theme.dart';
+import '../auth/welcome_screen.dart';
 import '../analytics/analytics_screen.dart';
 import '../credit/credit_screen.dart';
 import '../history/history_screen.dart';
@@ -12,11 +15,11 @@ import '../stock/stock_screen.dart';
 /// PocketTill's primary navigation drawer, opened from [CustomAppBar]'s
 /// hamburger icon.
 ///
-/// Stateless by design: Flutter's [Drawer] disposes its child's State once
-/// its close animation finishes, so [activeRoute] and the navigation
-/// callbacks are owned by the parent (`ShellScreen`) instead, which persists
-/// across drawer close/reopen cycles.
-class AppDrawer extends StatelessWidget {
+/// [activeRoute] and the navigation callbacks are owned by the parent
+/// (`ShellScreen`) instead of this widget's own state: Flutter's [Drawer]
+/// disposes its child's State once its close animation finishes, so
+/// anything stored here would be lost every time the drawer reopens.
+class AppDrawer extends ConsumerWidget {
   const AppDrawer({
     super.key,
     required this.activeRoute,
@@ -39,8 +42,43 @@ class AppDrawer extends StatelessWidget {
   /// Called when the header logo is tapped.
   final VoidCallback onGoHome;
 
+  Future<void> _confirmLogout(BuildContext context, WidgetRef ref) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Logout'),
+        content: const Text(
+          'Are you sure? Your data is saved locally and will be available '
+          'when you sign back in.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text(
+              'Logout',
+              style: TextStyle(color: AppTheme.logoutRed),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    await AuthService.logout();
+    await ref.read(storeConfigProvider.notifier).refresh();
+    if (!context.mounted) return;
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => const WelcomeScreen()),
+      (route) => false,
+    );
+  }
+
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return Drawer(
       backgroundColor: AppTheme.surface,
       width: 280,
@@ -114,7 +152,7 @@ class AppDrawer extends StatelessWidget {
                     isActive: false,
                     iconColor: AppTheme.logoutRed,
                     labelColor: AppTheme.logoutRed,
-                    onTap: () {}, // wired in Stage 13
+                    onTap: () => _confirmLogout(context, ref),
                   ),
                 ],
               ),
@@ -128,13 +166,18 @@ class AppDrawer extends StatelessWidget {
   }
 }
 
-class _Header extends StatelessWidget {
+class _Header extends ConsumerWidget {
   const _Header({required this.onLogoTap});
 
   final VoidCallback onLogoTap;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final config = ref.watch(storeConfigProvider);
+    final storeName = (config?.storeName ?? '').isEmpty
+        ? 'My Store'
+        : config!.storeName;
+
     return Padding(
       padding: const EdgeInsets.only(top: 32, left: 24, right: 24, bottom: 16),
       child: Column(
@@ -149,10 +192,9 @@ class _Header extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 8),
-          const Text(
-            // Hardcoded for now - Stage 13 replaces this with StoreConfig.
-            'Mommy Spaza Shop',
-            style: TextStyle(
+          Text(
+            storeName,
+            style: const TextStyle(
               fontSize: 14,
               fontWeight: FontWeight.normal,
               color: AppTheme.textSecondary,

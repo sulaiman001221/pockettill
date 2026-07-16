@@ -13,4 +13,9 @@ class StoreConfig {
   String? ownerPhone;
   String? address;
   DateTime? lastSyncedAt;
+
+  String? authUserId; // Supabase Auth user UUID
+  String? authPhone; // formatted +27 phone used to register
+  bool isBetaAdopter = false;
+  bool isLoggedIn = false;
 }

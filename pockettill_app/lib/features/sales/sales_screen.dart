@@ -71,9 +71,24 @@ class _SalesScreenState extends ConsumerState<SalesScreen> {
   /// without that, every fresh app launch would flash the dialog for a
   /// perfectly healthy store for the split second before the real status
   /// resolves.
+  ///
+  /// [SyncStatusNotifier.ensureLoaded] only waits for a local Isar read, not
+  /// an actual sync - right after registration or a first login on a new
+  /// device, lastSyncedAt is genuinely null even though main()'s
+  /// reachability listener has already kicked off a real sync in the
+  /// background. Give that sync a chance to land (and refresh the status
+  /// off its result) before deciding, so a store that's about to sync fine
+  /// within a few seconds doesn't get wrongly flagged as unsynced for 30
+  /// days.
   Future<void> _checkSyncWarning() async {
     final notifier = ref.read(syncStatusProvider.notifier);
     await notifier.ensureLoaded();
+    if (!mounted || _hasShownSyncWarningThisSession) return;
+
+    if (ref.read(reachabilityServiceProvider).currentlyReachable) {
+      await ref.read(syncServiceProvider).sync();
+      await notifier.refresh();
+    }
     if (!mounted || _hasShownSyncWarningThisSession) return;
 
     final status = ref.read(syncStatusProvider);
