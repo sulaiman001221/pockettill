@@ -19,6 +19,7 @@ const List<String> _entityTypePriority = [
   'sale_item',
   'product',
   'credit_customer',
+  'store_profile',
 ];
 
 const int _batchSize = 50;
@@ -56,6 +57,15 @@ class SyncService {
         _statusController.add(SyncStatus.idle);
         return;
       }
+      if (storeConfig.storeId.isEmpty) {
+        // Pre-auth state: a StoreConfig exists locally (e.g. an eagerly
+        // created placeholder) but hasn't been through registration/login
+        // yet, so there's no real store to attach rows to in Supabase.
+        debugPrint('SyncService: no storeId - skipping sync');
+        _statusController.add(SyncStatus.idle);
+        return;
+      }
+      final storeId = storeConfig.storeId;
 
       final pending = await _eventQueue.getPending();
 
@@ -71,7 +81,9 @@ class SyncService {
 
           for (var offset = 0; offset < events.length; offset += _batchSize) {
             final batch = events.skip(offset).take(_batchSize).toList();
-            await SupabaseService.pushEvents(batch.map(_toEventMap).toList());
+            await SupabaseService.pushEvents(
+              batch.map((event) => _toEventMap(event, storeId)).toList(),
+            );
             await _eventQueue.markPushed(
               batch.map((event) => event.uuid).toList(),
             );
@@ -87,7 +99,7 @@ class SyncService {
         await _isar.storeConfigs.put(storeConfig);
       });
 
-      await SupabaseService.updateLastSeen(storeConfig.deviceId);
+      await SupabaseService.updateLastSeen(storeConfig.deviceId, storeId);
 
       await SupabaseService.supabaseClient.from('sync_log').insert({
         'device_id': storeConfig.deviceId,
@@ -115,12 +127,20 @@ class SyncService {
     return rows.length;
   }
 
-  Map<String, dynamic> _toEventMap(SyncEvent event) {
+  Map<String, dynamic> _toEventMap(SyncEvent event, String storeId) {
+    final payload = Map<String, dynamic>.from(
+      jsonDecode(event.payload) as Map,
+    );
+    // store_profile rows in the `stores` table are the store, so they don't
+    // get a store_id column - every other entity attaches to one.
+    if (event.operation != 'delete' && event.entityType != 'store_profile') {
+      payload['store_id'] = storeId;
+    }
     return {
       'entityType': event.entityType,
       'operation': event.operation,
       'entityUuid': event.entityUuid,
-      'payload': jsonDecode(event.payload),
+      'payload': payload,
     };
   }
 

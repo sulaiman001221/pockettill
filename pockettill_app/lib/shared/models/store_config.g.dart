@@ -22,33 +22,53 @@ const StoreConfigSchema = CollectionSchema(
       name: r'address',
       type: IsarType.string,
     ),
-    r'deviceId': PropertySchema(
+    r'authPhone': PropertySchema(
       id: 1,
+      name: r'authPhone',
+      type: IsarType.string,
+    ),
+    r'authUserId': PropertySchema(
+      id: 2,
+      name: r'authUserId',
+      type: IsarType.string,
+    ),
+    r'deviceId': PropertySchema(
+      id: 3,
       name: r'deviceId',
       type: IsarType.string,
     ),
+    r'isBetaAdopter': PropertySchema(
+      id: 4,
+      name: r'isBetaAdopter',
+      type: IsarType.bool,
+    ),
+    r'isLoggedIn': PropertySchema(
+      id: 5,
+      name: r'isLoggedIn',
+      type: IsarType.bool,
+    ),
     r'lastSyncedAt': PropertySchema(
-      id: 2,
+      id: 6,
       name: r'lastSyncedAt',
       type: IsarType.dateTime,
     ),
     r'ownerName': PropertySchema(
-      id: 3,
+      id: 7,
       name: r'ownerName',
       type: IsarType.string,
     ),
     r'ownerPhone': PropertySchema(
-      id: 4,
+      id: 8,
       name: r'ownerPhone',
       type: IsarType.string,
     ),
     r'storeId': PropertySchema(
-      id: 5,
+      id: 9,
       name: r'storeId',
       type: IsarType.string,
     ),
     r'storeName': PropertySchema(
-      id: 6,
+      id: 10,
       name: r'storeName',
       type: IsarType.string,
     )
@@ -79,6 +99,18 @@ int _storeConfigEstimateSize(
       bytesCount += 3 + value.length * 3;
     }
   }
+  {
+    final value = object.authPhone;
+    if (value != null) {
+      bytesCount += 3 + value.length * 3;
+    }
+  }
+  {
+    final value = object.authUserId;
+    if (value != null) {
+      bytesCount += 3 + value.length * 3;
+    }
+  }
   bytesCount += 3 + object.deviceId.length * 3;
   {
     final value = object.ownerName;
@@ -104,12 +136,16 @@ void _storeConfigSerialize(
   Map<Type, List<int>> allOffsets,
 ) {
   writer.writeString(offsets[0], object.address);
-  writer.writeString(offsets[1], object.deviceId);
-  writer.writeDateTime(offsets[2], object.lastSyncedAt);
-  writer.writeString(offsets[3], object.ownerName);
-  writer.writeString(offsets[4], object.ownerPhone);
-  writer.writeString(offsets[5], object.storeId);
-  writer.writeString(offsets[6], object.storeName);
+  writer.writeString(offsets[1], object.authPhone);
+  writer.writeString(offsets[2], object.authUserId);
+  writer.writeString(offsets[3], object.deviceId);
+  writer.writeBool(offsets[4], object.isBetaAdopter);
+  writer.writeBool(offsets[5], object.isLoggedIn);
+  writer.writeDateTime(offsets[6], object.lastSyncedAt);
+  writer.writeString(offsets[7], object.ownerName);
+  writer.writeString(offsets[8], object.ownerPhone);
+  writer.writeString(offsets[9], object.storeId);
+  writer.writeString(offsets[10], object.storeName);
 }
 
 StoreConfig _storeConfigDeserialize(
@@ -120,13 +156,17 @@ StoreConfig _storeConfigDeserialize(
 ) {
   final object = StoreConfig();
   object.address = reader.readStringOrNull(offsets[0]);
-  object.deviceId = reader.readString(offsets[1]);
+  object.authPhone = reader.readStringOrNull(offsets[1]);
+  object.authUserId = reader.readStringOrNull(offsets[2]);
+  object.deviceId = reader.readString(offsets[3]);
   object.id = id;
-  object.lastSyncedAt = reader.readDateTimeOrNull(offsets[2]);
-  object.ownerName = reader.readStringOrNull(offsets[3]);
-  object.ownerPhone = reader.readStringOrNull(offsets[4]);
-  object.storeId = reader.readString(offsets[5]);
-  object.storeName = reader.readString(offsets[6]);
+  object.isBetaAdopter = reader.readBool(offsets[4]);
+  object.isLoggedIn = reader.readBool(offsets[5]);
+  object.lastSyncedAt = reader.readDateTimeOrNull(offsets[6]);
+  object.ownerName = reader.readStringOrNull(offsets[7]);
+  object.ownerPhone = reader.readStringOrNull(offsets[8]);
+  object.storeId = reader.readString(offsets[9]);
+  object.storeName = reader.readString(offsets[10]);
   return object;
 }
 
@@ -140,16 +180,24 @@ P _storeConfigDeserializeProp<P>(
     case 0:
       return (reader.readStringOrNull(offset)) as P;
     case 1:
-      return (reader.readString(offset)) as P;
+      return (reader.readStringOrNull(offset)) as P;
     case 2:
-      return (reader.readDateTimeOrNull(offset)) as P;
+      return (reader.readStringOrNull(offset)) as P;
     case 3:
-      return (reader.readStringOrNull(offset)) as P;
-    case 4:
-      return (reader.readStringOrNull(offset)) as P;
-    case 5:
       return (reader.readString(offset)) as P;
+    case 4:
+      return (reader.readBool(offset)) as P;
+    case 5:
+      return (reader.readBool(offset)) as P;
     case 6:
+      return (reader.readDateTimeOrNull(offset)) as P;
+    case 7:
+      return (reader.readStringOrNull(offset)) as P;
+    case 8:
+      return (reader.readStringOrNull(offset)) as P;
+    case 9:
+      return (reader.readString(offset)) as P;
+    case 10:
       return (reader.readString(offset)) as P;
     default:
       throw IsarError('Unknown property with id $propertyId');
@@ -401,6 +449,314 @@ extension StoreConfigQueryFilter
     });
   }
 
+  QueryBuilder<StoreConfig, StoreConfig, QAfterFilterCondition>
+      authPhoneIsNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(const FilterCondition.isNull(
+        property: r'authPhone',
+      ));
+    });
+  }
+
+  QueryBuilder<StoreConfig, StoreConfig, QAfterFilterCondition>
+      authPhoneIsNotNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(const FilterCondition.isNotNull(
+        property: r'authPhone',
+      ));
+    });
+  }
+
+  QueryBuilder<StoreConfig, StoreConfig, QAfterFilterCondition>
+      authPhoneEqualTo(
+    String? value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'authPhone',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<StoreConfig, StoreConfig, QAfterFilterCondition>
+      authPhoneGreaterThan(
+    String? value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'authPhone',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<StoreConfig, StoreConfig, QAfterFilterCondition>
+      authPhoneLessThan(
+    String? value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'authPhone',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<StoreConfig, StoreConfig, QAfterFilterCondition>
+      authPhoneBetween(
+    String? lower,
+    String? upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'authPhone',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<StoreConfig, StoreConfig, QAfterFilterCondition>
+      authPhoneStartsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.startsWith(
+        property: r'authPhone',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<StoreConfig, StoreConfig, QAfterFilterCondition>
+      authPhoneEndsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.endsWith(
+        property: r'authPhone',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<StoreConfig, StoreConfig, QAfterFilterCondition>
+      authPhoneContains(String value, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.contains(
+        property: r'authPhone',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<StoreConfig, StoreConfig, QAfterFilterCondition>
+      authPhoneMatches(String pattern, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.matches(
+        property: r'authPhone',
+        wildcard: pattern,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<StoreConfig, StoreConfig, QAfterFilterCondition>
+      authPhoneIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'authPhone',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<StoreConfig, StoreConfig, QAfterFilterCondition>
+      authPhoneIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        property: r'authPhone',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<StoreConfig, StoreConfig, QAfterFilterCondition>
+      authUserIdIsNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(const FilterCondition.isNull(
+        property: r'authUserId',
+      ));
+    });
+  }
+
+  QueryBuilder<StoreConfig, StoreConfig, QAfterFilterCondition>
+      authUserIdIsNotNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(const FilterCondition.isNotNull(
+        property: r'authUserId',
+      ));
+    });
+  }
+
+  QueryBuilder<StoreConfig, StoreConfig, QAfterFilterCondition>
+      authUserIdEqualTo(
+    String? value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'authUserId',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<StoreConfig, StoreConfig, QAfterFilterCondition>
+      authUserIdGreaterThan(
+    String? value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'authUserId',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<StoreConfig, StoreConfig, QAfterFilterCondition>
+      authUserIdLessThan(
+    String? value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'authUserId',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<StoreConfig, StoreConfig, QAfterFilterCondition>
+      authUserIdBetween(
+    String? lower,
+    String? upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'authUserId',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<StoreConfig, StoreConfig, QAfterFilterCondition>
+      authUserIdStartsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.startsWith(
+        property: r'authUserId',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<StoreConfig, StoreConfig, QAfterFilterCondition>
+      authUserIdEndsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.endsWith(
+        property: r'authUserId',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<StoreConfig, StoreConfig, QAfterFilterCondition>
+      authUserIdContains(String value, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.contains(
+        property: r'authUserId',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<StoreConfig, StoreConfig, QAfterFilterCondition>
+      authUserIdMatches(String pattern, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.matches(
+        property: r'authUserId',
+        wildcard: pattern,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<StoreConfig, StoreConfig, QAfterFilterCondition>
+      authUserIdIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'authUserId',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<StoreConfig, StoreConfig, QAfterFilterCondition>
+      authUserIdIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        property: r'authUserId',
+        value: '',
+      ));
+    });
+  }
+
   QueryBuilder<StoreConfig, StoreConfig, QAfterFilterCondition> deviceIdEqualTo(
     String value, {
     bool caseSensitive = true,
@@ -585,6 +941,26 @@ extension StoreConfigQueryFilter
         includeLower: includeLower,
         upper: upper,
         includeUpper: includeUpper,
+      ));
+    });
+  }
+
+  QueryBuilder<StoreConfig, StoreConfig, QAfterFilterCondition>
+      isBetaAdopterEqualTo(bool value) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'isBetaAdopter',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<StoreConfig, StoreConfig, QAfterFilterCondition>
+      isLoggedInEqualTo(bool value) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'isLoggedIn',
+        value: value,
       ));
     });
   }
@@ -1262,6 +1638,30 @@ extension StoreConfigQuerySortBy
     });
   }
 
+  QueryBuilder<StoreConfig, StoreConfig, QAfterSortBy> sortByAuthPhone() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'authPhone', Sort.asc);
+    });
+  }
+
+  QueryBuilder<StoreConfig, StoreConfig, QAfterSortBy> sortByAuthPhoneDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'authPhone', Sort.desc);
+    });
+  }
+
+  QueryBuilder<StoreConfig, StoreConfig, QAfterSortBy> sortByAuthUserId() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'authUserId', Sort.asc);
+    });
+  }
+
+  QueryBuilder<StoreConfig, StoreConfig, QAfterSortBy> sortByAuthUserIdDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'authUserId', Sort.desc);
+    });
+  }
+
   QueryBuilder<StoreConfig, StoreConfig, QAfterSortBy> sortByDeviceId() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'deviceId', Sort.asc);
@@ -1271,6 +1671,31 @@ extension StoreConfigQuerySortBy
   QueryBuilder<StoreConfig, StoreConfig, QAfterSortBy> sortByDeviceIdDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'deviceId', Sort.desc);
+    });
+  }
+
+  QueryBuilder<StoreConfig, StoreConfig, QAfterSortBy> sortByIsBetaAdopter() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'isBetaAdopter', Sort.asc);
+    });
+  }
+
+  QueryBuilder<StoreConfig, StoreConfig, QAfterSortBy>
+      sortByIsBetaAdopterDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'isBetaAdopter', Sort.desc);
+    });
+  }
+
+  QueryBuilder<StoreConfig, StoreConfig, QAfterSortBy> sortByIsLoggedIn() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'isLoggedIn', Sort.asc);
+    });
+  }
+
+  QueryBuilder<StoreConfig, StoreConfig, QAfterSortBy> sortByIsLoggedInDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'isLoggedIn', Sort.desc);
     });
   }
 
@@ -1350,6 +1775,30 @@ extension StoreConfigQuerySortThenBy
     });
   }
 
+  QueryBuilder<StoreConfig, StoreConfig, QAfterSortBy> thenByAuthPhone() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'authPhone', Sort.asc);
+    });
+  }
+
+  QueryBuilder<StoreConfig, StoreConfig, QAfterSortBy> thenByAuthPhoneDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'authPhone', Sort.desc);
+    });
+  }
+
+  QueryBuilder<StoreConfig, StoreConfig, QAfterSortBy> thenByAuthUserId() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'authUserId', Sort.asc);
+    });
+  }
+
+  QueryBuilder<StoreConfig, StoreConfig, QAfterSortBy> thenByAuthUserIdDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'authUserId', Sort.desc);
+    });
+  }
+
   QueryBuilder<StoreConfig, StoreConfig, QAfterSortBy> thenByDeviceId() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'deviceId', Sort.asc);
@@ -1371,6 +1820,31 @@ extension StoreConfigQuerySortThenBy
   QueryBuilder<StoreConfig, StoreConfig, QAfterSortBy> thenByIdDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'id', Sort.desc);
+    });
+  }
+
+  QueryBuilder<StoreConfig, StoreConfig, QAfterSortBy> thenByIsBetaAdopter() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'isBetaAdopter', Sort.asc);
+    });
+  }
+
+  QueryBuilder<StoreConfig, StoreConfig, QAfterSortBy>
+      thenByIsBetaAdopterDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'isBetaAdopter', Sort.desc);
+    });
+  }
+
+  QueryBuilder<StoreConfig, StoreConfig, QAfterSortBy> thenByIsLoggedIn() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'isLoggedIn', Sort.asc);
+    });
+  }
+
+  QueryBuilder<StoreConfig, StoreConfig, QAfterSortBy> thenByIsLoggedInDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'isLoggedIn', Sort.desc);
     });
   }
 
@@ -1445,10 +1919,36 @@ extension StoreConfigQueryWhereDistinct
     });
   }
 
+  QueryBuilder<StoreConfig, StoreConfig, QDistinct> distinctByAuthPhone(
+      {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'authPhone', caseSensitive: caseSensitive);
+    });
+  }
+
+  QueryBuilder<StoreConfig, StoreConfig, QDistinct> distinctByAuthUserId(
+      {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'authUserId', caseSensitive: caseSensitive);
+    });
+  }
+
   QueryBuilder<StoreConfig, StoreConfig, QDistinct> distinctByDeviceId(
       {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
       return query.addDistinctBy(r'deviceId', caseSensitive: caseSensitive);
+    });
+  }
+
+  QueryBuilder<StoreConfig, StoreConfig, QDistinct> distinctByIsBetaAdopter() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'isBetaAdopter');
+    });
+  }
+
+  QueryBuilder<StoreConfig, StoreConfig, QDistinct> distinctByIsLoggedIn() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'isLoggedIn');
     });
   }
 
@@ -1501,9 +2001,33 @@ extension StoreConfigQueryProperty
     });
   }
 
+  QueryBuilder<StoreConfig, String?, QQueryOperations> authPhoneProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'authPhone');
+    });
+  }
+
+  QueryBuilder<StoreConfig, String?, QQueryOperations> authUserIdProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'authUserId');
+    });
+  }
+
   QueryBuilder<StoreConfig, String, QQueryOperations> deviceIdProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'deviceId');
+    });
+  }
+
+  QueryBuilder<StoreConfig, bool, QQueryOperations> isBetaAdopterProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'isBetaAdopter');
+    });
+  }
+
+  QueryBuilder<StoreConfig, bool, QQueryOperations> isLoggedInProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'isLoggedIn');
     });
   }
 

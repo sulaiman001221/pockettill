@@ -61,6 +61,14 @@ class _Leading extends StatelessWidget {
         onPressed: () => Scaffold.of(context).openDrawer(),
       );
     }
+    if (!Navigator.of(context).canPop()) {
+      // Reached via pushReplacement (e.g. SplashScreen routing straight to
+      // LoginScreen for a registered-but-logged-out device) - there's
+      // nothing to pop back to, so a back arrow that pops would leave a
+      // blank Navigator. Keep the same footprint so the centred title
+      // doesn't shift, just make it inert instead.
+      return const SizedBox(width: 48, height: 48);
+    }
     return IconButton(
       icon: const Icon(Icons.arrow_back, color: AppTheme.textPrimary),
       onPressed: () => Navigator.of(context).pop(),

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import 'features/shell/shell_screen.dart';
+import 'features/auth/splash_screen.dart';
 import 'shared/theme/app_theme.dart';
 
 /// Root widget of the PocketTill app.
@@ -13,7 +13,7 @@ class PocketTillApp extends StatelessWidget {
       title: 'PocketTill',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light,
-      home: const ShellScreen(),
+      home: const SplashScreen(),
     );
   }
 }

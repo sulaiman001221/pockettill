@@ -19,6 +19,7 @@ class SupabaseService {
     'product': 'products',
     'credit_customer': 'credit_customers',
     'credit_tx': 'credit_transactions',
+    'store_profile': 'stores',
   };
 
   /// Initializes the Supabase client.
@@ -110,9 +111,10 @@ class SupabaseService {
 
   /// Marks a device as having just synced, creating its `devices` row on
   /// first sync (there is no separate device-registration step).
-  static Future<void> updateLastSeen(String deviceId) {
+  static Future<void> updateLastSeen(String deviceId, String storeId) {
     return supabaseClient.from('devices').upsert({
       'id': deviceId,
+      'store_id': storeId,
       'last_seen_at': DateTime.now().toUtc().toIso8601String(),
     });
   }

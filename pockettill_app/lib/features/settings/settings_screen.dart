@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -5,14 +7,18 @@ import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:uuid/uuid.dart';
 
+import '../../core/auth/auth_service.dart';
 import '../../core/hardware/hardware_detector.dart';
 import '../../core/sync/sync_service.dart';
 import '../../core/sync/sync_status_provider.dart';
 import '../../shared/models/store_config.dart';
+import '../../shared/models/sync_event.dart';
 import '../../shared/repositories/repositories.dart';
+import '../../shared/repositories/store_config_provider.dart';
 import '../../shared/theme/app_theme.dart';
 import '../../shared/utils/sync_status.dart';
 import '../../shared/widgets/pockettill_app_bar.dart';
+import '../auth/welcome_screen.dart';
 
 // Placeholder until the real support number is available.
 const String _supportWhatsAppNumber = '27000000000';
@@ -58,19 +64,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
   Future<void> _load() async {
     setState(() => _loading = true);
-    final repo = ref.read(storeConfigRepositoryProvider);
-    var config = await repo.get();
-    if (config == null) {
-      // First time this device has ever opened Settings - give it a real
-      // identity so Device ID has something to show and Sync Now has a
-      // config to sync against.
-      const uuid = Uuid();
-      config = StoreConfig()
-        ..storeId = uuid.v4()
-        ..storeName = ''
-        ..deviceId = uuid.v4();
-      await repo.save(config);
-    }
+    // By the time Settings is reachable, SplashScreen has already gated
+    // entry behind registration/login, so a real StoreConfig (with a
+    // storeId matching a genuine `stores` row) always exists - this never
+    // fabricates a placeholder one, since a locally-invented storeId would
+    // violate the store_id foreign key on every synced table.
+    final config = await ref.read(storeConfigRepositoryProvider).get();
     if (!mounted) return;
     setState(() {
       _config = config;
@@ -83,7 +82,31 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     if (config == null) return;
     mutate(config);
     await ref.read(storeConfigRepositoryProvider).save(config);
+    await _enqueueStoreProfileSync(config);
+    ref.read(storeConfigProvider.notifier).refresh();
     if (mounted) setState(() {});
+  }
+
+  /// Queues a `store_profile` sync event so the edit reaches the `stores`
+  /// row on the next sync. A no-op before registration - there's no store
+  /// row yet to update.
+  Future<void> _enqueueStoreProfileSync(StoreConfig config) async {
+    if (config.storeId.isEmpty) return;
+    final event = SyncEvent()
+      ..uuid = const Uuid().v4()
+      ..entityType = 'store_profile'
+      ..entityUuid = config.storeId
+      ..operation = 'update'
+      ..payload = jsonEncode({
+        'uuid': config.storeId,
+        'name': config.storeName,
+        'owner_name': config.ownerName,
+        'owner_phone': config.ownerPhone,
+        'address': config.address,
+      })
+      ..deviceId = config.deviceId
+      ..createdAt = DateTime.now();
+    await ref.read(eventQueueProvider).enqueue(event);
   }
 
   Future<void> _editField({
@@ -224,26 +247,37 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   }
 
   Future<void> _confirmLogout() async {
-    await showDialog<void>(
+    final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: const Text('Logout'),
-        content: const Text('Are you sure you want to logout?'),
+        content: const Text(
+          'Are you sure? Your data is saved locally and will be available '
+          'when you sign back in.',
+        ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(),
+            onPressed: () => Navigator.of(dialogContext).pop(false),
             child: const Text('Cancel'),
           ),
           TextButton(
-            // Stage 13 wires this up to a real logout.
-            onPressed: () => Navigator.of(dialogContext).pop(),
+            onPressed: () => Navigator.of(dialogContext).pop(true),
             child: const Text(
-              'Confirm',
+              'Logout',
               style: TextStyle(color: AppTheme.logoutRed),
             ),
           ),
         ],
       ),
+    );
+    if (confirmed != true) return;
+
+    await AuthService.logout();
+    ref.read(storeConfigProvider.notifier).refresh();
+    if (!mounted) return;
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => const WelcomeScreen()),
+      (route) => false,
     );
   }
 
@@ -260,8 +294,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 _buildStoreProfileCard(),
                 const SizedBox(height: 16),
                 _buildSyncCard(),
-                const SizedBox(height: 16),
-                _buildBetaCard(),
+                if (_config?.isBetaAdopter == true) ...[
+                  const SizedBox(height: 16),
+                  _buildBetaCard(),
+                ],
                 const SizedBox(height: 16),
                 _buildDeviceInfoCard(),
                 const SizedBox(height: 16),
@@ -276,8 +312,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
   Widget _buildStoreProfileCard() {
     final config = _config;
-    const hardcodedName = 'Mommy Spaza Shop'; // Stage 13 replaces with StoreConfig.
-    final letter = hardcodedName.trim()[0].toUpperCase();
+    final displayName = (config?.storeName ?? '').isEmpty
+        ? 'My Store'
+        : config!.storeName;
+    final letter = displayName.trim()[0].toUpperCase();
 
     return _SettingsCard(
       child: Column(
@@ -295,9 +333,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             ),
           ),
           const SizedBox(height: 12),
-          const Text(
-            hardcodedName,
-            style: TextStyle(
+          Text(
+            displayName,
+            style: const TextStyle(
               fontSize: 20,
               fontWeight: FontWeight.bold,
               color: AppTheme.textPrimary,
