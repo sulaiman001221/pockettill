@@ -26,6 +26,24 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   bool _submitting = false;
 
   @override
+  void initState() {
+    super.initState();
+    _phoneController.addListener(_onFieldsChanged);
+    _passwordController.addListener(_onFieldsChanged);
+  }
+
+  void _onFieldsChanged() {
+    // Only to repaint the Sign In button's enabled state - no field-level
+    // validation beyond "something is typed", since the server is the
+    // actual source of truth for whether phone+password are correct.
+    setState(() {});
+  }
+
+  bool get _canSubmit =>
+      _phoneController.text.trim().isNotEmpty &&
+      _passwordController.text.isNotEmpty;
+
+  @override
   void dispose() {
     _phoneController.dispose();
     _passwordController.dispose();
@@ -57,7 +75,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   }
 
   Future<void> _submit() async {
-    if (_submitting) return;
+    if (_submitting || !_canSubmit) return;
 
     // No pre-emptive reachability check here (unlike registration/reset,
     // which start an OTP flow that's wasteful to kick off while offline):
@@ -310,7 +328,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
-                onPressed: _submitting ? null : _submit,
+                onPressed: (_canSubmit && !_submitting) ? _submit : null,
                 child: _submitting
                     ? const SizedBox(
                         width: 22,
