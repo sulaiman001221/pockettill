@@ -162,6 +162,17 @@ class AuthService {
       throw Exception('Login failed');
     }
 
+    // Single-device policy: logging in anywhere immediately ends every
+    // other session for this account, using this brand-new session's own
+    // authority (no service-role key needed). Deliberately not a "log out
+    // the old device first" block - that would permanently lock a store
+    // out if the old device is lost, stolen, or broken. This way a new
+    // login always works, and the old device just stops being authenticated
+    // next time it tries to use its session.
+    await SupabaseService.supabaseClient.auth.signOut(
+      scope: SignOutScope.others,
+    );
+
     final store = await SupabaseService.supabaseClient
         .from('stores')
         .select()
