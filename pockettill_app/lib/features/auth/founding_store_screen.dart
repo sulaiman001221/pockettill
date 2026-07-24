@@ -3,10 +3,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../shared/repositories/store_config_provider.dart';
 import '../../shared/theme/app_theme.dart';
-import '../shell/shell_screen.dart';
 
-/// One-time celebration shown right after registration to a store that
-/// landed in PocketTill's first 100 (see `is_founding_store` in Supabase).
+/// Celebration shown when a store earns founding-store status through
+/// actual usage (7+ days registered, 5+ sales recorded, a slot still open -
+/// see `check_founding_store_qualification` in Supabase). Always reached by
+/// [ShellScreen] pushing this on top of itself a couple of seconds after a
+/// silent background check finds the store newly qualified - never shown at
+/// registration anymore, so its own "Start Using PocketTill" button just
+/// pops back rather than rebuilding the app shell underneath it.
 class FoundingStoreScreen extends ConsumerStatefulWidget {
   const FoundingStoreScreen({super.key});
 
@@ -64,10 +68,10 @@ class _FoundingStoreScreenState extends ConsumerState<FoundingStoreScreen>
               ),
               const SizedBox(height: 24),
               const Text(
-                '🎉 Founding Store!',
+                "🎉 You've Earned Founding Store Status!",
                 textAlign: TextAlign.center,
                 style: TextStyle(
-                  fontSize: 32,
+                  fontSize: 28,
                   fontWeight: FontWeight.bold,
                   color: AppTheme.textPrimary,
                 ),
@@ -88,9 +92,9 @@ class _FoundingStoreScreenState extends ConsumerState<FoundingStoreScreen>
               const Padding(
                 padding: EdgeInsets.symmetric(horizontal: 32),
                 child: Text(
-                  "You're one of PocketTill's first 100 stores. As a thank "
-                  "you, you'll receive a 50% lifetime discount when billing "
-                  'begins.',
+                  "Your store has earned a spot among PocketTill's first "
+                  "100 founding stores. As a thank you, you'll receive a "
+                  '50% lifetime discount when billing begins.',
                   textAlign: TextAlign.center,
                   style: TextStyle(fontSize: 15, color: Color(0xFF4A5568)),
                 ),
@@ -129,10 +133,7 @@ class _FoundingStoreScreenState extends ConsumerState<FoundingStoreScreen>
                         borderRadius: BorderRadius.circular(12),
                       ),
                     ),
-                    onPressed: () => Navigator.of(context).pushAndRemoveUntil(
-                      MaterialPageRoute(builder: (_) => const ShellScreen()),
-                      (route) => false,
-                    ),
+                    onPressed: () => Navigator.of(context).pop(),
                     child: const Text(
                       'Start Using PocketTill →',
                       style: TextStyle(

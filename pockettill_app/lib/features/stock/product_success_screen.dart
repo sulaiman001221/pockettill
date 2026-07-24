@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import '../../shared/models/product.dart';
 import '../../shared/theme/app_theme.dart';
 import 'add_product_screen.dart';
+import 'stock_screen.dart';
 import 'stock_ui.dart';
 
 /// Shown after successfully adding a new product (never after an edit -
@@ -53,10 +54,16 @@ class _ProductSuccessScreenState extends State<ProductSuccessScreen>
   }
 
   void _goToStock() {
-    // Stack is Shell -> Stock -> AddProduct -> Success; pop the last two.
-    Navigator.of(context)
-      ..pop()
-      ..pop();
+    // Not a fixed-count pop: AddProductScreen (and this Success screen) can
+    // also be reached from the Sales screen's scan-to-add-new-product flow,
+    // where the stack is Shell(Sales) -> AddProduct -> Success with no
+    // StockScreen underneath at all - popping twice there would strand on
+    // Sales instead of Stock. Clear back to the shell, then push a fresh
+    // StockScreen, so this always lands on Stock regardless of entry path.
+    Navigator.of(context).popUntil((route) => route.isFirst);
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const StockScreen()));
   }
 
   void _returnHome() {

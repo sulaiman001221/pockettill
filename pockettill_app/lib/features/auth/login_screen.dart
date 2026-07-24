@@ -87,10 +87,34 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     // reachability check.
     setState(() => _submitting = true);
     try {
-      await AuthService.login(
+      final result = await AuthService.login(
         phone: _phoneController.text,
         password: _passwordController.text,
       );
+
+      if (result.needsDeviceVerification) {
+        if (!mounted) return;
+        await Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => OtpVerificationScreen(
+              phone: result.phone!,
+              mode: OtpMode.newDeviceVerification,
+              initialChannel: result.otpChannel!,
+              onVerified: (_) async {
+                await AuthService.completeNewDeviceLogin(result);
+                await ref.read(storeConfigProvider.notifier).refresh();
+                if (!mounted) return;
+                Navigator.of(context).pushAndRemoveUntil(
+                  MaterialPageRoute(builder: (_) => const ShellScreen()),
+                  (route) => false,
+                );
+              },
+            ),
+          ),
+        );
+        return;
+      }
+
       await ref.read(storeConfigProvider.notifier).refresh();
       if (!mounted) return;
       // pushAndRemoveUntil, not pushReplacement - Login was pushed on top
@@ -231,7 +255,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                 builder: (_) => OtpVerificationScreen(
                                   phone: formatted,
                                   mode: OtpMode.passwordReset,
-                                  onVerified: () async {
+                                  onVerified: (_) async {
                                     if (!mounted) return;
                                     Navigator.of(context).push(
                                       MaterialPageRoute(

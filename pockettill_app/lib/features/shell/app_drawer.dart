@@ -5,6 +5,7 @@ import '../../core/auth/auth_service.dart';
 import '../../core/sync/sync_status_provider.dart';
 import '../../shared/repositories/store_config_provider.dart';
 import '../../shared/theme/app_theme.dart';
+import '../../shared/widgets/confirmation_dialog.dart';
 import '../auth/welcome_screen.dart';
 import '../analytics/analytics_screen.dart';
 import '../credit/credit_screen.dart';
@@ -42,32 +43,21 @@ class AppDrawer extends ConsumerWidget {
   /// Called when the header logo is tapped.
   final VoidCallback onGoHome;
 
-  Future<void> _confirmLogout(BuildContext context, WidgetRef ref) async {
-    final confirmed = await showDialog<bool>(
+  void _confirmLogout(BuildContext context, WidgetRef ref) {
+    showDialog<void>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Logout'),
-        content: const Text(
-          'Are you sure? Your data is saved locally and will be available '
-          'when you sign back in.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text(
-              'Logout',
-              style: TextStyle(color: AppTheme.logoutRed),
-            ),
-          ),
-        ],
+      builder: (_) => ConfirmationDialog(
+        message:
+            'Are you sure you want to logout? Your data stays safe on '
+            'this device.',
+        confirmLabel: 'Logout',
+        confirmColor: AppTheme.primary,
+        onConfirm: () => _performLogout(context, ref),
       ),
     );
-    if (confirmed != true) return;
+  }
 
+  Future<void> _performLogout(BuildContext context, WidgetRef ref) async {
     await AuthService.logout();
     await ref.read(storeConfigProvider.notifier).refresh();
     if (!context.mounted) return;

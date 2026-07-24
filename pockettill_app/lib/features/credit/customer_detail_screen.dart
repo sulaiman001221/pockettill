@@ -8,6 +8,7 @@ import '../../shared/models/sale.dart';
 import '../../shared/models/sale_item.dart';
 import '../../shared/repositories/repositories.dart';
 import '../../shared/theme/app_theme.dart';
+import '../../shared/widgets/confirmation_dialog.dart';
 import 'add_customer_screen.dart';
 import 'add_payment_screen.dart';
 import 'date_range_sheet.dart';
@@ -219,40 +220,26 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
     await _load();
   }
 
-  Future<void> _deleteCustomer() async {
+  void _deleteCustomer() {
     final customer = _customer;
     if (customer == null) return;
 
-    final confirmed = await showDialog<bool>(
+    showDialog<void>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Delete Customer?'),
-        content: Text(
-          'This removes "${customer.name}" and their transaction history '
-          'from your customer list.'
-          '${customer.balance > 0 ? '\n\nThis customer still owes R${customer.balance.toStringAsFixed(2)}.' : ''}',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text(
-              'Delete',
-              style: TextStyle(color: AppTheme.logoutRed),
-            ),
-          ),
-        ],
+      builder: (_) => ConfirmationDialog(
+        message:
+            'This will permanently delete ${customer.name} and all their '
+            'transaction history.',
+        confirmLabel: 'Delete',
+        onConfirm: () {
+          if (!mounted) return;
+          // The actual delete (with its own Undo window) happens back on
+          // CreditScreen, not here - this screen is about to be popped
+          // since it's showing the very customer being removed.
+          Navigator.of(context).pop(customer);
+        },
       ),
     );
-    if (confirmed != true || !mounted) return;
-
-    // The actual delete (with its own Undo window) happens back on
-    // CreditScreen, not here - this screen is about to be popped since it's
-    // showing the very customer being removed.
-    Navigator.of(context).pop(customer);
   }
 
   @override

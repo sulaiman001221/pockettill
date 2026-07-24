@@ -21,9 +21,9 @@ String historyFilterLabel(HistoryFilter filter) {
   }
 }
 
-/// The currently selected filter period. Defaults to This Week.
+/// The currently selected filter period. Defaults to Today.
 final historyFilterProvider = StateProvider<HistoryFilter>(
-  (ref) => HistoryFilter.thisWeek,
+  (ref) => HistoryFilter.today,
 );
 
 /// The date range chosen via the custom date-range picker, if any. Only

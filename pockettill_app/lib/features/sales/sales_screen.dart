@@ -9,7 +9,9 @@ import '../../core/sync/sync_service.dart';
 import '../../core/sync/sync_status_provider.dart';
 import '../../main.dart';
 import '../../shared/models/product.dart';
+import '../../shared/repositories/repositories.dart';
 import '../../shared/theme/app_theme.dart';
+import '../../shared/widgets/quick_stock_update_sheet.dart';
 import '../stock/add_product_screen.dart';
 import '../stock/barcode_scanner_screen.dart';
 import '../stock/stock_ui.dart';
@@ -172,14 +174,46 @@ class _SalesScreenState extends ConsumerState<SalesScreen> {
   Future<void> _handleBarcode(String barcode) async {
     final product = await ref
         .read(salesNotifierProvider.notifier)
-        .onBarcodeScanned(barcode);
+        .lookupByBarcode(barcode);
     if (!mounted) return;
 
-    // A found product just shows up in the cart directly - no separate
-    // confirmation popup needed on top of that.
     if (product == null) {
       _showProductNotFoundSheet(barcode);
+      return;
     }
+    await _addToCartRespectingStock(product);
+  }
+
+  /// Adds [product] to the cart directly if it's in stock; otherwise shows
+  /// the quick stock update sheet first. Shared by both the scan and search
+  /// paths so an out-of-stock product behaves identically either way -
+  /// previously scanning one added it to the cart anyway while search just
+  /// disabled it, silently and inconsistently.
+  Future<void> _addToCartRespectingStock(Product product) async {
+    if (product.stock > 0) {
+      ref.read(salesNotifierProvider.notifier).addToCart(product);
+      return;
+    }
+
+    final quantity = await showModalBottomSheet<int>(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) =>
+          QuickStockUpdateSheet(productName: productDisplayName(product)),
+    );
+    if (quantity == null || !mounted) return;
+
+    final repository = ref.read(productRepositoryProvider);
+    await repository.adjustStock(product.uuid, quantity);
+    final updated = await repository.getByUuid(product.uuid);
+    if (!mounted) return;
+
+    if (updated != null) {
+      ref.read(salesNotifierProvider.notifier).addToCart(updated);
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Stock updated and added to cart')),
+    );
   }
 
   void _showProductNotFoundSheet(String barcode) {
@@ -207,9 +241,9 @@ class _SalesScreenState extends ConsumerState<SalesScreen> {
   }
 
   void _onSelectSearchResult(Product product) {
-    ref.read(salesNotifierProvider.notifier).addToCart(product);
     _searchController.clear();
     _searchFocusNode.unfocus(disposition: UnfocusDisposition.scope);
+    _addToCartRespectingStock(product);
   }
 
   @override
@@ -551,7 +585,6 @@ class _SearchResultsList extends StatelessWidget {
                   final product = results[index];
                   final outOfStock = product.stock <= 0;
                   return ListTile(
-                    enabled: !outOfStock,
                     leading: ProductAvatar(
                       name: productDisplayName(product),
                       size: 36,
@@ -572,7 +605,7 @@ class _SearchResultsList extends StatelessWidget {
                         color: AppTheme.primary,
                       ),
                     ),
-                    onTap: outOfStock ? null : () => onSelect(product),
+                    onTap: () => onSelect(product),
                   );
                 },
               ),

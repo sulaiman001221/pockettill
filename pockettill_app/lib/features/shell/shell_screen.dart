@@ -8,6 +8,7 @@ import '../../core/supabase/supabase_service.dart';
 import '../../shared/repositories/store_config_repository.dart';
 import '../../shared/theme/app_theme.dart';
 import '../../shared/widgets/pockettill_app_bar.dart';
+import '../auth/founding_store_screen.dart';
 import '../auth/welcome_screen.dart';
 import '../sales/sales_screen.dart';
 import 'app_drawer.dart';
@@ -43,6 +44,44 @@ class _ShellScreenState extends State<ShellScreen> {
     // silently failing to sync forever with no explanation.
     _authSubscription = SupabaseService.supabaseClient.auth.onAuthStateChange
         .listen(_onAuthStateChange);
+    unawaited(_checkFoundingStoreQualification());
+  }
+
+  /// Silently checks (every time the app opens to here, logged in) whether
+  /// this store has now earned founding-store status through usage - see
+  /// `check_founding_store_qualification` in Supabase. Never blocks the app
+  /// from loading: it runs in the background, and only surfaces anything if
+  /// the store just newly qualified, a couple of seconds after this screen
+  /// is already up and usable.
+  Future<void> _checkFoundingStoreQualification() async {
+    final repo = StoreConfigRepository(isar: IsarService.db);
+    final config = await repo.get();
+    if (config == null || config.storeId.isEmpty || config.isBetaAdopter) {
+      return;
+    }
+
+    try {
+      final result = await SupabaseService.supabaseClient
+          .rpc(
+            'check_founding_store_qualification',
+            params: {'store_uuid': config.storeId},
+          )
+          .single();
+      final newlyQualified = result['newly_qualified'] as bool? ?? false;
+      if (!newlyQualified) return;
+
+      config.isBetaAdopter = true;
+      await repo.save(config);
+
+      await Future.delayed(const Duration(seconds: 2));
+      if (!mounted) return;
+      await Navigator.of(
+        context,
+      ).push(MaterialPageRoute(builder: (_) => const FoundingStoreScreen()));
+    } catch (_) {
+      // Best-effort and silent - offline or a transient failure just means
+      // this gets checked again the next time the app opens.
+    }
   }
 
   void _onAuthStateChange(AuthState state) {

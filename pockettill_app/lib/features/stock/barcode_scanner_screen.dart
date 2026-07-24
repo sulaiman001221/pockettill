@@ -79,6 +79,7 @@ class _ScannerBodyState extends ConsumerState<_ScannerBody> {
   bool _handled = false;
   final DateTime _mountedAt = DateTime.now();
   StreamSubscription<String>? _subscription;
+  bool _torchOn = false;
 
   @override
   void initState() {
@@ -110,18 +111,32 @@ class _ScannerBodyState extends ConsumerState<_ScannerBody> {
     widget.onScanned(barcode);
   }
 
+  /// Only meaningful on a phone camera - Sunmi's hardware scanner has no
+  /// controllable torch through this app.
+  Future<void> _toggleTorch(CameraScannerService scanner) async {
+    await scanner.controller.toggleTorch();
+    if (mounted) setState(() => _torchOn = !_torchOn);
+  }
+
   @override
   Widget build(BuildContext context) {
     final scanner = ref.watch(scannerServiceProvider);
+    final cameraScanner = scanner is CameraScannerService ? scanner : null;
 
     return Stack(
       fit: StackFit.expand,
       children: [
-        if (scanner is CameraScannerService)
-          MobileScanner(controller: scanner.controller)
+        if (cameraScanner != null)
+          MobileScanner(controller: cameraScanner.controller)
         else
           const _WaitingForHardwareScan(),
-        _ScannerOverlay(onManualEntry: () => _promptManualEntry(context)),
+        _ScannerOverlay(
+          onManualEntry: () => _promptManualEntry(context),
+          torchOn: _torchOn,
+          onToggleTorch: cameraScanner == null
+              ? null
+              : () => _toggleTorch(cameraScanner),
+        ),
       ],
     );
   }
@@ -178,9 +193,18 @@ class _WaitingForHardwareScan extends StatelessWidget {
 }
 
 class _ScannerOverlay extends StatelessWidget {
-  const _ScannerOverlay({required this.onManualEntry});
+  const _ScannerOverlay({
+    required this.onManualEntry,
+    required this.torchOn,
+    required this.onToggleTorch,
+  });
 
   final VoidCallback onManualEntry;
+  final bool torchOn;
+
+  /// Null on Sunmi hardware scanners (no controllable torch through this
+  /// app) - non-null only for the phone camera scanner.
+  final VoidCallback? onToggleTorch;
 
   @override
   Widget build(BuildContext context) {
@@ -205,7 +229,15 @@ class _ScannerOverlay extends StatelessWidget {
                   ),
                 ),
               ),
-              const SizedBox(width: 48),
+              SizedBox(
+                width: 48,
+                child: onToggleTorch == null
+                    ? null
+                    : _FlashlightButton(
+                        torchOn: torchOn,
+                        onTap: onToggleTorch!,
+                      ),
+              ),
             ],
           ),
         ),
@@ -252,6 +284,34 @@ class _ScannerOverlay extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _FlashlightButton extends StatelessWidget {
+  const _FlashlightButton({required this.torchOn, required this.onTap});
+
+  final bool torchOn;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 40,
+      height: 40,
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.4),
+        shape: BoxShape.circle,
+      ),
+      child: IconButton(
+        padding: EdgeInsets.zero,
+        icon: Icon(
+          torchOn ? Icons.flashlight_on : Icons.flashlight_off,
+          color: Colors.white,
+          size: 20,
+        ),
+        onPressed: onTap,
+      ),
     );
   }
 }
