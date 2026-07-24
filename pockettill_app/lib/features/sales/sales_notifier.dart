@@ -73,6 +73,22 @@ class SalesNotifier extends StateNotifier<SalesState> {
     state = state.copyWith(cartItems: items);
   }
 
+  /// Replaces the stored [Product] for whichever cart item matches
+  /// [updatedProduct]'s uuid, keeping its quantity. Used after a stock
+  /// correction at checkout so the cart reflects the new stock without
+  /// re-adding the item (which would bump its quantity instead).
+  void refreshCartItemProduct(Product updatedProduct) {
+    state = state.copyWith(
+      cartItems: [
+        for (final item in state.cartItems)
+          if (item.product.uuid == updatedProduct.uuid)
+            item.copyWith(product: updatedProduct)
+          else
+            item,
+      ],
+    );
+  }
+
   void clearCart() {
     state = state.copyWith(cartItems: [], searchQuery: '', searchResults: []);
   }
@@ -96,14 +112,11 @@ class SalesNotifier extends StateNotifier<SalesState> {
     state = state.copyWith(searchResults: results, isSearching: false);
   }
 
-  /// Looks up [barcode] and adds the match to the cart. Returns the matched
-  /// product, or null if none exists - the caller decides how to surface
-  /// that (e.g. an "add to stock" prompt).
-  Future<Product?> onBarcodeScanned(String barcode) async {
-    final product = await _productRepository.getByBarcode(barcode);
-    if (product != null) {
-      addToCart(product);
-    }
-    return product;
+  /// Looks up [barcode]. Returns the matched product, or null if none
+  /// exists. Does not add to cart - the caller decides how (a product not
+  /// found prompts "add to stock"; an out-of-stock match needs a quick stock
+  /// update first, same as tapping one from search results).
+  Future<Product?> lookupByBarcode(String barcode) {
+    return _productRepository.getByBarcode(barcode);
   }
 }

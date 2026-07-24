@@ -5,6 +5,7 @@ import '../../core/supabase/supabase_service.dart';
 import '../../shared/models/product.dart';
 import '../../shared/repositories/repositories.dart';
 import '../../shared/theme/app_theme.dart';
+import '../../shared/widgets/confirmation_dialog.dart';
 import '../../shared/widgets/pockettill_app_bar.dart';
 import 'barcode_scanner_screen.dart';
 import 'product_success_screen.dart';
@@ -132,6 +133,8 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
   Future<void> _lookupCatalogue(String barcode) async {
     if (barcode.isEmpty) return;
     try {
+      // Supabase: shared catalogue - verified only (filtered inside
+      // fetchCatalogueProduct itself).
       final results = await SupabaseService.fetchCatalogueProduct(
         barcode,
       ).timeout(const Duration(seconds: 4));
@@ -173,6 +176,9 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
     final barcode = _barcodeController.text.trim();
 
     if (barcode.isNotEmpty) {
+      // Local: store's own products - no verification filter. A store can
+      // always find its own products regardless of catalogue verification
+      // status.
       final existingByBarcode = await repo.getByBarcode(barcode);
       if (existingByBarcode != null && existingByBarcode.uuid != currentUuid) {
         return 'This barcode is already used by another product';
@@ -243,38 +249,26 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
     }
   }
 
-  Future<void> _delete() async {
+  void _delete() {
     final product = widget.existingProduct;
     if (product == null) return;
 
-    final confirmed = await showDialog<bool>(
+    showDialog<void>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Delete Product?'),
-        content: Text(
-          'This removes "${productDisplayName(product)}" from your stock.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text(
-              'Delete',
-              style: TextStyle(color: AppTheme.logoutRed),
-            ),
-          ),
-        ],
+      builder: (_) => ConfirmationDialog(
+        message:
+            'This will permanently delete ${productDisplayName(product)} '
+            'from your stock.',
+        confirmLabel: 'Delete',
+        onConfirm: () {
+          if (!mounted) return;
+          // The actual delete (with its own Undo window) happens back on
+          // StockScreen, not here - this screen is about to be popped
+          // since it's showing the very product being removed.
+          Navigator.of(context).pop(product);
+        },
       ),
     );
-    if (confirmed != true || !mounted) return;
-
-    // The actual delete (with its own Undo window) happens back on
-    // StockScreen, not here - this screen is about to be popped since it's
-    // showing the very product being removed.
-    Navigator.of(context).pop(product);
   }
 
   @override

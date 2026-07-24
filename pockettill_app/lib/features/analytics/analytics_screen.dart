@@ -36,7 +36,7 @@ class AnalyticsScreen extends ConsumerWidget {
     return Scaffold(
       appBar: const CustomAppBar(
         showMenuIcon: false,
-        title: 'PocketTill Analytics',
+        title: 'Analytics',
       ),
       backgroundColor: AppTheme.background,
       body: RefreshIndicator(

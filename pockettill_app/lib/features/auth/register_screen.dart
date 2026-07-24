@@ -7,7 +7,6 @@ import '../../shared/repositories/store_config_provider.dart';
 import '../../shared/theme/app_theme.dart';
 import '../../shared/widgets/pockettill_app_bar.dart';
 import '../shell/shell_screen.dart';
-import 'founding_store_screen.dart';
 import 'otp_verification_screen.dart';
 
 /// New store sign-up: store details, password, optional address. Requires a
@@ -159,25 +158,23 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
           builder: (_) => OtpVerificationScreen(
             phone: formattedPhone,
             mode: OtpMode.registration,
-            onVerified: () async {
+            onVerified: (channel) async {
               await AuthService.setPassword(password);
               await AuthService.createStore(
                 storeName: storeName,
                 ownerName: ownerName,
                 ownerPhone: ownerPhone,
                 address: address,
+                otpChannel: channel,
               );
               await ref.read(storeConfigProvider.notifier).refresh();
               if (!mounted) return;
 
-              final isBetaAdopter =
-                  ref.read(storeConfigProvider)?.isBetaAdopter ?? false;
+              // Founding store status is earned later through usage, not
+              // granted at signup - so registration always lands straight
+              // in the app now (see ShellScreen's own qualification check).
               Navigator.of(context).pushAndRemoveUntil(
-                MaterialPageRoute(
-                  builder: (_) => isBetaAdopter
-                      ? const FoundingStoreScreen()
-                      : const ShellScreen(),
-                ),
+                MaterialPageRoute(builder: (_) => const ShellScreen()),
                 (route) => false,
               );
             },

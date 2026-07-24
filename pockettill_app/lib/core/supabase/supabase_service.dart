@@ -37,10 +37,20 @@ class SupabaseService {
 
   /// Looks up a shared-catalogue product by [barcode]. Returns an empty list
   /// if no match exists.
+  ///
+  /// Filters by `is_verified` - this is the cross-store shared catalogue,
+  /// so only verified/approved entries should ever auto-fill a form. This is
+  /// distinct from the local Isar lookup a store does for its own products
+  /// (ProductRepository.getByBarcode), which has no such filter - a store
+  /// can always find its own products regardless of verification.
   static Future<List<Map<String, dynamic>>> fetchCatalogueProduct(
     String barcode,
   ) {
-    return supabaseClient.from('products').select().eq('barcode', barcode);
+    return supabaseClient
+        .from('products')
+        .select()
+        .eq('barcode', barcode)
+        .eq('is_verified', true);
   }
 
   /// Upserts (or deletes) a batch of sync events to their Supabase tables.

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -9,6 +10,7 @@ import 'package:uuid/uuid.dart';
 
 import '../../core/auth/auth_service.dart';
 import '../../core/hardware/hardware_detector.dart';
+import '../../core/supabase/supabase_service.dart';
 import '../../core/sync/sync_service.dart';
 import '../../core/sync/sync_status_provider.dart';
 import '../../shared/models/store_config.dart';
@@ -17,6 +19,7 @@ import '../../shared/repositories/repositories.dart';
 import '../../shared/repositories/store_config_provider.dart';
 import '../../shared/theme/app_theme.dart';
 import '../../shared/utils/sync_status.dart';
+import '../../shared/widgets/confirmation_dialog.dart';
 import '../../shared/widgets/pockettill_app_bar.dart';
 import '../auth/welcome_screen.dart';
 
@@ -56,6 +59,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   StoreConfig? _config;
   bool _loading = true;
 
+  _FoundingProgress? _foundingProgress;
+  bool _foundingProgressLoading = false;
+  bool _checkingStatus = false;
+
   @override
   void initState() {
     super.initState();
@@ -75,6 +82,107 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       _config = config;
       _loading = false;
     });
+
+    if (config != null && !config.isBetaAdopter && config.storeId.isNotEmpty) {
+      unawaited(_loadFoundingProgress());
+    }
+  }
+
+  Future<Map<String, dynamic>> _fetchQualification(String storeId) {
+    return SupabaseService.supabaseClient
+        .rpc(
+          'check_founding_store_qualification',
+          params: {'store_uuid': storeId},
+        )
+        .single();
+  }
+
+  /// Flips the local badge on the moment a check (silent or manual) reports
+  /// qualification, so the UI doesn't wait for a future app open to catch
+  /// up with what Supabase already decided.
+  Future<void> _persistIfQualified(_FoundingProgress progress) async {
+    final config = _config;
+    if (config == null || !progress.qualified || config.isBetaAdopter) return;
+    config.isBetaAdopter = true;
+    await ref.read(storeConfigRepositoryProvider).save(config);
+    ref.read(storeConfigProvider.notifier).refresh();
+  }
+
+  /// Passive load for the progress card - runs once when Settings opens, no
+  /// user action needed. A failure (offline, etc.) just leaves the card in
+  /// its loading state; "Check My Status" is there for the user to retry.
+  Future<void> _loadFoundingProgress() async {
+    final config = _config;
+    if (config == null) return;
+    setState(() => _foundingProgressLoading = true);
+    try {
+      final progress = _FoundingProgress.fromRow(
+        await _fetchQualification(config.storeId),
+      );
+      await _persistIfQualified(progress);
+      if (!mounted) return;
+      setState(() {
+        _foundingProgress = progress;
+        _foundingProgressLoading = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _foundingProgressLoading = false);
+    }
+  }
+
+  Future<void> _checkFoundingStatus() async {
+    final config = _config;
+    if (config == null || _checkingStatus) return;
+    setState(() => _checkingStatus = true);
+    try {
+      final progress = _FoundingProgress.fromRow(
+        await _fetchQualification(config.storeId),
+      );
+      await _persistIfQualified(progress);
+      if (!mounted) return;
+      setState(() {
+        _foundingProgress = progress;
+        _checkingStatus = false;
+      });
+      await _showFoundingStatusDialog(progress);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _checkingStatus = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not check status. Try again.')),
+      );
+    }
+  }
+
+  Future<void> _showFoundingStatusDialog(_FoundingProgress progress) {
+    return showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        icon: Icon(
+          progress.qualified ? Icons.emoji_events : Icons.hourglass_bottom,
+          color: progress.qualified ? AppTheme.syncAmber : AppTheme.primary,
+          size: 48,
+        ),
+        title: Text(
+          progress.qualified ? "You're a Founding Store!" : 'Not Quite Yet',
+        ),
+        content: Text(
+          progress.qualified
+              ? 'Congratulations — your store has qualified for founding '
+                    'store status and its 50% lifetime discount.'
+              : "You're at ${progress.daysSinceRegistration}/7 days and "
+                    "${progress.salesCount}/5 sales. Keep going — "
+                    '${progress.foundingStoresRemaining} founding spots are '
+                    'still available.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _saveConfig(void Function(StoreConfig config) mutate) async {
@@ -246,32 +354,21 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     );
   }
 
-  Future<void> _confirmLogout() async {
-    final confirmed = await showDialog<bool>(
+  void _confirmLogout() {
+    showDialog<void>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Logout'),
-        content: const Text(
-          'Are you sure? Your data is saved locally and will be available '
-          'when you sign back in.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text(
-              'Logout',
-              style: TextStyle(color: AppTheme.logoutRed),
-            ),
-          ),
-        ],
+      builder: (_) => ConfirmationDialog(
+        message:
+            'Are you sure you want to logout? Your data stays safe on '
+            'this device.',
+        confirmLabel: 'Logout',
+        confirmColor: AppTheme.primary,
+        onConfirm: _performLogout,
       ),
     );
-    if (confirmed != true) return;
+  }
 
+  Future<void> _performLogout() async {
     await AuthService.logout();
     ref.read(storeConfigProvider.notifier).refresh();
     if (!mounted) return;
@@ -297,6 +394,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 if (_config?.isBetaAdopter == true) ...[
                   const SizedBox(height: 16),
                   _buildBetaCard(),
+                ] else if ((_config?.storeId ?? '').isNotEmpty) ...[
+                  const SizedBox(height: 16),
+                  _buildFoundingProgressCard(),
                 ],
                 const SizedBox(height: 16),
                 _buildDeviceInfoCard(),
@@ -567,6 +667,100 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     );
   }
 
+  Widget _buildFoundingProgressCard() {
+    final progress = _foundingProgress;
+    final days = (progress?.daysSinceRegistration ?? 0).clamp(0, 7);
+    final sales = (progress?.salesCount ?? 0).clamp(0, 5);
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFFBEB),
+        borderRadius: const BorderRadius.only(
+          topRight: Radius.circular(16),
+          bottomRight: Radius.circular(16),
+        ),
+        border: const Border(
+          left: BorderSide(color: AppTheme.syncAmber, width: 4),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            offset: const Offset(0, 2),
+            blurRadius: 8,
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
+            children: [
+              Icon(Icons.emoji_events_outlined, color: AppTheme.syncAmber),
+              SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  'Founding Store Progress',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: AppTheme.textPrimary,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          const Text(
+            'First 100 stores to qualify get a 50% lifetime discount when '
+            'billing begins',
+            style: TextStyle(fontSize: 12, color: AppTheme.textSecondary),
+          ),
+          const SizedBox(height: 12),
+          if (_foundingProgressLoading && progress == null)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 8),
+              child: Center(
+                child: SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              ),
+            )
+          else ...[
+            _ProgressRow(label: 'Days since registration', value: '$days/7'),
+            const SizedBox(height: 8),
+            _ProgressRow(label: 'Sales recorded', value: '$sales/5'),
+            const SizedBox(height: 8),
+            _ProgressRow(
+              label: 'Founding spots',
+              value: progress == null
+                  ? '—'
+                  : (progress.foundingStoresRemaining > 0
+                        ? 'Available'
+                        : 'Full'),
+            ),
+          ],
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            height: 44,
+            child: OutlinedButton(
+              onPressed: _checkingStatus ? null : _checkFoundingStatus,
+              child: _checkingStatus
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Text('Check My Status'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildDeviceInfoCard() {
     final deviceId = _config?.deviceId ?? '';
     final truncated = deviceId.length > 12
@@ -734,6 +928,59 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Result of the `check_founding_store_qualification` RPC, for the progress
+/// card and the "Check My Status" confirmation dialog.
+class _FoundingProgress {
+  const _FoundingProgress({
+    required this.qualified,
+    required this.daysSinceRegistration,
+    required this.salesCount,
+    required this.foundingStoresRemaining,
+  });
+
+  factory _FoundingProgress.fromRow(Map<String, dynamic> row) {
+    return _FoundingProgress(
+      qualified: row['qualified'] as bool? ?? false,
+      daysSinceRegistration: row['days_since_registration'] as int? ?? 0,
+      salesCount: row['sales_count'] as int? ?? 0,
+      foundingStoresRemaining: row['founding_stores_remaining'] as int? ?? 0,
+    );
+  }
+
+  final bool qualified;
+  final int daysSinceRegistration;
+  final int salesCount;
+  final int foundingStoresRemaining;
+}
+
+class _ProgressRow extends StatelessWidget {
+  const _ProgressRow({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Text(
+          label,
+          style: const TextStyle(fontSize: 13, color: AppTheme.textSecondary),
+        ),
+        const Spacer(),
+        Text(
+          value,
+          style: const TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: AppTheme.textPrimary,
+          ),
+        ),
+      ],
     );
   }
 }

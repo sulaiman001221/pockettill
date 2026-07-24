@@ -3,32 +3,48 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/auth/auth_service.dart';
 import '../../shared/theme/app_theme.dart';
 import '../../shared/widgets/pockettill_app_bar.dart';
+import 'welcome_screen.dart';
 
-/// What happens after the code is verified - both flows send/verify the
-/// code identically; only [OtpVerificationScreen.onVerified] differs by
-/// caller.
-enum OtpMode { registration, passwordReset }
+const String _supportWhatsAppNumber = '27663352002';
 
-/// 6-digit WhatsApp OTP entry, shared by registration and password reset.
-/// Calls [AuthService.verifyOtp] itself, then hands off to [onVerified] for
-/// whatever the caller does next (set password + create store, or go to
-/// [ResetPasswordScreen]) - [onVerified] is awaited so this screen's own
-/// loading state covers that follow-up work too, not just the verify call.
+/// What happens after the code is verified - all three modes send/verify
+/// the code identically; only [OtpVerificationScreen.onVerified] differs by
+/// caller, and [OtpMode.newDeviceVerification] additionally changes the
+/// screen's copy and blocks casually backing out of it (see
+/// [_OtpVerificationScreenState._confirmAbandon]).
+enum OtpMode { registration, passwordReset, newDeviceVerification }
+
+/// 6-digit OTP entry, shared by registration, password reset, and new-device
+/// login verification. Calls [AuthService.verifyOtp] itself, then hands off
+/// to [onVerified] for whatever the caller does next - [onVerified] is
+/// awaited so this screen's own loading state covers that follow-up work
+/// too, not just the verify call. [onVerified] receives the channel the
+/// code actually ended up being sent on (WhatsApp unless the user switched
+/// to SMS), which registration needs to persist as the store's OTP
+/// preference for later new-device logins.
 class OtpVerificationScreen extends StatefulWidget {
   const OtpVerificationScreen({
     super.key,
     required this.phone,
     required this.onVerified,
     required this.mode,
+    this.initialChannel = OtpChannel.whatsapp,
   });
 
   final String phone;
-  final Future<void> Function() onVerified;
+  final Future<void> Function(OtpChannel channel) onVerified;
   final OtpMode mode;
+
+  /// Which channel the code was actually sent on before this screen opened
+  /// - matters for [OtpMode.newDeviceVerification], where the store's saved
+  /// preference (possibly SMS) decides it, rather than always defaulting to
+  /// WhatsApp the way a fresh registration does.
+  final OtpChannel initialChannel;
 
   @override
   State<OtpVerificationScreen> createState() => _OtpVerificationScreenState();
@@ -45,11 +61,14 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
   bool _resending = false;
   int _resendSecondsLeft = _resendCooldownSeconds;
   Timer? _resendTimer;
-  OtpChannel _channel = OtpChannel.whatsapp;
+  late OtpChannel _channel;
+
+  bool get _isNewDeviceMode => widget.mode == OtpMode.newDeviceVerification;
 
   @override
   void initState() {
     super.initState();
+    _channel = widget.initialChannel;
     _startResendCooldown();
   }
 
@@ -133,7 +152,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
     }
 
     try {
-      await widget.onVerified();
+      await widget.onVerified(_channel);
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -146,6 +165,47 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
     } finally {
       if (mounted) setState(() => _verifying = false);
     }
+  }
+
+  Future<void> _contactSupport() async {
+    final uri = Uri.parse('https://wa.me/$_supportWhatsAppNumber');
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
+  }
+
+  /// [AuthService.login]'s password check already created a live session on
+  /// this device before this screen even opened - simply backing out here
+  /// (system back gesture, the app bar's back arrow, or killing the app)
+  /// must not leave that session usable, or the new-device check it's
+  /// meant to gate would be pointless. Confirms with the user, then revokes
+  /// the session server-side before letting the pop through.
+  Future<void> _confirmAbandon() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Cancel verification?'),
+        content: const Text(
+          "You'll need to sign in again to access your account.",
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Stay'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Cancel Verification'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    await AuthService.abandonNewDeviceVerification();
+    if (!mounted) return;
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => const WelcomeScreen()),
+      (route) => false,
+    );
   }
 
   Future<void> _resend() async {
@@ -187,31 +247,89 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: const CustomAppBar(showMenuIcon: false, title: 'Verify Phone'),
+    final scaffold = Scaffold(
+      // CustomAppBar's back arrow calls Navigator.pop() directly, which
+      // bypasses PopScope entirely (PopScope only gates system back
+      // gestures/buttons, not an explicit in-app pop() call) - so new-device
+      // mode uses a plain title bar with no leading icon at all, rather than
+      // relying on PopScope to catch a tap that would never reach it.
+      appBar: _isNewDeviceMode
+          ? AppBar(
+              backgroundColor: AppTheme.surface,
+              elevation: 0,
+              toolbarHeight: 72,
+              automaticallyImplyLeading: false,
+              centerTitle: true,
+              title: const Text(
+                'Verify Phone',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w700,
+                  color: AppTheme.textPrimary,
+                ),
+              ),
+            )
+          : const CustomAppBar(showMenuIcon: false, title: 'Verify Phone'),
       backgroundColor: AppTheme.background,
       body: SingleChildScrollView(
         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
         child: Column(
           children: [
             Icon(
-              _channel == OtpChannel.whatsapp ? Icons.message : Icons.sms_outlined,
+              _isNewDeviceMode
+                  ? Icons.security
+                  : (_channel == OtpChannel.whatsapp
+                        ? Icons.message
+                        : Icons.sms_outlined),
               size: 64,
-              color: _channel == OtpChannel.whatsapp
-                  ? const Color(0xFF25D366)
-                  : AppTheme.primary,
+              color: _isNewDeviceMode
+                  ? AppTheme.syncAmber
+                  : (_channel == OtpChannel.whatsapp
+                        ? const Color(0xFF25D366)
+                        : AppTheme.primary),
             ),
             const SizedBox(height: 20),
             Text(
-              _channel == OtpChannel.whatsapp
-                  ? 'Check your WhatsApp'
-                  : 'Check your SMS messages',
+              _isNewDeviceMode
+                  ? 'New Device Detected'
+                  : (_channel == OtpChannel.whatsapp
+                        ? 'Check your WhatsApp'
+                        : 'Check your SMS messages'),
               style: const TextStyle(
                 fontSize: 22,
                 fontWeight: FontWeight.bold,
                 color: AppTheme.textPrimary,
               ),
             ),
+            if (_isNewDeviceMode) ...[
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFFFBEB),
+                  borderRadius: BorderRadius.circular(12),
+                  border: const Border(
+                    left: BorderSide(color: AppTheme.syncAmber, width: 4),
+                  ),
+                ),
+                child: const Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(Icons.info_outline, color: AppTheme.syncAmber, size: 18),
+                    SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Someone is trying to access your account from a new '
+                        "device. If this is you, enter the code below to "
+                        "continue. If it wasn't you, you can safely ignore "
+                        'this — your account stays safe.',
+                        style: TextStyle(fontSize: 13, color: AppTheme.textPrimary),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
             const SizedBox(height: 8),
             Text(
               'We sent a 6-digit code to\n${widget.phone}',
@@ -277,6 +395,25 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                 ),
               ),
             ],
+            const SizedBox(height: 20),
+            // Subtle, not a prominent CTA - deliberately smaller/quieter
+            // than the resend/SMS-fallback rows above it.
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Text(
+                  'Need help? ',
+                  style: TextStyle(color: AppTheme.textSecondary, fontSize: 13),
+                ),
+                GestureDetector(
+                  onTap: _contactSupport,
+                  child: const Text(
+                    'Contact Support',
+                    style: TextStyle(color: AppTheme.primary, fontSize: 13),
+                  ),
+                ),
+              ],
+            ),
             const SizedBox(height: 32),
             SizedBox(
               width: double.infinity,
@@ -299,6 +436,17 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
           ],
         ),
       ),
+    );
+
+    if (!_isNewDeviceMode) return scaffold;
+
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+        _confirmAbandon();
+      },
+      child: scaffold,
     );
   }
 }

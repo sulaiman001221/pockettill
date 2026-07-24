@@ -6,9 +6,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../shared/models/credit_customer.dart';
 import '../../shared/repositories/repositories.dart';
 import '../../shared/theme/app_theme.dart';
+import '../../shared/widgets/quick_stock_update_sheet.dart';
 import '../stock/stock_ui.dart';
 import 'cart_item.dart';
 import 'payment_success_screen.dart';
+import 'sales_providers.dart';
+
+enum _StockAlertAction { completeAnyway, updateStock, cancel }
 
 const TextStyle _sectionLabelStyle = TextStyle(
   fontSize: 12,
@@ -145,8 +149,78 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
     }
   }
 
+  /// Cart items that would go negative if this sale completes now (checked
+  /// against whatever stock value each item's [Product] was carrying when
+  /// it was added to the cart - the same snapshot [SaleRepository
+  /// .completeSale] itself deducts from).
+  List<CartItem> _stockWarningItems() {
+    return widget.cartItems
+        .where((item) => item.product.stock - item.quantity < 0)
+        .toList();
+  }
+
   Future<void> _confirm() async {
     if (!_canConfirm || _submitting) return;
+
+    final affected = _stockWarningItems();
+    if (affected.isNotEmpty) {
+      final action = await showModalBottomSheet<_StockAlertAction>(
+        context: context,
+        isScrollControlled: true,
+        builder: (_) => _StockAlertSheet(items: affected),
+      );
+      if (!mounted || action == null || action == _StockAlertAction.cancel) {
+        return;
+      }
+      if (action == _StockAlertAction.updateStock) {
+        await _updateStockForAffectedItems(affected);
+        return;
+      }
+    }
+
+    await _completeSale();
+  }
+
+  /// Shows the quick stock update sheet for each affected item in turn, then
+  /// leaves the user back on this screen to review before tapping the
+  /// confirm button again - it deliberately does not auto-complete the sale
+  /// afterwards, since the corrected stock is worth a fresh look first.
+  Future<void> _updateStockForAffectedItems(List<CartItem> affected) async {
+    final repository = ref.read(productRepositoryProvider);
+    for (final item in affected) {
+      if (!mounted) return;
+      final quantity = await showModalBottomSheet<int>(
+        context: context,
+        isScrollControlled: true,
+        builder: (_) => QuickStockUpdateSheet(
+          productName: productDisplayName(item.product),
+          confirmLabel: 'Update Stock',
+        ),
+      );
+      if (quantity == null || !mounted) continue;
+
+      await repository.adjustStock(
+        item.product.uuid,
+        quantity - item.product.stock,
+      );
+      final updated = await repository.getByUuid(item.product.uuid);
+      if (updated != null && mounted) {
+        ref
+            .read(salesNotifierProvider.notifier)
+            .refreshCartItemProduct(updated);
+      }
+    }
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Stock updated. Tap Confirm again to continue.'),
+        ),
+      );
+    }
+  }
+
+  Future<void> _completeSale() async {
     setState(() => _submitting = true);
 
     try {
@@ -928,6 +1002,92 @@ class _ConfirmBar extends StatelessWidget {
                   ),
                 )
               : Text(label, style: AppTheme.buttonText),
+        ),
+      ),
+    );
+  }
+}
+
+class _StockAlertSheet extends StatelessWidget {
+  const _StockAlertSheet({required this.items});
+
+  final List<CartItem> items;
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 24, 20, 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Icon(
+              Icons.warning_amber_outlined,
+              size: 48,
+              color: AppTheme.syncAmber,
+            ),
+            const SizedBox(height: 12),
+            const Text(
+              'Stock Alert',
+              textAlign: TextAlign.center,
+              style: AppTheme.mainTitle,
+            ),
+            const SizedBox(height: 16),
+            ...items.map((item) {
+              final resulting = item.product.stock - item.quantity;
+              final color = resulting < 0
+                  ? AppTheme.logoutRed
+                  : AppTheme.syncAmber;
+              return Padding(
+                padding: const EdgeInsets.symmetric(vertical: 6),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        productDisplayName(item.product),
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w600,
+                          color: AppTheme.textPrimary,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      'will go to $resulting units',
+                      style: TextStyle(color: color, fontWeight: FontWeight.w600),
+                    ),
+                  ],
+                ),
+              );
+            }),
+            const SizedBox(height: 12),
+            SizedBox(
+              height: 52,
+              child: ElevatedButton(
+                onPressed: () => Navigator.of(
+                  context,
+                ).pop(_StockAlertAction.completeAnyway),
+                child: const Text('Complete Sale Anyway'),
+              ),
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              height: 52,
+              child: OutlinedButton(
+                onPressed: () =>
+                    Navigator.of(context).pop(_StockAlertAction.updateStock),
+                child: const Text('Update Stock First'),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextButton(
+              onPressed: () =>
+                  Navigator.of(context).pop(_StockAlertAction.cancel),
+              child: const Text('Cancel'),
+            ),
+          ],
         ),
       ),
     );

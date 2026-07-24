@@ -23,7 +23,7 @@ class WelcomeScreen extends StatelessWidget {
               Image.asset('assets/images/pockettill_logo.png', height: 56),
               const SizedBox(height: 32),
               const Text(
-                'Your shop. Your till.',
+                'Smart POS. Operate anywhere.',
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: 28,
@@ -33,7 +33,8 @@ class WelcomeScreen extends StatelessWidget {
               ),
               const SizedBox(height: 12),
               const Text(
-                'The offline-first POS built for South African spaza shops.',
+                'An offline-first POS built for spaza shops and small '
+                'upcoming businesses.',
                 textAlign: TextAlign.center,
                 style: TextStyle(fontSize: 16, color: AppTheme.textSecondary),
               ),
