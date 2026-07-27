@@ -5,6 +5,8 @@ import 'package:path_provider/path_provider.dart';
 import '../../shared/models/credit_customer.dart';
 import '../../shared/models/credit_transaction.dart';
 import '../../shared/models/product.dart';
+import '../../shared/models/return_item.dart';
+import '../../shared/models/return_record.dart';
 import '../../shared/models/sale.dart';
 import '../../shared/models/sale_item.dart';
 import '../../shared/models/store_config.dart';
@@ -39,6 +41,8 @@ class IsarService {
         SaleItemSchema,
         CreditCustomerSchema,
         CreditTransactionSchema,
+        ReturnRecordSchema,
+        ReturnItemSchema,
         SyncEventSchema,
         StoreConfigSchema,
       ],

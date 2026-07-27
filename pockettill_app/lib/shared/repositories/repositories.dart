@@ -5,6 +5,7 @@ import '../../core/database/isar_service.dart';
 import '../../core/sync/event_queue.dart';
 import 'credit_repository.dart';
 import 'product_repository.dart';
+import 'return_repository.dart';
 import 'sale_repository.dart';
 import 'store_config_repository.dart';
 
@@ -38,6 +39,11 @@ final creditRepositoryProvider = Provider<CreditRepository>((ref) {
 /// [SaleRepository] singleton.
 final saleRepositoryProvider = Provider<SaleRepository>((ref) {
   return SaleRepository(isar: ref.watch(isarServiceProvider));
+});
+
+/// [ReturnRepository] singleton.
+final returnRepositoryProvider = Provider<ReturnRepository>((ref) {
+  return ReturnRepository(isar: ref.watch(isarServiceProvider));
 });
 
 /// [StoreConfigRepository] singleton.

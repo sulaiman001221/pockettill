@@ -8,6 +8,8 @@ import '../../shared/models/sale.dart';
 import '../../shared/models/sale_item.dart';
 import '../../shared/repositories/repositories.dart';
 import '../../shared/theme/app_theme.dart';
+import '../../shared/widgets/fully_returned_badge.dart';
+import '../history/process_return_screen.dart';
 
 const TextStyle _sectionLabelStyle = TextStyle(
   fontSize: 12,
@@ -53,9 +55,17 @@ class _TransactionDetailScreenState
     extends ConsumerState<TransactionDetailScreen> {
   Sale? _sale;
   List<SaleItem> _items = [];
+  Map<String, int> _returnedQty = {};
   bool _loading = true;
 
   bool get _isCredit => widget.transaction.type == 'purchase';
+
+  /// Whether the linked sale still has anything left to return - mirrors
+  /// SaleDetailScreen's own gating so "Process Return" behaves identically
+  /// regardless of which screen it's reached from.
+  bool get _hasReturnableItems => _items.any(
+    (item) => item.quantity - (_returnedQty[item.productUuid] ?? 0) > 0,
+  );
 
   @override
   void initState() {
@@ -66,18 +76,34 @@ class _TransactionDetailScreenState
   Future<void> _load() async {
     final t = widget.transaction;
     if (_isCredit && t.saleUuid != null) {
-      final repo = ref.read(saleRepositoryProvider);
-      final sale = await repo.getByUuid(t.saleUuid!);
-      final items = await repo.getItemsForSale(t.saleUuid!);
+      final saleRepo = ref.read(saleRepositoryProvider);
+      final sale = await saleRepo.getByUuid(t.saleUuid!);
+      final items = await saleRepo.getItemsForSale(t.saleUuid!);
+      final returnedQty = await ref
+          .read(returnRepositoryProvider)
+          .getReturnedQuantities(t.saleUuid!);
       if (!mounted) return;
       setState(() {
         _sale = sale;
         _items = items;
+        _returnedQty = returnedQty;
         _loading = false;
       });
     } else {
       setState(() => _loading = false);
     }
+  }
+
+  Future<void> _openProcessReturn() async {
+    final sale = _sale;
+    if (sale == null) return;
+    await Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => ProcessReturnScreen(sale: sale)));
+    // A completed return can change the sale's returnable state (and this
+    // transaction's own customer/balance context) - refresh either way,
+    // same as SaleDetailScreen does after its own return flow.
+    await _load();
   }
 
   Future<void> _printReceipt() async {
@@ -173,7 +199,21 @@ class _TransactionDetailScreenState
                   const SizedBox(height: 12),
                   _RepaymentDetailsCard(transaction: t),
                 ],
-                const SizedBox(height: 24),
+                if (_isCredit && _sale != null) ...[
+                  const SizedBox(height: 24),
+                  _hasReturnableItems
+                      ? SizedBox(
+                          width: double.infinity,
+                          height: 52,
+                          child: OutlinedButton.icon(
+                            onPressed: _openProcessReturn,
+                            icon: const Icon(Icons.assignment_return_outlined),
+                            label: const Text('Process Return'),
+                          ),
+                        )
+                      : const FullyReturnedBadge(),
+                ],
+                const SizedBox(height: 12),
                 SizedBox(
                   width: double.infinity,
                   height: 52,

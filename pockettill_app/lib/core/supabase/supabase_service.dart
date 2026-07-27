@@ -19,6 +19,8 @@ class SupabaseService {
     'product': 'products',
     'credit_customer': 'credit_customers',
     'credit_tx': 'credit_transactions',
+    'return': 'returns',
+    'return_item': 'return_items',
     'store_profile': 'stores',
   };
 
@@ -57,7 +59,7 @@ class SupabaseService {
   ///
   /// Each event map is expected to contain:
   /// - `entityType`: one of `sale`, `sale_item`, `product`,
-  ///   `credit_customer`, `credit_tx`
+  ///   `credit_customer`, `credit_tx`, `return`, `return_item`
   /// - `operation`: `create`, `update`, or `delete`
   /// - `entityUuid`: the row's primary key
   /// - `payload`: the decoded row data (used for `create`/`update`)

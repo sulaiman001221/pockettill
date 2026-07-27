@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
+import '../../shared/models/return_record.dart';
 import '../../shared/models/sale.dart';
 import '../../shared/models/sale_item.dart';
 import '../../shared/repositories/repositories.dart';
@@ -9,11 +10,13 @@ import '../../shared/theme/app_theme.dart';
 import '../../shared/widgets/pockettill_app_bar.dart';
 import '../credit/date_range_sheet.dart';
 import 'history_providers.dart';
+import 'return_detail_screen.dart';
 import 'sale_detail_screen.dart';
 
 /// Sales History: a period-filtered summary card, filter tabs, and the
-/// transaction list grouped by date. All reads go through
-/// [saleRepositoryProvider] via [history_providers.dart]'s providers.
+/// transaction list grouped by date. Sales and returns are merged into one
+/// chronological list via [combinedHistoryProvider] - a return always shows
+/// up as its own entry, never folded into the sale it came from.
 class HistoryScreen extends ConsumerWidget {
   const HistoryScreen({super.key});
 
@@ -32,17 +35,17 @@ class HistoryScreen extends ConsumerWidget {
     }
   }
 
-  Map<String, List<Sale>> _groupByDate(List<Sale> sales) {
+  Map<String, List<HistoryEntry>> _groupByDate(List<HistoryEntry> entries) {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     final yesterday = today.subtract(const Duration(days: 1));
 
-    final map = <String, List<Sale>>{};
-    for (final sale in sales) {
+    final map = <String, List<HistoryEntry>>{};
+    for (final entry in entries) {
       final day = DateTime(
-        sale.createdAt.year,
-        sale.createdAt.month,
-        sale.createdAt.day,
+        entry.createdAt.year,
+        entry.createdAt.month,
+        entry.createdAt.day,
       );
       final String key;
       if (day == today) {
@@ -52,7 +55,7 @@ class HistoryScreen extends ConsumerWidget {
       } else {
         key = DateFormat('d MMM yyyy').format(day).toUpperCase();
       }
-      map.putIfAbsent(key, () => []).add(sale);
+      map.putIfAbsent(key, () => []).add(entry);
     }
     return map;
   }
@@ -61,13 +64,18 @@ class HistoryScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final filter = ref.watch(historyFilterProvider);
     final salesAsync = ref.watch(filteredSalesProvider);
+    final returnsAsync = ref.watch(filteredReturnsProvider);
+    final combined = ref.watch(combinedHistoryProvider);
     final summary = ref.watch(historySummaryProvider);
 
     return Scaffold(
       appBar: const CustomAppBar(showMenuIcon: false, title: 'Sales History'),
       backgroundColor: AppTheme.background,
       body: RefreshIndicator(
-        onRefresh: () => ref.refresh(filteredSalesProvider.future),
+        onRefresh: () => Future.wait([
+          ref.refresh(filteredSalesProvider.future),
+          ref.refresh(filteredReturnsProvider.future),
+        ]),
         child: CustomScrollView(
           slivers: [
             SliverToBoxAdapter(
@@ -83,17 +91,27 @@ class HistoryScreen extends ConsumerWidget {
               child: _buildFilterChips(context, ref, filter),
             ),
             const SliverToBoxAdapter(child: SizedBox(height: 16)),
-            salesAsync.when(
-              data: (sales) => _buildList(context, sales),
-              loading: () => const SliverFillRemaining(
+            if (salesAsync.isLoading || returnsAsync.isLoading)
+              const SliverFillRemaining(
                 hasScrollBody: false,
                 child: Center(child: CircularProgressIndicator()),
-              ),
-              error: (error, _) => SliverFillRemaining(
+              )
+            else if (salesAsync.hasError)
+              SliverFillRemaining(
                 hasScrollBody: false,
-                child: Center(child: Text('Could not load sales: $error')),
-              ),
-            ),
+                child: Center(
+                  child: Text('Could not load sales: ${salesAsync.error}'),
+                ),
+              )
+            else if (returnsAsync.hasError)
+              SliverFillRemaining(
+                hasScrollBody: false,
+                child: Center(
+                  child: Text('Could not load returns: ${returnsAsync.error}'),
+                ),
+              )
+            else
+              _buildList(context, combined),
             const SliverToBoxAdapter(child: SizedBox(height: 24)),
           ],
         ),
@@ -153,8 +171,8 @@ class HistoryScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildList(BuildContext context, List<Sale> sales) {
-    if (sales.isEmpty) {
+  Widget _buildList(BuildContext context, List<HistoryEntry> entries) {
+    if (entries.isEmpty) {
       return SliverFillRemaining(
         hasScrollBody: false,
         child: Center(
@@ -170,7 +188,7 @@ class HistoryScreen extends ConsumerWidget {
                 ),
                 const SizedBox(height: 16),
                 Text(
-                  'No sales for this period',
+                  'No sales or returns for this period',
                   style: AppTheme.mainTitle,
                   textAlign: TextAlign.center,
                 ),
@@ -187,25 +205,44 @@ class HistoryScreen extends ConsumerWidget {
       );
     }
 
-    final grouped = _groupByDate(sales);
+    final grouped = _groupByDate(entries);
 
     return SliverPadding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
       sliver: SliverList(
         delegate: SliverChildListDelegate([
-          for (final entry in grouped.entries) ...[
+          for (final group in grouped.entries) ...[
             _DateHeader(
-              label: entry.key,
-              total: entry.value.fold<double>(0, (sum, s) => sum + s.total),
+              label: group.key,
+              total: group.value.fold<double>(0, (sum, e) {
+                return switch (e) {
+                  SaleHistoryEntry(:final sale) => sum + sale.total,
+                  ReturnHistoryEntry(:final returnRecord) =>
+                    sum + returnRecord.netMoneyMovement,
+                };
+              }),
             ),
             const SizedBox(height: 8),
-            ...entry.value.map(
-              (sale) => _SaleListItem(
-                sale: sale,
-                onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => SaleDetailScreen(sale: sale)),
+            ...group.value.map(
+              (entry) => switch (entry) {
+                SaleHistoryEntry(:final sale) => _SaleListItem(
+                  sale: sale,
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => SaleDetailScreen(sale: sale),
+                    ),
+                  ),
                 ),
-              ),
+                ReturnHistoryEntry(:final returnRecord) => _ReturnListItem(
+                  returnRecord: returnRecord,
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) =>
+                          ReturnDetailScreen(returnRecord: returnRecord),
+                    ),
+                  ),
+                ),
+              },
             ),
             const SizedBox(height: 8),
           ],
@@ -474,6 +511,152 @@ class _SaleListItem extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// A return's own row in the list - visually distinct from a sale (red
+/// accent, return icon, "Return" badge) with its refund/deduction amount
+/// shown as negative, so it's obvious at a glance that money went back.
+class _ReturnListItem extends StatelessWidget {
+  const _ReturnListItem({required this.returnRecord, required this.onTap});
+
+  final ReturnRecord returnRecord;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final timeText = DateFormat('HH:mm').format(returnRecord.createdAt);
+    final net = returnRecord.netMoneyMovement;
+    final amountColor = net > 0
+        ? AppTheme.syncGreen
+        : (net < 0 ? AppTheme.logoutRed : AppTheme.textSecondary);
+    final amountText = net > 0
+        ? '+R${net.toStringAsFixed(2)}'
+        : (net < 0
+              ? '-R${(-net).toStringAsFixed(2)}'
+              : 'R0.00');
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 40,
+            child: Padding(
+              padding: const EdgeInsets.only(top: 16),
+              child: Text(timeText, style: AppTheme.bodySubtitle),
+            ),
+          ),
+          Expanded(
+            child: InkWell(
+              onTap: onTap,
+              borderRadius: BorderRadius.circular(12),
+              child: Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppTheme.surface,
+                  borderRadius: BorderRadius.circular(12),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.04),
+                      offset: const Offset(0, 2),
+                      blurRadius: 4,
+                    ),
+                  ],
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: AppTheme.logoutRed.withValues(alpha: 0.12),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.assignment_return_outlined,
+                        color: AppTheme.logoutRed,
+                        size: 20,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            amountText,
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                              color: amountColor,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          _ReturnSaleRefLine(returnRecord: returnRecord),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 3,
+                          ),
+                          decoration: BoxDecoration(
+                            color: AppTheme.logoutRed.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(9999),
+                          ),
+                          child: const Text(
+                            '↩ Return',
+                            style: TextStyle(
+                              color: AppTheme.logoutRed,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        const Icon(
+                          Icons.chevron_right,
+                          color: AppTheme.iconBorder,
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// "Return for Sale #X" - fetched lazily since the list only needs it once
+/// a tile actually renders, same as [_ItemCountLine].
+class _ReturnSaleRefLine extends ConsumerWidget {
+  const _ReturnSaleRefLine({required this.returnRecord});
+
+  final ReturnRecord returnRecord;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return FutureBuilder<Sale?>(
+      future: ref.read(saleRepositoryProvider).getByUuid(returnRecord.saleUuid),
+      builder: (context, snapshot) {
+        final sale = snapshot.data;
+        return Text(
+          sale != null ? 'Return for Sale #${sale.id}' : 'Return',
+          style: AppTheme.bodySubtitle,
+        );
+      },
     );
   }
 }

@@ -7,6 +7,8 @@ import '../../shared/models/sale.dart';
 import '../../shared/models/sale_item.dart';
 import '../../shared/repositories/repositories.dart';
 import '../../shared/theme/app_theme.dart';
+import '../../shared/widgets/fully_returned_badge.dart';
+import 'process_return_screen.dart';
 
 const TextStyle _sectionLabelStyle = TextStyle(
   fontSize: 12,
@@ -57,10 +59,17 @@ class SaleDetailScreen extends ConsumerStatefulWidget {
 
 class _SaleDetailScreenState extends ConsumerState<SaleDetailScreen> {
   List<SaleItem> _items = [];
+  Map<String, int> _returnedQty = {};
   String? _customerName;
   bool _loading = true;
 
   bool get _isCredit => widget.sale.paymentType == 'credit';
+
+  /// Whether at least one original item still has units that haven't been
+  /// returned yet.
+  bool get _hasReturnableItems => _items.any(
+    (item) => item.quantity - (_returnedQty[item.productUuid] ?? 0) > 0,
+  );
 
   @override
   void initState() {
@@ -73,6 +82,9 @@ class _SaleDetailScreenState extends ConsumerState<SaleDetailScreen> {
     final items = await ref
         .read(saleRepositoryProvider)
         .getItemsForSale(sale.uuid);
+    final returnedQty = await ref
+        .read(returnRepositoryProvider)
+        .getReturnedQuantities(sale.uuid);
 
     String? customerName;
     if (_isCredit && sale.customerId != null) {
@@ -85,9 +97,22 @@ class _SaleDetailScreenState extends ConsumerState<SaleDetailScreen> {
     if (!mounted) return;
     setState(() {
       _items = items;
+      _returnedQty = returnedQty;
       _customerName = customerName;
       _loading = false;
     });
+  }
+
+  Future<void> _openProcessReturn() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => ProcessReturnScreen(sale: widget.sale),
+      ),
+    );
+    // Whatever happened on the return screen - a completed return, or the
+    // cashier just backing out - this screen's returned-quantities and
+    // button/badge state need to reflect the latest data either way.
+    await _load();
   }
 
   Future<void> _printReceipt() async {
@@ -188,8 +213,25 @@ class _SaleDetailScreenState extends ConsumerState<SaleDetailScreen> {
                 const SizedBox(height: 24),
                 const Text('ITEMS PURCHASED', style: _sectionLabelStyle),
                 const SizedBox(height: 12),
-                _ItemsCard(items: _items, total: sale.total),
+                _ItemsCard(
+                  items: _items,
+                  total: sale.total,
+                  returnedQty: _returnedQty,
+                ),
                 const SizedBox(height: 24),
+                if (_items.isNotEmpty)
+                  _hasReturnableItems
+                      ? SizedBox(
+                          width: double.infinity,
+                          height: 52,
+                          child: OutlinedButton.icon(
+                            onPressed: _openProcessReturn,
+                            icon: const Icon(Icons.assignment_return_outlined),
+                            label: const Text('Process Return'),
+                          ),
+                        )
+                      : const FullyReturnedBadge(),
+                const SizedBox(height: 12),
                 SizedBox(
                   width: double.infinity,
                   height: 52,
@@ -323,10 +365,18 @@ class _DetailsCard extends StatelessWidget {
 }
 
 class _ItemsCard extends StatelessWidget {
-  const _ItemsCard({required this.items, required this.total});
+  const _ItemsCard({
+    required this.items,
+    required this.total,
+    this.returnedQty = const {},
+  });
 
   final List<SaleItem> items;
   final double total;
+
+  /// productUuid -> total quantity already returned, across every return
+  /// processed for this sale.
+  final Map<String, int> returnedQty;
 
   @override
   Widget build(BuildContext context) {
@@ -340,39 +390,8 @@ class _ItemsCard extends StatelessWidget {
       ),
       child: Column(
         children: [
-          for (final item in items) ...[
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    item.productName,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: AppTheme.textPrimary,
-                    ),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                Text(
-                  '${item.quantity} × R${item.unitPrice.toStringAsFixed(2)}',
-                  style: AppTheme.bodySubtitle,
-                ),
-                const SizedBox(width: 12),
-                SizedBox(
-                  width: 70,
-                  child: Text(
-                    'R${item.subtotal.toStringAsFixed(2)}',
-                    textAlign: TextAlign.right,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w600,
-                      color: AppTheme.primary,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 10),
-          ],
+          for (final item in items)
+            _ItemRow(item: item, returned: returnedQty[item.productUuid] ?? 0),
           const Divider(color: AppTheme.divider, height: 1),
           const SizedBox(height: 10),
           Row(
@@ -394,6 +413,73 @@ class _ItemsCard extends StatelessWidget {
               ),
             ],
           ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ItemRow extends StatelessWidget {
+  const _ItemRow({required this.item, required this.returned});
+
+  final SaleItem item;
+
+  /// Total quantity of this item already returned, across every return
+  /// processed for this sale.
+  final int returned;
+
+  @override
+  Widget build(BuildContext context) {
+    final remaining = item.quantity - returned;
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  item.productName,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: AppTheme.textPrimary,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              Text(
+                '${item.quantity} × R${item.unitPrice.toStringAsFixed(2)}',
+                style: AppTheme.bodySubtitle,
+              ),
+              const SizedBox(width: 12),
+              SizedBox(
+                width: 70,
+                child: Text(
+                  'R${item.subtotal.toStringAsFixed(2)}',
+                  textAlign: TextAlign.right,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w600,
+                    color: AppTheme.primary,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          if (returned > 0) ...[
+            const SizedBox(height: 4),
+            Text(
+              remaining > 0
+                  ? '$returned returned · $remaining remaining'
+                  : '$returned returned · fully returned',
+              style: const TextStyle(
+                fontSize: 12,
+                color: AppTheme.syncAmber,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
         ],
       ),
     );
