@@ -17,6 +17,8 @@ const List<String> _entityTypePriority = [
   'credit_tx',
   'sale',
   'sale_item',
+  'return',
+  'return_item',
   'product',
   'credit_customer',
   'store_profile',

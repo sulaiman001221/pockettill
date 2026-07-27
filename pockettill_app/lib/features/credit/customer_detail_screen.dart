@@ -590,9 +590,10 @@ class _TransactionTile extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final isCredit = transaction.type == 'purchase';
+    final isReturn = transaction.type == 'return';
     final color = isCredit ? AppTheme.logoutRed : AppTheme.syncGreen;
     final icon = isCredit ? Icons.arrow_upward : Icons.arrow_downward;
-    final label = isCredit ? 'Credit' : 'Repayment';
+    final label = isCredit ? 'Credit' : (isReturn ? 'Return' : 'Repayment');
     final dateText = DateFormat('d MMM yyyy').format(transaction.createdAt);
 
     return InkWell(
@@ -632,7 +633,7 @@ class _TransactionTile extends ConsumerWidget {
                   ),
                   const SizedBox(height: 2),
                   Text(dateText, style: AppTheme.bodySubtitle),
-                  if (isCredit && transaction.saleUuid != null)
+                  if ((isCredit || isReturn) && transaction.saleUuid != null)
                     _SaleSummaryLine(saleUuid: transaction.saleUuid!)
                   else if ((transaction.note ?? '').isNotEmpty)
                     Text(transaction.note!, style: AppTheme.bodySubtitle),
