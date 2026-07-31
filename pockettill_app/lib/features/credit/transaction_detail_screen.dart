@@ -8,6 +8,7 @@ import '../../shared/models/sale.dart';
 import '../../shared/models/sale_item.dart';
 import '../../shared/repositories/repositories.dart';
 import '../../shared/theme/app_theme.dart';
+import '../../shared/utils/credit_balance_display.dart';
 import '../../shared/widgets/fully_returned_badge.dart';
 import '../history/process_return_screen.dart';
 
@@ -59,6 +60,13 @@ class _TransactionDetailScreenState
   bool _loading = true;
 
   bool get _isCredit => widget.transaction.type == 'purchase';
+  bool get _isReturn => widget.transaction.type == 'return';
+
+  /// A purchase always increases what's owed, a repayment always decreases
+  /// it, but a return can go either way - so for a return, its own signed
+  /// amount decides the direction instead of the type alone.
+  bool get _increasesBalance =>
+      _isCredit || (_isReturn && widget.transaction.amount > 0);
 
   /// Whether the linked sale still has anything left to return - mirrors
   /// SaleDetailScreen's own gating so "Process Return" behaves identically
@@ -142,9 +150,11 @@ class _TransactionDetailScreenState
   @override
   Widget build(BuildContext context) {
     final t = widget.transaction;
-    final color = _isCredit ? AppTheme.logoutRed : AppTheme.syncGreen;
-    final icon = _isCredit ? Icons.arrow_upward : Icons.arrow_downward;
-    final heading = _isCredit ? 'Credit Purchase' : 'Repayment';
+    final color = _increasesBalance ? AppTheme.logoutRed : AppTheme.syncGreen;
+    final icon = _increasesBalance ? Icons.arrow_upward : Icons.arrow_downward;
+    final heading = _isCredit
+        ? 'Credit Purchase'
+        : (_isReturn ? 'Return' : 'Repayment');
     final dateText = DateFormat('dd/MM/yy, hh:mm a').format(t.createdAt);
 
     return Scaffold(
@@ -171,7 +181,7 @@ class _TransactionDetailScreenState
                 const SizedBox(height: 4),
                 Center(
                   child: Text(
-                    '${_isCredit ? '+' : '-'}R${t.amount.toStringAsFixed(2)}',
+                    '${_increasesBalance ? '+' : '-'}R${t.amount.abs().toStringAsFixed(2)}',
                     style: TextStyle(
                       fontSize: 28,
                       fontWeight: FontWeight.bold,
@@ -187,6 +197,7 @@ class _TransactionDetailScreenState
                   sale: _sale,
                   customerName: widget.customerName,
                   isCredit: _isCredit,
+                  typeLabel: heading,
                 ),
                 if (_isCredit) ...[
                   const SizedBox(height: 24),
@@ -284,12 +295,14 @@ class _DetailsCard extends StatelessWidget {
     required this.sale,
     required this.customerName,
     required this.isCredit,
+    required this.typeLabel,
   });
 
   final CreditTransaction transaction;
   final Sale? sale;
   final String customerName;
   final bool isCredit;
+  final String typeLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -305,7 +318,7 @@ class _DetailsCard extends StatelessWidget {
         children: [
           _detailRow('Transaction ID', '#${sale?.id ?? transaction.id}'),
           const SizedBox(height: 12),
-          _detailRow('Type', isCredit ? 'Credit Purchase' : 'Repayment'),
+          _detailRow('Type', typeLabel),
           const SizedBox(height: 12),
           _detailRow('Customer', customerName),
           if (!isCredit) ...[
@@ -441,11 +454,11 @@ class _RepaymentDetailsCard extends StatelessWidget {
           _detailRow('Amount Paid', 'R${transaction.amount.toStringAsFixed(2)}'),
           if (before != null) ...[
             const SizedBox(height: 12),
-            _detailRow('Previous Balance', 'R${before.toStringAsFixed(2)}'),
+            _detailRow('Previous Balance', formatCreditBalance(before)),
           ],
           if (after != null) ...[
             const SizedBox(height: 12),
-            _detailRow('New Balance', 'R${after.toStringAsFixed(2)}'),
+            _detailRow('New Balance', formatCreditBalance(after)),
           ],
           const SizedBox(height: 12),
           _detailRow('Payment Method', transaction.note ?? 'Cash'),

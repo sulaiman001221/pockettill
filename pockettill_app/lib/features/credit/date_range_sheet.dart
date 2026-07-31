@@ -177,7 +177,17 @@ class _SelectDateRangeScreenState extends State<SelectDateRangeScreen> {
           children: [
             Expanded(
               child: ListView(
-                padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
+                // The body doesn't resize for the keyboard, so pad the list
+                // bottom by the keyboard height instead - without this, the
+                // typed date fields (and the Apply button below them) can
+                // end up hidden behind the keyboard with no way to scroll
+                // past it.
+                padding: EdgeInsets.fromLTRB(
+                  20,
+                  16,
+                  20,
+                  16 + MediaQuery.viewInsetsOf(context).bottom,
+                ),
                 children: [
                   const Text(
                     'QUICK SELECT',

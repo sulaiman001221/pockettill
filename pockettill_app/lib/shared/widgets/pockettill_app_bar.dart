@@ -7,12 +7,23 @@ import '../theme/app_theme.dart';
 /// Shows a hamburger icon that opens the drawer ([showMenuIcon] true, used
 /// by the shell) or a back arrow that pops the current route ([showMenuIcon]
 /// false, used by every pushed screen). The centre shows the PocketTill
-/// icon by default, or [title] when provided.
+/// icon by default, or [title] when provided. The trailing icon is a
+/// notification bell by default (not yet wired to anything); pass
+/// [trailingIcon]/[onTrailingTap] together to replace it for a screen that
+/// has a more relevant action there.
 class CustomAppBar extends StatelessWidget implements PreferredSizeWidget {
-  const CustomAppBar({super.key, this.showMenuIcon = true, this.title});
+  const CustomAppBar({
+    super.key,
+    this.showMenuIcon = true,
+    this.title,
+    this.trailingIcon,
+    this.onTrailingTap,
+  });
 
   final bool showMenuIcon;
   final String? title;
+  final IconData? trailingIcon;
+  final VoidCallback? onTrailingTap;
 
   @override
   Widget build(BuildContext context) {
@@ -30,12 +41,12 @@ class CustomAppBar extends StatelessWidget implements PreferredSizeWidget {
               _Leading(showMenuIcon: showMenuIcon),
               Expanded(child: Center(child: _Centre(title: title))),
               IconButton(
-                icon: const Icon(
-                  Icons.notifications_none,
+                icon: Icon(
+                  trailingIcon ?? Icons.notifications_none,
                   color: AppTheme.textPrimary,
                   size: 28,
                 ),
-                onPressed: () {},
+                onPressed: onTrailingTap ?? () {},
               ),
             ],
           ),

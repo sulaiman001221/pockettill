@@ -8,6 +8,7 @@ import '../../shared/models/sale.dart';
 import '../../shared/models/sale_item.dart';
 import '../../shared/repositories/repositories.dart';
 import '../../shared/theme/app_theme.dart';
+import '../../shared/utils/credit_balance_display.dart';
 import '../../shared/widgets/confirmation_dialog.dart';
 import 'add_customer_screen.dart';
 import 'add_payment_screen.dart';
@@ -130,48 +131,93 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
   }
 
   Future<void> _editCreditLimit() async {
+    final customer = _customer;
+    if (customer == null) return;
+
     final controller = TextEditingController(
-      text: _customer?.creditLimit?.toStringAsFixed(2) ?? '',
+      text: customer.creditLimit?.toStringAsFixed(2) ?? '',
     );
+    // A limit below what the customer already owes would let them exceed
+    // it the moment it's saved - the balance itself is the floor.
+    final minLimit = customer.balance > 0 ? customer.balance : 0.0;
 
     final result = await showModalBottomSheet<String>(
       context: context,
       isScrollControlled: true,
-      builder: (sheetContext) => Padding(
-        padding: EdgeInsets.only(
-          left: 20,
-          right: 20,
-          top: 24,
-          bottom: MediaQuery.of(sheetContext).viewInsets.bottom + 24,
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text('Edit Credit Limit', style: AppTheme.mainTitle),
-            const SizedBox(height: 16),
-            TextField(
-              controller: controller,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              autofocus: true,
-              decoration: const InputDecoration(
-                prefixText: 'R ',
-                hintText: 'Leave empty for no limit',
+      builder: (sheetContext) {
+        String? error;
+        return StatefulBuilder(
+          builder: (sheetContext, setSheetState) {
+            void save() {
+              final text = controller.text.trim();
+              if (text.isEmpty) {
+                Navigator.of(sheetContext).pop('');
+                return;
+              }
+              final parsed = double.tryParse(text);
+              if (parsed == null) {
+                setSheetState(() => error = 'Enter a valid amount');
+                return;
+              }
+              if (parsed < minLimit) {
+                setSheetState(
+                  () => error =
+                      "Can't be below the customer's current balance of "
+                      '${formatCreditBalance(customer.balance)}',
+                );
+                return;
+              }
+              Navigator.of(sheetContext).pop(text);
+            }
+
+            return Padding(
+              padding: EdgeInsets.only(
+                left: 20,
+                right: 20,
+                top: 24,
+                bottom: MediaQuery.of(sheetContext).viewInsets.bottom + 24,
               ),
-            ),
-            const SizedBox(height: 20),
-            SizedBox(
-              width: double.infinity,
-              height: 52,
-              child: ElevatedButton(
-                onPressed: () =>
-                    Navigator.of(sheetContext).pop(controller.text.trim()),
-                child: const Text('Save'),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Edit Credit Limit', style: AppTheme.mainTitle),
+                  if (minLimit > 0) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      'Must be at least ${formatCreditBalance(minLimit)} - '
+                      'what the customer already owes',
+                      style: AppTheme.bodySubtitle,
+                    ),
+                  ],
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: controller,
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    autofocus: true,
+                    decoration: InputDecoration(
+                      prefixText: 'R ',
+                      hintText: 'Leave empty for no limit',
+                      errorText: error,
+                    ),
+                    onChanged: (_) {
+                      if (error != null) setSheetState(() => error = null);
+                    },
+                  ),
+                  const SizedBox(height: 20),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 52,
+                    child: ElevatedButton(onPressed: save, child: const Text('Save')),
+                  ),
+                ],
               ),
-            ),
-          ],
-        ),
-      ),
+            );
+          },
+        );
+      },
     );
 
     if (result == null || !mounted) return;
@@ -331,7 +377,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
             Row(
               children: [
                 Text(
-                  'Balance: R${customer.balance.toStringAsFixed(2)}',
+                  'Balance: ${formatCreditBalance(customer.balance)}',
                   style: AppTheme.bodySubtitle,
                 ),
                 const Spacer(),
@@ -431,9 +477,27 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: 32),
         child: Center(
-          child: Text(
-            'No transactions for this period',
-            style: AppTheme.bodySubtitle,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(
+                Icons.receipt_long_outlined,
+                size: 48,
+                color: AppTheme.iconBorder,
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'No transactions for this period',
+                style: AppTheme.mainTitle.copyWith(fontSize: 16),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 4),
+              const Text(
+                'Try a different filter, or add a payment above',
+                style: AppTheme.bodySubtitle,
+                textAlign: TextAlign.center,
+              ),
+            ],
           ),
         ),
       );
@@ -510,7 +574,7 @@ class _BalanceCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      'R${customer.balance.toStringAsFixed(2)}',
+                      formatCreditBalance(customer.balance),
                       style: const TextStyle(
                         color: Colors.white,
                         fontSize: 32,
@@ -565,7 +629,9 @@ class _BalanceCard extends StatelessWidget {
                 ),
                 const SizedBox(width: 6),
                 Text(
-                  owing ? 'Owing' : 'Settled',
+                  owing
+                      ? 'Owing'
+                      : (customer.balance < 0 ? 'In Credit' : 'Settled'),
                   style: const TextStyle(
                     color: Colors.white,
                     fontSize: 12,
@@ -591,9 +657,16 @@ class _TransactionTile extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final isCredit = transaction.type == 'purchase';
     final isReturn = transaction.type == 'return';
-    final color = isCredit ? AppTheme.logoutRed : AppTheme.syncGreen;
-    final icon = isCredit ? Icons.arrow_upward : Icons.arrow_downward;
+    // A purchase always increases what's owed and a repayment always
+    // decreases it, but a return can go either way - an exchange for a
+    // pricier item adds to the balance, while a refund/cheaper exchange
+    // takes away from it - so for a return, the transaction's own signed
+    // amount decides the direction instead of the type alone.
+    final increasesBalance = isCredit || (isReturn && transaction.amount > 0);
+    final color = increasesBalance ? AppTheme.logoutRed : AppTheme.syncGreen;
+    final icon = increasesBalance ? Icons.arrow_upward : Icons.arrow_downward;
     final label = isCredit ? 'Credit' : (isReturn ? 'Return' : 'Repayment');
+    final displayAmount = transaction.amount.abs();
     final dateText = DateFormat('d MMM yyyy').format(transaction.createdAt);
 
     return InkWell(
@@ -645,7 +718,7 @@ class _TransactionTile extends ConsumerWidget {
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 Text(
-                  '${isCredit ? '+' : '-'}R${transaction.amount.toStringAsFixed(2)}',
+                  '${increasesBalance ? '+' : '-'}R${displayAmount.toStringAsFixed(2)}',
                   style: TextStyle(color: color, fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 4),

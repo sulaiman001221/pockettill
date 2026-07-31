@@ -9,6 +9,7 @@ import '../../shared/repositories/repositories.dart';
 import '../../shared/theme/app_theme.dart';
 import '../../shared/widgets/pockettill_app_bar.dart';
 import '../credit/date_range_sheet.dart';
+import 'end_of_day_screen.dart';
 import 'history_providers.dart';
 import 'return_detail_screen.dart';
 import 'sale_detail_screen.dart';
@@ -33,6 +34,21 @@ class HistoryScreen extends ConsumerWidget {
       ref.read(historyCustomRangeProvider.notifier).state = range;
       ref.read(historyFilterProvider.notifier).state = HistoryFilter.custom;
     }
+  }
+
+  /// Whether [DateTimeRange] spans exactly one calendar day - the End of
+  /// Day Summary only makes sense for a single day's reconciliation, not a
+  /// multi-day range.
+  bool _isSingleDay(DateTimeRange range) {
+    return range.start.year == range.end.year &&
+        range.start.month == range.end.month &&
+        range.start.day == range.end.day;
+  }
+
+  void _openEndOfDay(BuildContext context, DateTime date) {
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => EndOfDayScreen(date: date)),
+    );
   }
 
   Map<String, List<HistoryEntry>> _groupByDate(List<HistoryEntry> entries) {
@@ -63,14 +79,41 @@ class HistoryScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final filter = ref.watch(historyFilterProvider);
+    final customRange = ref.watch(historyCustomRangeProvider);
     final salesAsync = ref.watch(filteredSalesProvider);
     final returnsAsync = ref.watch(filteredReturnsProvider);
     final combined = ref.watch(combinedHistoryProvider);
     final summary = ref.watch(historySummaryProvider);
 
+    // Today, or a Custom range narrowed down to exactly one day - a
+    // multi-day range has no single day to reconcile.
+    final endOfDayDate = filter == HistoryFilter.today
+        ? DateTime.now()
+        : (filter == HistoryFilter.custom &&
+                  customRange != null &&
+                  _isSingleDay(customRange)
+              ? customRange.start
+              : null);
+
     return Scaffold(
       appBar: const CustomAppBar(showMenuIcon: false, title: 'Sales History'),
       backgroundColor: AppTheme.background,
+      bottomNavigationBar: endOfDayDate != null
+          ? SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
+                child: SizedBox(
+                  width: double.infinity,
+                  height: 52,
+                  child: ElevatedButton.icon(
+                    onPressed: () => _openEndOfDay(context, endOfDayDate),
+                    icon: const Icon(Icons.calculate_outlined),
+                    label: const Text('End of Day Summary'),
+                  ),
+                ),
+              ),
+            )
+          : null,
       body: RefreshIndicator(
         onRefresh: () => Future.wait([
           ref.refresh(filteredSalesProvider.future),
@@ -275,7 +318,7 @@ class _SummaryCard extends StatelessWidget {
               const Icon(Icons.bar_chart, color: Colors.white, size: 20),
               const SizedBox(width: 8),
               const Text(
-                'Total Sales',
+                'Total Revenue',
                 style: TextStyle(color: Colors.white, fontSize: 14),
               ),
               const Spacer(),
@@ -342,7 +385,7 @@ class _SummaryCard extends StatelessWidget {
               Expanded(
                 child: _Stat(
                   icon: Icons.payments_outlined,
-                  value: '${summary.cashPercent.toStringAsFixed(0)}%',
+                  value: '${summary.cashPercentage.toStringAsFixed(0)}%',
                   label: 'Cash',
                 ),
               ),

@@ -6,6 +6,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../shared/models/credit_customer.dart';
 import '../../shared/repositories/repositories.dart';
 import '../../shared/theme/app_theme.dart';
+import '../../shared/utils/credit_balance_display.dart';
+import '../../shared/utils/friendly_error.dart';
 import '../../shared/widgets/pockettill_app_bar.dart';
 import '../sales/payment_success_screen.dart';
 import '../stock/stock_ui.dart';
@@ -116,7 +118,13 @@ class _AddPaymentScreenState extends ConsumerState<AddPaymentScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Could not record payment: $e'),
+          content: Text(
+            friendlyErrorMessage(
+              e,
+              fallback: 'Could not record the payment. Please try again or '
+                  'contact support.',
+            ),
+          ),
           backgroundColor: AppTheme.logoutRed,
         ),
       );
@@ -143,7 +151,16 @@ class _AddPaymentScreenState extends ConsumerState<AddPaymentScreen> {
           children: [
             Expanded(
               child: ListView(
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
+              // The body doesn't resize for the keyboard, so pad the list
+              // bottom by the keyboard height instead - without this, the
+              // "Amount Received" field (and the confirm bar below it) can
+              // end up hidden behind the keyboard with no way to scroll past it.
+              padding: EdgeInsets.fromLTRB(
+                20,
+                16,
+                20,
+                16 + MediaQuery.viewInsetsOf(context).bottom,
+              ),
               children: [
                 _CustomerHeader(customer: widget.customer),
                 const SizedBox(height: 20),
@@ -298,7 +315,7 @@ class _AddPaymentScreenState extends ConsumerState<AddPaymentScreen> {
       ),
       child: Column(
         children: [
-          _summaryRow('Outstanding Balance', 'R${_balance.toStringAsFixed(2)}'),
+          _summaryRow('Outstanding Balance', formatCreditBalance(_balance)),
           const SizedBox(height: 10),
           if (_paymentMethod == 'cash')
             _summaryRow(
@@ -380,10 +397,10 @@ class _CustomerHeader extends StatelessWidget {
               style: TextStyle(fontSize: 11, color: AppTheme.textSecondary),
             ),
             Text(
-              'R${customer.balance.toStringAsFixed(2)}',
-              style: const TextStyle(
+              formatCreditBalance(customer.balance),
+              style: TextStyle(
                 fontWeight: FontWeight.bold,
-                color: AppTheme.primary,
+                color: creditBalanceColor(customer.balance),
               ),
             ),
           ],

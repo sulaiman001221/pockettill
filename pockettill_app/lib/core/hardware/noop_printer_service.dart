@@ -7,5 +7,8 @@ class NoopPrinterService implements PrinterService {
   Future<void> printReceipt(Map<String, dynamic> saleData) async {}
 
   @override
+  Future<void> printEndOfDaySummary(Map<String, dynamic> summaryData) async {}
+
+  @override
   Future<bool> isPrinterAvailable() async => false;
 }

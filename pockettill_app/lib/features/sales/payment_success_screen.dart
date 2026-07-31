@@ -1,13 +1,27 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
+import '../../core/hardware/sound_service.dart';
 import '../../main.dart';
 import '../../shared/repositories/repositories.dart';
 import '../../shared/theme/app_theme.dart';
+import '../stock/stock_screen.dart';
 import '../stock/stock_ui.dart';
 import 'cart_item.dart';
 import 'sales_providers.dart';
+
+/// A product sold in this transaction whose stock is now at or below its
+/// low-stock threshold - surfaced so the cashier notices before it runs out
+/// entirely, rather than finding out on the next sale attempt.
+class LowStockAlert {
+  const LowStockAlert({required this.productName, required this.stock});
+
+  final String productName;
+  final int stock;
+}
 
 /// Shown after a sale or credit repayment completes successfully. By
 /// default clears the cart before returning to [ShellScreen] - pass
@@ -25,11 +39,16 @@ class PaymentSuccessScreen extends ConsumerStatefulWidget {
     this.onReturnHome,
     this.primaryActionLabel,
     this.onPrimaryAction,
+    this.lowStockProducts = const [],
   });
 
   /// Empty for non-cart payments (e.g. a credit repayment).
   final List<CartItem> cartItems;
   final double total;
+
+  /// Products just sold whose stock is now at or below their low-stock
+  /// threshold - empty for non-cart payments, same as [cartItems].
+  final List<LowStockAlert> lowStockProducts;
 
   /// 'cash' | 'card' | 'credit'.
   final String paymentMethod;
@@ -75,6 +94,19 @@ class _PaymentSuccessScreenState extends ConsumerState<PaymentSuccessScreen>
   void initState() {
     super.initState();
     _controller.forward();
+    unawaited(SoundService.paymentSuccess());
+    if (widget.lowStockProducts.isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        showDialog<void>(
+          context: context,
+          builder: (_) => _LowStockDialog(
+            products: widget.lowStockProducts,
+            onGoToStock: _goToStock,
+          ),
+        );
+      });
+    }
   }
 
   @override
@@ -135,6 +167,17 @@ class _PaymentSuccessScreenState extends ConsumerState<PaymentSuccessScreen>
     }
     ref.read(salesNotifierProvider.notifier).clearCart();
     Navigator.of(context).popUntil((route) => route.isFirst);
+  }
+
+  void _goToStock() {
+    // Not a fixed-count pop - clear back to the shell first (regardless of
+    // how this screen was reached), then push a fresh StockScreen, so this
+    // always lands on Stock rather than wherever the stack happened to be.
+    ref.read(salesNotifierProvider.notifier).clearCart();
+    Navigator.of(context).popUntil((route) => route.isFirst);
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const StockScreen()));
   }
 
   @override
@@ -201,21 +244,37 @@ class _PaymentSuccessScreenState extends ConsumerState<PaymentSuccessScreen>
                 width: double.infinity,
                 height: 52,
                 child: ElevatedButton(
-                  onPressed: widget.onPrimaryAction != null
-                      ? () => widget.onPrimaryAction!(context)
-                      : _printReceipt,
-                  child: Text(widget.primaryActionLabel ?? 'Print Receipt'),
+                  onPressed: _printReceipt,
+                  child: const Text('Print Receipt'),
                 ),
               ),
               const SizedBox(height: 12),
-              SizedBox(
-                width: double.infinity,
-                height: 52,
-                child: OutlinedButton(
-                  onPressed: _returnHome,
-                  child: const Text('Return Home'),
+              if (widget.onPrimaryAction != null) ...[
+                SizedBox(
+                  width: double.infinity,
+                  height: 52,
+                  child: OutlinedButton(
+                    onPressed: () => widget.onPrimaryAction!(context),
+                    child: Text(widget.primaryActionLabel!),
+                  ),
                 ),
-              ),
+                const SizedBox(height: 12),
+                TextButton(
+                  onPressed: _returnHome,
+                  child: const Text(
+                    'Return Home',
+                    style: TextStyle(color: AppTheme.textSecondary),
+                  ),
+                ),
+              ] else
+                SizedBox(
+                  width: double.infinity,
+                  height: 52,
+                  child: OutlinedButton(
+                    onPressed: _returnHome,
+                    child: const Text('Return Home'),
+                  ),
+                ),
               const SizedBox(height: 24),
             ],
           ),
@@ -378,6 +437,116 @@ class _DetailRow extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// Modal popup listing products this sale just pushed to (or past) their
+/// low-stock threshold, with a shortcut to Stock to fix it immediately
+/// rather than discovering it on the next sale attempt. A negative [stock]
+/// already carries its own minus sign, so the label uses a colon rather
+/// than a dash to avoid a double dash (e.g. "- -1 left").
+class _LowStockDialog extends StatelessWidget {
+  const _LowStockDialog({required this.products, required this.onGoToStock});
+
+  final List<LowStockAlert> products;
+  final VoidCallback onGoToStock;
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: AppTheme.surface,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 24),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(24, 32, 24, 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(
+                  Icons.warning_amber_rounded,
+                  color: AppTheme.syncAmber,
+                  size: 48,
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'Low Stock Alert',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: AppTheme.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Column(
+                  children: [
+                    for (final product in products)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 4),
+                        child: Text(
+                          '${product.productName}: ${product.stock} left',
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            fontSize: 14,
+                            color: AppTheme.textSecondary,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 28),
+                SizedBox(
+                  width: double.infinity,
+                  height: 52,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppTheme.syncAmber,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    onPressed: () {
+                      Navigator.of(context).pop();
+                      onGoToStock();
+                    },
+                    child: const Text(
+                      'Go to Stock',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Positioned(
+            top: 12,
+            right: 12,
+            child: GestureDetector(
+              onTap: () => Navigator.of(context).pop(),
+              child: Container(
+                width: 32,
+                height: 32,
+                decoration: const BoxDecoration(
+                  color: Color(0xFFF3F4F6),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.close,
+                  size: 18,
+                  color: AppTheme.iconBorder,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

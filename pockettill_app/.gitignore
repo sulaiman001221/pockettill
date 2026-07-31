@@ -47,3 +47,10 @@ app.*.map.json
 # Real Supabase credentials - see dart_define.example.json for the shape.
 # Never committed; fill in dart_define.json locally with the real values.
 /dart_define.json
+
+# Release signing keystore + credentials - never committed. Losing these
+# means never being able to publish an update under the same app identity
+# again, so back them up somewhere safe outside this repo.
+/android/key.properties
+/android/app/*.jks
+/android/app/*.keystore

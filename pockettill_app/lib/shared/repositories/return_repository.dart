@@ -95,9 +95,16 @@ class ReturnRepository {
   /// sale's own multi-effect write.
   ///
   /// Each entry in [items] must be `{'saleItem': SaleItem, 'quantity': int}`.
-  /// [customerId] is only meaningful (and required) when [resolutionType] is
-  /// `refund` against a credit sale or `store_credit` - an exchange's cash
-  /// difference never touches a credit balance, regardless of direction.
+  /// [customerId] is required whenever [balanceDelta] is non-zero - a
+  /// refund/exchange against a credit sale, or store credit. [balanceDelta]
+  /// is added to the customer's balance as-is (positive increases what they
+  /// owe, e.g. an exchange for a pricier item; negative decreases it, e.g. a
+  /// refund or store credit) - the caller is responsible for having already
+  /// clamped it so the balance never goes negative from a refund (any
+  /// excess should show up in [cashPaidToCustomer] instead).
+  /// [customerOwes]/[customerReceives] describe the gross value that moved
+  /// (cash or balance combined) purely for display/reporting - they don't
+  /// drive the actual balance mutation.
   Future<void> processReturn({
     required Sale sale,
     required List<Map<String, dynamic>> items,
@@ -107,12 +114,17 @@ class ReturnRepository {
     required double itemsValue,
     double customerOwes = 0,
     double customerReceives = 0,
+    double cashPaidToCustomer = 0,
+    double balanceDelta = 0,
     String? customerId,
     Product? exchangeProduct,
     required String deviceId,
   }) async {
     if (resolutionType == 'store_credit' && customerId == null) {
       throw ArgumentError('customerId is required for store credit.');
+    }
+    if (balanceDelta != 0 && customerId == null) {
+      throw ArgumentError('customerId is required when balanceDelta is non-zero.');
     }
 
     final returnUuid = _uuid.v4();
@@ -128,6 +140,7 @@ class ReturnRepository {
       ..itemsValue = itemsValue
       ..customerOwes = customerOwes
       ..customerReceives = customerReceives
+      ..cashPaidToCustomer = cashPaidToCustomer
       ..customerId = customerId
       ..exchangeProductUuid = exchangeProduct?.uuid
       ..exchangeProductName = exchangeProduct?.name
@@ -164,13 +177,11 @@ class ReturnRepository {
         ),
     ];
 
-    // Credit balance is only touched for a refund against a credit sale or
-    // store credit - an exchange's cash difference is always settled at the
-    // counter, never against a credit account.
-    final touchesCreditBalance =
-        (resolutionType == 'refund' || resolutionType == 'store_credit') &&
-        customerId != null &&
-        customerReceives > 0;
+    // Credit balance is only touched when the caller has resolved a
+    // non-zero balanceDelta - a refund/exchange against a credit sale's own
+    // balance, or store credit. A cash/card sale's refund, or an exchange
+    // settled entirely at the counter, leaves balanceDelta at 0.
+    final touchesCreditBalance = balanceDelta != 0 && customerId != null;
 
     await _isar.writeTxn(() async {
       await _isar.returnRecords.put(returnRecord);
@@ -234,14 +245,19 @@ class ReturnRepository {
         }
 
         final balanceBefore = customer.balance;
-        customer.balance -= customerReceives;
+        customer.balance += balanceDelta;
         customer.lastActivityAt = now;
         await _isar.creditCustomers.put(customer);
 
+        // Signed, unlike a purchase/repayment's amount - positive means the
+        // balance went up (the customer now owes more, e.g. an exchange for
+        // a pricier item), negative means it went down (a refund or store
+        // credit). Display code keys off this sign rather than the
+        // transaction type alone, since a return can move either way.
         final transaction = CreditTransaction()
           ..uuid = _uuid.v4()
           ..customerId = customerId
-          ..amount = customerReceives
+          ..amount = balanceDelta
           ..type = 'return'
           ..saleUuid = sale.uuid
           ..note = _reasonLabel(reason)
@@ -304,6 +320,7 @@ class ReturnRepository {
     'items_value': returnRecord.itemsValue,
     'customer_owes': returnRecord.customerOwes,
     'customer_receives': returnRecord.customerReceives,
+    'cash_paid_to_customer': returnRecord.cashPaidToCustomer,
     'customer_id': returnRecord.customerId,
     'exchange_product_uuid': returnRecord.exchangeProductUuid,
     'exchange_product_name': returnRecord.exchangeProductName,

@@ -17,73 +17,83 @@ const ReturnRecordSchema = CollectionSchema(
   name: r'ReturnRecord',
   id: -8100134467443344680,
   properties: {
-    r'createdAt': PropertySchema(
+    r'cashPaidToCustomer': PropertySchema(
       id: 0,
+      name: r'cashPaidToCustomer',
+      type: IsarType.double,
+    ),
+    r'createdAt': PropertySchema(
+      id: 1,
       name: r'createdAt',
       type: IsarType.dateTime,
     ),
     r'customerId': PropertySchema(
-      id: 1,
+      id: 2,
       name: r'customerId',
       type: IsarType.string,
     ),
     r'customerOwes': PropertySchema(
-      id: 2,
+      id: 3,
       name: r'customerOwes',
       type: IsarType.double,
     ),
     r'customerReceives': PropertySchema(
-      id: 3,
+      id: 4,
       name: r'customerReceives',
       type: IsarType.double,
     ),
     r'deviceId': PropertySchema(
-      id: 4,
+      id: 5,
       name: r'deviceId',
       type: IsarType.string,
     ),
     r'exchangeProductName': PropertySchema(
-      id: 5,
+      id: 6,
       name: r'exchangeProductName',
       type: IsarType.string,
     ),
     r'exchangeProductUuid': PropertySchema(
-      id: 6,
+      id: 7,
       name: r'exchangeProductUuid',
       type: IsarType.string,
     ),
     r'itemsValue': PropertySchema(
-      id: 7,
+      id: 8,
       name: r'itemsValue',
       type: IsarType.double,
     ),
+    r'netMoneyMovement': PropertySchema(
+      id: 9,
+      name: r'netMoneyMovement',
+      type: IsarType.double,
+    ),
     r'reason': PropertySchema(
-      id: 8,
+      id: 10,
       name: r'reason',
       type: IsarType.string,
     ),
     r'resolutionType': PropertySchema(
-      id: 9,
+      id: 11,
       name: r'resolutionType',
       type: IsarType.string,
     ),
     r'saleUuid': PropertySchema(
-      id: 10,
+      id: 12,
       name: r'saleUuid',
       type: IsarType.string,
     ),
     r'stockAction': PropertySchema(
-      id: 11,
+      id: 13,
       name: r'stockAction',
       type: IsarType.string,
     ),
     r'synced': PropertySchema(
-      id: 12,
+      id: 14,
       name: r'synced',
       type: IsarType.bool,
     ),
     r'uuid': PropertySchema(
-      id: 13,
+      id: 15,
       name: r'uuid',
       type: IsarType.string,
     )
@@ -141,20 +151,22 @@ void _returnRecordSerialize(
   List<int> offsets,
   Map<Type, List<int>> allOffsets,
 ) {
-  writer.writeDateTime(offsets[0], object.createdAt);
-  writer.writeString(offsets[1], object.customerId);
-  writer.writeDouble(offsets[2], object.customerOwes);
-  writer.writeDouble(offsets[3], object.customerReceives);
-  writer.writeString(offsets[4], object.deviceId);
-  writer.writeString(offsets[5], object.exchangeProductName);
-  writer.writeString(offsets[6], object.exchangeProductUuid);
-  writer.writeDouble(offsets[7], object.itemsValue);
-  writer.writeString(offsets[8], object.reason);
-  writer.writeString(offsets[9], object.resolutionType);
-  writer.writeString(offsets[10], object.saleUuid);
-  writer.writeString(offsets[11], object.stockAction);
-  writer.writeBool(offsets[12], object.synced);
-  writer.writeString(offsets[13], object.uuid);
+  writer.writeDouble(offsets[0], object.cashPaidToCustomer);
+  writer.writeDateTime(offsets[1], object.createdAt);
+  writer.writeString(offsets[2], object.customerId);
+  writer.writeDouble(offsets[3], object.customerOwes);
+  writer.writeDouble(offsets[4], object.customerReceives);
+  writer.writeString(offsets[5], object.deviceId);
+  writer.writeString(offsets[6], object.exchangeProductName);
+  writer.writeString(offsets[7], object.exchangeProductUuid);
+  writer.writeDouble(offsets[8], object.itemsValue);
+  writer.writeDouble(offsets[9], object.netMoneyMovement);
+  writer.writeString(offsets[10], object.reason);
+  writer.writeString(offsets[11], object.resolutionType);
+  writer.writeString(offsets[12], object.saleUuid);
+  writer.writeString(offsets[13], object.stockAction);
+  writer.writeBool(offsets[14], object.synced);
+  writer.writeString(offsets[15], object.uuid);
 }
 
 ReturnRecord _returnRecordDeserialize(
@@ -164,21 +176,22 @@ ReturnRecord _returnRecordDeserialize(
   Map<Type, List<int>> allOffsets,
 ) {
   final object = ReturnRecord();
-  object.createdAt = reader.readDateTime(offsets[0]);
-  object.customerId = reader.readStringOrNull(offsets[1]);
-  object.customerOwes = reader.readDouble(offsets[2]);
-  object.customerReceives = reader.readDouble(offsets[3]);
-  object.deviceId = reader.readString(offsets[4]);
-  object.exchangeProductName = reader.readStringOrNull(offsets[5]);
-  object.exchangeProductUuid = reader.readStringOrNull(offsets[6]);
+  object.cashPaidToCustomer = reader.readDouble(offsets[0]);
+  object.createdAt = reader.readDateTime(offsets[1]);
+  object.customerId = reader.readStringOrNull(offsets[2]);
+  object.customerOwes = reader.readDouble(offsets[3]);
+  object.customerReceives = reader.readDouble(offsets[4]);
+  object.deviceId = reader.readString(offsets[5]);
+  object.exchangeProductName = reader.readStringOrNull(offsets[6]);
+  object.exchangeProductUuid = reader.readStringOrNull(offsets[7]);
   object.id = id;
-  object.itemsValue = reader.readDouble(offsets[7]);
-  object.reason = reader.readString(offsets[8]);
-  object.resolutionType = reader.readString(offsets[9]);
-  object.saleUuid = reader.readString(offsets[10]);
-  object.stockAction = reader.readString(offsets[11]);
-  object.synced = reader.readBool(offsets[12]);
-  object.uuid = reader.readString(offsets[13]);
+  object.itemsValue = reader.readDouble(offsets[8]);
+  object.reason = reader.readString(offsets[10]);
+  object.resolutionType = reader.readString(offsets[11]);
+  object.saleUuid = reader.readString(offsets[12]);
+  object.stockAction = reader.readString(offsets[13]);
+  object.synced = reader.readBool(offsets[14]);
+  object.uuid = reader.readString(offsets[15]);
   return object;
 }
 
@@ -190,32 +203,36 @@ P _returnRecordDeserializeProp<P>(
 ) {
   switch (propertyId) {
     case 0:
-      return (reader.readDateTime(offset)) as P;
-    case 1:
-      return (reader.readStringOrNull(offset)) as P;
-    case 2:
       return (reader.readDouble(offset)) as P;
+    case 1:
+      return (reader.readDateTime(offset)) as P;
+    case 2:
+      return (reader.readStringOrNull(offset)) as P;
     case 3:
       return (reader.readDouble(offset)) as P;
     case 4:
-      return (reader.readString(offset)) as P;
+      return (reader.readDouble(offset)) as P;
     case 5:
-      return (reader.readStringOrNull(offset)) as P;
+      return (reader.readString(offset)) as P;
     case 6:
       return (reader.readStringOrNull(offset)) as P;
     case 7:
-      return (reader.readDouble(offset)) as P;
+      return (reader.readStringOrNull(offset)) as P;
     case 8:
-      return (reader.readString(offset)) as P;
+      return (reader.readDouble(offset)) as P;
     case 9:
-      return (reader.readString(offset)) as P;
+      return (reader.readDouble(offset)) as P;
     case 10:
       return (reader.readString(offset)) as P;
     case 11:
       return (reader.readString(offset)) as P;
     case 12:
-      return (reader.readBool(offset)) as P;
+      return (reader.readString(offset)) as P;
     case 13:
+      return (reader.readString(offset)) as P;
+    case 14:
+      return (reader.readBool(offset)) as P;
+    case 15:
       return (reader.readString(offset)) as P;
     default:
       throw IsarError('Unknown property with id $propertyId');
@@ -316,6 +333,72 @@ extension ReturnRecordQueryWhere
 
 extension ReturnRecordQueryFilter
     on QueryBuilder<ReturnRecord, ReturnRecord, QFilterCondition> {
+  QueryBuilder<ReturnRecord, ReturnRecord, QAfterFilterCondition>
+      cashPaidToCustomerEqualTo(
+    double value, {
+    double epsilon = Query.epsilon,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'cashPaidToCustomer',
+        value: value,
+        epsilon: epsilon,
+      ));
+    });
+  }
+
+  QueryBuilder<ReturnRecord, ReturnRecord, QAfterFilterCondition>
+      cashPaidToCustomerGreaterThan(
+    double value, {
+    bool include = false,
+    double epsilon = Query.epsilon,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'cashPaidToCustomer',
+        value: value,
+        epsilon: epsilon,
+      ));
+    });
+  }
+
+  QueryBuilder<ReturnRecord, ReturnRecord, QAfterFilterCondition>
+      cashPaidToCustomerLessThan(
+    double value, {
+    bool include = false,
+    double epsilon = Query.epsilon,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'cashPaidToCustomer',
+        value: value,
+        epsilon: epsilon,
+      ));
+    });
+  }
+
+  QueryBuilder<ReturnRecord, ReturnRecord, QAfterFilterCondition>
+      cashPaidToCustomerBetween(
+    double lower,
+    double upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    double epsilon = Query.epsilon,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'cashPaidToCustomer',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+        epsilon: epsilon,
+      ));
+    });
+  }
+
   QueryBuilder<ReturnRecord, ReturnRecord, QAfterFilterCondition>
       createdAtEqualTo(DateTime value) {
     return QueryBuilder.apply(this, (query) {
@@ -1221,6 +1304,72 @@ extension ReturnRecordQueryFilter
     });
   }
 
+  QueryBuilder<ReturnRecord, ReturnRecord, QAfterFilterCondition>
+      netMoneyMovementEqualTo(
+    double value, {
+    double epsilon = Query.epsilon,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'netMoneyMovement',
+        value: value,
+        epsilon: epsilon,
+      ));
+    });
+  }
+
+  QueryBuilder<ReturnRecord, ReturnRecord, QAfterFilterCondition>
+      netMoneyMovementGreaterThan(
+    double value, {
+    bool include = false,
+    double epsilon = Query.epsilon,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'netMoneyMovement',
+        value: value,
+        epsilon: epsilon,
+      ));
+    });
+  }
+
+  QueryBuilder<ReturnRecord, ReturnRecord, QAfterFilterCondition>
+      netMoneyMovementLessThan(
+    double value, {
+    bool include = false,
+    double epsilon = Query.epsilon,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'netMoneyMovement',
+        value: value,
+        epsilon: epsilon,
+      ));
+    });
+  }
+
+  QueryBuilder<ReturnRecord, ReturnRecord, QAfterFilterCondition>
+      netMoneyMovementBetween(
+    double lower,
+    double upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    double epsilon = Query.epsilon,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'netMoneyMovement',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+        epsilon: epsilon,
+      ));
+    });
+  }
+
   QueryBuilder<ReturnRecord, ReturnRecord, QAfterFilterCondition> reasonEqualTo(
     String value, {
     bool caseSensitive = true,
@@ -1917,6 +2066,20 @@ extension ReturnRecordQueryLinks
 
 extension ReturnRecordQuerySortBy
     on QueryBuilder<ReturnRecord, ReturnRecord, QSortBy> {
+  QueryBuilder<ReturnRecord, ReturnRecord, QAfterSortBy>
+      sortByCashPaidToCustomer() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'cashPaidToCustomer', Sort.asc);
+    });
+  }
+
+  QueryBuilder<ReturnRecord, ReturnRecord, QAfterSortBy>
+      sortByCashPaidToCustomerDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'cashPaidToCustomer', Sort.desc);
+    });
+  }
+
   QueryBuilder<ReturnRecord, ReturnRecord, QAfterSortBy> sortByCreatedAt() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'createdAt', Sort.asc);
@@ -2022,6 +2185,20 @@ extension ReturnRecordQuerySortBy
     });
   }
 
+  QueryBuilder<ReturnRecord, ReturnRecord, QAfterSortBy>
+      sortByNetMoneyMovement() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'netMoneyMovement', Sort.asc);
+    });
+  }
+
+  QueryBuilder<ReturnRecord, ReturnRecord, QAfterSortBy>
+      sortByNetMoneyMovementDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'netMoneyMovement', Sort.desc);
+    });
+  }
+
   QueryBuilder<ReturnRecord, ReturnRecord, QAfterSortBy> sortByReason() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'reason', Sort.asc);
@@ -2100,6 +2277,20 @@ extension ReturnRecordQuerySortBy
 
 extension ReturnRecordQuerySortThenBy
     on QueryBuilder<ReturnRecord, ReturnRecord, QSortThenBy> {
+  QueryBuilder<ReturnRecord, ReturnRecord, QAfterSortBy>
+      thenByCashPaidToCustomer() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'cashPaidToCustomer', Sort.asc);
+    });
+  }
+
+  QueryBuilder<ReturnRecord, ReturnRecord, QAfterSortBy>
+      thenByCashPaidToCustomerDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'cashPaidToCustomer', Sort.desc);
+    });
+  }
+
   QueryBuilder<ReturnRecord, ReturnRecord, QAfterSortBy> thenByCreatedAt() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'createdAt', Sort.asc);
@@ -2217,6 +2408,20 @@ extension ReturnRecordQuerySortThenBy
     });
   }
 
+  QueryBuilder<ReturnRecord, ReturnRecord, QAfterSortBy>
+      thenByNetMoneyMovement() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'netMoneyMovement', Sort.asc);
+    });
+  }
+
+  QueryBuilder<ReturnRecord, ReturnRecord, QAfterSortBy>
+      thenByNetMoneyMovementDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'netMoneyMovement', Sort.desc);
+    });
+  }
+
   QueryBuilder<ReturnRecord, ReturnRecord, QAfterSortBy> thenByReason() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'reason', Sort.asc);
@@ -2295,6 +2500,13 @@ extension ReturnRecordQuerySortThenBy
 
 extension ReturnRecordQueryWhereDistinct
     on QueryBuilder<ReturnRecord, ReturnRecord, QDistinct> {
+  QueryBuilder<ReturnRecord, ReturnRecord, QDistinct>
+      distinctByCashPaidToCustomer() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'cashPaidToCustomer');
+    });
+  }
+
   QueryBuilder<ReturnRecord, ReturnRecord, QDistinct> distinctByCreatedAt() {
     return QueryBuilder.apply(this, (query) {
       return query.addDistinctBy(r'createdAt');
@@ -2350,6 +2562,13 @@ extension ReturnRecordQueryWhereDistinct
     });
   }
 
+  QueryBuilder<ReturnRecord, ReturnRecord, QDistinct>
+      distinctByNetMoneyMovement() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'netMoneyMovement');
+    });
+  }
+
   QueryBuilder<ReturnRecord, ReturnRecord, QDistinct> distinctByReason(
       {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
@@ -2401,6 +2620,13 @@ extension ReturnRecordQueryProperty
     });
   }
 
+  QueryBuilder<ReturnRecord, double, QQueryOperations>
+      cashPaidToCustomerProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'cashPaidToCustomer');
+    });
+  }
+
   QueryBuilder<ReturnRecord, DateTime, QQueryOperations> createdAtProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'createdAt');
@@ -2449,6 +2675,13 @@ extension ReturnRecordQueryProperty
   QueryBuilder<ReturnRecord, double, QQueryOperations> itemsValueProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'itemsValue');
+    });
+  }
+
+  QueryBuilder<ReturnRecord, double, QQueryOperations>
+      netMoneyMovementProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'netMoneyMovement');
     });
   }
 

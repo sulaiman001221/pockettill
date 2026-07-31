@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../shared/models/credit_transaction.dart';
 import '../../shared/models/return_record.dart';
 import '../../shared/models/sale.dart';
 import '../../shared/repositories/repositories.dart';
@@ -126,49 +127,201 @@ final combinedHistoryProvider = Provider<List<HistoryEntry>>((ref) {
   return entries;
 });
 
-/// Headline numbers derived from [filteredSalesProvider]'s current sales,
-/// with [total] further adjusted by [filteredReturnsProvider]'s net money
-/// movement - a return should reduce (or, for a customer-pays-more
-/// exchange, increase) the revenue figure the owner sees. Count, average
-/// sale, and cash percentage stay based on sales alone - those describe the
-/// sales themselves, not the money that came back afterwards.
+/// Simple headline numbers for the Sales History summary card - the
+/// period's revenue (net of any returns, so it matches the transaction
+/// list's own per-day totals), how many sales, the average sale value, and
+/// what share of sales were paid in cash. The full cash/card/credit
+/// reconciliation breakdown lives only in [EndOfDaySummary], not here.
 class HistorySummary {
   const HistorySummary({
     required this.total,
     required this.count,
     required this.averageSale,
-    required this.cashPercent,
+    required this.cashPercentage,
   });
 
   final double total;
   final int count;
   final double averageSale;
-  final double cashPercent;
+
+  /// Share of gross sales (0-100) paid in cash - returns don't factor in,
+  /// since this describes how sales themselves were paid for.
+  final double cashPercentage;
 }
 
+/// Headline numbers for the currently selected filter period.
 final historySummaryProvider = Provider<HistorySummary>((ref) {
   final sales = ref.watch(filteredSalesProvider).valueOrNull ?? const [];
   final returns = ref.watch(filteredReturnsProvider).valueOrNull ?? const [];
 
-  final salesTotal = sales.fold<double>(0, (sum, sale) => sum + sale.total);
+  final grossSales = sales.fold<double>(0, (sum, sale) => sum + sale.total);
+  // Nets in returns so this matches the transaction list's own per-day
+  // totals, which already fold each return's netMoneyMovement in alongside
+  // its sales.
   final returnsNet = returns.fold<double>(
     0,
     (sum, r) => sum + r.netMoneyMovement,
   );
-  final total = salesTotal + returnsNet;
+  final total = grossSales + returnsNet;
 
   final count = sales.length;
-  final average = count == 0 ? 0.0 : salesTotal / count;
+  final average = count == 0 ? 0.0 : grossSales / count;
 
-  final cashTotal = sales
-      .where((sale) => sale.paymentType == 'cash')
-      .fold<double>(0, (sum, sale) => sum + sale.total);
-  final cashPercent = salesTotal == 0 ? 0.0 : (cashTotal / salesTotal) * 100;
+  final cashSales = sales
+      .where((s) => s.paymentType == 'cash')
+      .fold<double>(0, (sum, s) => sum + s.total);
+  final cashPercentage = grossSales == 0 ? 0.0 : (cashSales / grossSales) * 100;
 
   return HistorySummary(
     total: total,
     count: count,
     averageSale: average,
-    cashPercent: cashPercent,
+    cashPercentage: cashPercentage,
+  );
+});
+
+/// Full till/card-machine reconciliation for a single calendar day - shown
+/// on the End of Day Summary page for whichever day is requested,
+/// independent of whatever period the Sales History filter chips currently
+/// have selected.
+///
+/// A repayment's method (cash vs card) is read from
+/// [CreditTransaction.note] ('Cash'/'Card', set by AddPaymentScreen) since
+/// there's no dedicated field for it. [returnsNet] uses each return's own
+/// [ReturnRecord.netMoneyMovement] - the same figure the Sales History
+/// summary card nets into [totalRevenue] - rather than trying to split
+/// refunds/exchanges by cash vs card vs credit-balance, so every number on
+/// this page traces back to the exact same calculation.
+class EndOfDaySummary {
+  const EndOfDaySummary({
+    required this.totalRevenue,
+    required this.cashSales,
+    required this.cardSales,
+    required this.creditSales,
+    required this.cashRepaymentsCollected,
+    required this.cardRepaymentsCollected,
+    required this.hasReturns,
+    required this.returnsNet,
+    required this.totalExpected,
+  });
+
+  /// All sales regardless of payment type, net of today's returns - the
+  /// same figure [historySummaryProvider] shows on the Sales History summary
+  /// card. Includes credit sales not yet received as cash.
+  final double totalRevenue;
+
+  final double cashSales;
+  final double cardSales;
+
+  /// Value of goods sold on credit today - not yet received.
+  final double creditSales;
+
+  /// Cash collected today from credit customers paying down their balance.
+  final double cashRepaymentsCollected;
+
+  /// Card-machine repayments collected today from credit customers.
+  final double cardRepaymentsCollected;
+
+  /// Whether any returns were processed today - [returnsNet] can
+  /// legitimately land on exactly zero (a refund and an exchange overpayment
+  /// cancelling out) even when returns did happen, so this is tracked
+  /// separately rather than inferred from the net being non-zero.
+  final bool hasReturns;
+
+  /// Net effect of today's returns on money in hand - positive if returns
+  /// brought money IN overall (an exchange where the customer paid extra),
+  /// negative if they took money OUT (a refund, store credit, or a
+  /// lower-value exchange), zero if there were none or they cancelled out.
+  final double returnsNet;
+
+  /// Cash + card sales, plus all repayments collected, plus/minus today's
+  /// returns - the actual money that came into the business today, excluding
+  /// credit sales that were recorded but not yet paid.
+  final double totalExpected;
+}
+
+/// Sales on the requested calendar day - independent of whatever period is
+/// currently selected in the Sales History filter chips, since the End of
+/// Day Summary page can be opened for any past day, not just today.
+final _dailySalesProvider = FutureProvider.family<List<Sale>, DateTime>((
+  ref,
+  date,
+) {
+  return ref.watch(saleRepositoryProvider).getByDate(date);
+});
+
+final _dailyReturnsProvider = FutureProvider.family<List<ReturnRecord>, DateTime>((
+  ref,
+  date,
+) {
+  return ref.watch(returnRepositoryProvider).getByDate(date);
+});
+
+final _dailyCreditPaymentsProvider =
+    FutureProvider.family<List<CreditTransaction>, DateTime>((ref, date) {
+      return ref.watch(creditRepositoryProvider).getRepaymentsInRange(date, date);
+    });
+
+/// Forces a fresh read of the End of Day summary for [date] - invalidating
+/// only [endOfDaySummaryProvider] isn't enough, since it just recomputes
+/// from whatever [_dailySalesProvider]/[_dailyReturnsProvider]/
+/// [_dailyCreditPaymentsProvider] last cached; those are plain (non-
+/// autoDispose) families too, so each one keeps its own stale result until
+/// invalidated in turn.
+void refreshEndOfDaySummary(WidgetRef ref, DateTime date) {
+  final day = DateTime(date.year, date.month, date.day);
+  ref.invalidate(_dailySalesProvider(day));
+  ref.invalidate(_dailyReturnsProvider(day));
+  ref.invalidate(_dailyCreditPaymentsProvider(day));
+  ref.invalidate(endOfDaySummaryProvider(day));
+}
+
+/// The End of Day reconciliation for [date] - async since classifying a
+/// refund's cash/card bucket requires looking up its original sale. Callers
+/// should pass a date normalised to midnight (year/month/day only) so the
+/// family cache keys correctly regardless of time-of-day.
+final endOfDaySummaryProvider =
+    FutureProvider.family<EndOfDaySummary, DateTime>((ref, date) async {
+  final sales = await ref.watch(_dailySalesProvider(date).future);
+  final returns = await ref.watch(_dailyReturnsProvider(date).future);
+  final repayments = await ref.watch(_dailyCreditPaymentsProvider(date).future);
+
+  final cashSales = sales
+      .where((s) => s.paymentType == 'cash')
+      .fold<double>(0, (sum, s) => sum + s.total);
+  final cardSales = sales
+      .where((s) => s.paymentType == 'card')
+      .fold<double>(0, (sum, s) => sum + s.total);
+  final creditSales = sales
+      .where((s) => s.paymentType == 'credit')
+      .fold<double>(0, (sum, s) => sum + s.total);
+  final grossSales = cashSales + cardSales + creditSales;
+
+  final cashRepayments = repayments
+      .where((tx) => tx.note == 'Cash')
+      .fold<double>(0, (sum, tx) => sum + tx.amount);
+  final cardRepayments = repayments
+      .where((tx) => tx.note == 'Card')
+      .fold<double>(0, (sum, tx) => sum + tx.amount);
+
+  final returnsNet = returns.fold<double>(
+    0,
+    (sum, r) => sum + r.netMoneyMovement,
+  );
+
+  final totalRevenue = grossSales + returnsNet;
+  final totalExpected =
+      cashSales + cardSales + cashRepayments + cardRepayments + returnsNet;
+
+  return EndOfDaySummary(
+    totalRevenue: totalRevenue,
+    cashSales: cashSales,
+    cardSales: cardSales,
+    creditSales: creditSales,
+    cashRepaymentsCollected: cashRepayments,
+    cardRepaymentsCollected: cardRepayments,
+    hasReturns: returns.isNotEmpty,
+    returnsNet: returnsNet,
+    totalExpected: totalExpected,
   );
 });
