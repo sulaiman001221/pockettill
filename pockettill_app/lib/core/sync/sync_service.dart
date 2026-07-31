@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:isar/isar.dart';
 
@@ -63,7 +62,6 @@ class SyncService {
         // Pre-auth state: a StoreConfig exists locally (e.g. an eagerly
         // created placeholder) but hasn't been through registration/login
         // yet, so there's no real store to attach rows to in Supabase.
-        debugPrint('SyncService: no storeId - skipping sync');
         _statusController.add(SyncStatus.idle);
         return;
       }
@@ -110,8 +108,7 @@ class SyncService {
       });
 
       _statusController.add(SyncStatus.success);
-    } catch (error) {
-      debugPrint('SyncService: sync cycle failed: $error');
+    } catch (_) {
       _statusController.add(SyncStatus.error);
     } finally {
       _isSyncing = false;

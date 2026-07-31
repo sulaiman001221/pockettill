@@ -5,6 +5,7 @@ import '../../core/auth/auth_service.dart';
 import '../../core/sync/reachability_service.dart';
 import '../../shared/repositories/store_config_provider.dart';
 import '../../shared/theme/app_theme.dart';
+import '../../shared/utils/friendly_error.dart';
 import '../../shared/widgets/pockettill_app_bar.dart';
 import '../shell/shell_screen.dart';
 import 'otp_verification_screen.dart';
@@ -110,10 +111,11 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     if (message.contains('User already registered')) {
       return 'This phone number is already registered. Try signing in instead.';
     }
-    if (message.contains('SocketException') || message.contains('Network')) {
-      return 'Connection failed. Please try again.';
-    }
-    return message;
+    return friendlyErrorMessage(
+      error,
+      fallback: 'Could not create your account. Please try again or '
+          'contact support.',
+    );
   }
 
   Future<void> _submit() async {

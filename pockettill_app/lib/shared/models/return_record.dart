@@ -22,6 +22,14 @@ class ReturnRecord {
   double customerOwes = 0; // cash the customer pays (exchange costs more)
   double customerReceives = 0; // cash/credit value the customer gets back
 
+  // Portion of customerReceives actually handed over as physical cash,
+  // rather than applied to a credit customer's balance - only ever nonzero
+  // for a refund against a credit sale that exceeds the customer's
+  // outstanding balance (the excess is always paid out in cash). Used by
+  // the End of Day reconciliation, which otherwise has no way to tell a
+  // balance-only adjustment apart from an actual till event.
+  double cashPaidToCustomer = 0;
+
   // Credit customer affected - a refund against a credit sale, or whoever
   // was chosen to receive store credit.
   String? customerId;

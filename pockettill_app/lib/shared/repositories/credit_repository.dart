@@ -247,6 +247,23 @@ class CreditRepository {
         .findAll();
   }
 
+  /// Every repayment (cash collected from a debtor, across all customers)
+  /// recorded between [from] and [to], inclusive of both calendar days -
+  /// used for Sales History's summary breakdown and the end-of-day
+  /// reconciliation.
+  Future<List<CreditTransaction>> getRepaymentsInRange(
+    DateTime from,
+    DateTime to,
+  ) {
+    final start = DateTime(from.year, from.month, from.day);
+    final end = DateTime(to.year, to.month, to.day, 23, 59, 59, 999);
+    return _isar.creditTransactions
+        .filter()
+        .typeEqualTo('repayment')
+        .createdAtBetween(start, end)
+        .findAll();
+  }
+
   Future<void> _enqueueEvent({
     required String entityType,
     required String entityUuid,

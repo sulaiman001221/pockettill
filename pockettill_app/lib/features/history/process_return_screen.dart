@@ -7,6 +7,8 @@ import '../../shared/models/sale.dart';
 import '../../shared/models/sale_item.dart';
 import '../../shared/repositories/repositories.dart';
 import '../../shared/theme/app_theme.dart';
+import '../../shared/utils/credit_balance_display.dart';
+import '../../shared/utils/friendly_error.dart';
 import '../stock/barcode_scanner_screen.dart';
 import '../stock/stock_ui.dart';
 import 'return_success_screen.dart';
@@ -26,6 +28,33 @@ String resolutionLabel(String resolution) => switch (resolution) {
   'store_credit' => 'Store Credit',
   _ => resolution,
 };
+
+/// Where a return's money actually goes: some combination of cash over the
+/// counter and a change to a credit customer's balance. At most one of
+/// [cashFromCustomer]/[cashToCustomer] is ever non-zero (money only ever
+/// flows one direction per return), and [balanceDelta] can be paired with
+/// either when a balance can only partly absorb the amount.
+class _MoneyOutcome {
+  const _MoneyOutcome({
+    this.cashFromCustomer = 0,
+    this.cashToCustomer = 0,
+    this.balanceDelta = 0,
+  });
+
+  /// Cash the customer pays over the counter (an exchange for a pricier
+  /// item, settled outside any credit balance).
+  final double cashFromCustomer;
+
+  /// Cash handed to the customer (a refund, or an exchange for a cheaper
+  /// item, settled outside any credit balance - or whatever a credit
+  /// balance couldn't fully absorb).
+  final double cashToCustomer;
+
+  /// Change to a credit customer's balance: positive means they now owe
+  /// more, negative means they owe less (or, if it goes below zero, that
+  /// the store now owes them - store credit or an over-refund).
+  final double balanceDelta;
+}
 
 /// Walks a cashier through returning one or more items from [sale]: which
 /// items, why, what happens to the returned stock, and what the customer
@@ -139,7 +168,9 @@ class _ProcessReturnScreenState extends ConsumerState<ProcessReturnScreen> {
         if (_resolutionType == null) return false;
         if (_resolutionType == 'exchange') return _exchangeProduct != null;
         if (_resolutionType == 'store_credit') {
-          return _selectedCustomer != null;
+          // Store credit only makes sense for a customer who doesn't
+          // already owe money - see _MoneyOutcome's class doc.
+          return _selectedCustomer != null && _selectedCustomer!.balance <= 0;
         }
         return true;
       case _ReturnStep.summary:
@@ -205,32 +236,90 @@ class _ProcessReturnScreenState extends ConsumerState<ProcessReturnScreen> {
   /// amount back. Zero: nothing changes hands.
   double get _exchangeDifference => _replacementPrice - _itemsValue;
 
+  /// The credit customer whose balance a refund or exchange affects - the
+  /// sale's own customer, since only a credit sale's own tab is ever
+  /// adjusted this way (store credit is handled separately via
+  /// _selectedCustomer, a deliberately different pick). Null for a cash/card
+  /// sale, where a refund or exchange is always settled at the counter.
+  CreditCustomer? get _balanceCustomer {
+    if (widget.sale.paymentType != 'credit') return null;
+    if (_resolutionType == 'refund' || _resolutionType == 'exchange') {
+      return _saleCustomer;
+    }
+    return null;
+  }
+
+  /// The credit customer whose balance this return affects - the sale's own
+  /// customer for a refund/exchange against a credit sale, or whoever was
+  /// picked for store credit. Null for a cash/card refund or an exchange
+  /// settled at the counter, neither of which touch a credit balance.
+  String? get _customerIdForResolution {
+    if (_resolutionType == 'store_credit') return _selectedCustomer?.uuid;
+    return _balanceCustomer?.uuid;
+  }
+
+  /// Where the money for the current resolution actually goes: cash handed
+  /// over the counter versus a change to a credit customer's balance. Follows
+  /// the same rules in every case - if the customer already owes money, the
+  /// return settles against that balance first (never below zero); only
+  /// whatever the balance can't absorb (or the whole amount, if there's
+  /// nothing owing to absorb it into) is ever cash.
+  _MoneyOutcome get _moneyOutcome {
+    switch (_resolutionType) {
+      case 'refund':
+        final customer = _balanceCustomer;
+        if (customer == null || customer.balance <= 0) {
+          return _MoneyOutcome(cashToCustomer: _itemsValue);
+        }
+        final balance = customer.balance;
+        if (_itemsValue <= balance) {
+          return _MoneyOutcome(balanceDelta: -_itemsValue);
+        }
+        return _MoneyOutcome(
+          cashToCustomer: _itemsValue - balance,
+          balanceDelta: -balance,
+        );
+
+      case 'exchange':
+        final diff = _exchangeDifference;
+        if (diff == 0) return const _MoneyOutcome();
+        final customer = _balanceCustomer;
+        if (customer == null || customer.balance <= 0) {
+          return diff > 0
+              ? _MoneyOutcome(cashFromCustomer: diff)
+              : _MoneyOutcome(cashToCustomer: -diff);
+        }
+        final balance = customer.balance;
+        if (diff > 0) return _MoneyOutcome(balanceDelta: diff);
+        final owed = -diff;
+        if (owed <= balance) return _MoneyOutcome(balanceDelta: -owed);
+        return _MoneyOutcome(
+          cashToCustomer: owed - balance,
+          balanceDelta: -balance,
+        );
+
+      case 'store_credit':
+        return _MoneyOutcome(balanceDelta: -_itemsValue);
+
+      default:
+        return const _MoneyOutcome();
+    }
+  }
+
+  /// Gross value that moved this return, cash or balance combined - what
+  /// Sales History's list/summary total, and this return's own receipt,
+  /// should show. Unaffected by whether the amount actually landed as cash
+  /// or against a credit balance.
   double get _customerOwes {
-    if (_resolutionType != 'exchange') return 0;
-    return _exchangeDifference > 0 ? _exchangeDifference : 0;
+    final outcome = _moneyOutcome;
+    return outcome.cashFromCustomer +
+        (outcome.balanceDelta > 0 ? outcome.balanceDelta : 0);
   }
 
   double get _customerReceives {
-    switch (_resolutionType) {
-      case 'refund':
-      case 'store_credit':
-        return _itemsValue;
-      case 'exchange':
-        return _exchangeDifference < 0 ? -_exchangeDifference : 0;
-      default:
-        return 0;
-    }
-  }
-
-  /// The credit customer whose balance this return affects - null for cash
-  /// refunds, exchanges, and card refunds (only refund-on-credit-sale and
-  /// store credit ever touch a credit balance).
-  String? get _customerIdForResolution {
-    if (_resolutionType == 'refund' && widget.sale.paymentType == 'credit') {
-      return widget.sale.customerId;
-    }
-    if (_resolutionType == 'store_credit') return _selectedCustomer?.uuid;
-    return null;
+    final outcome = _moneyOutcome;
+    return outcome.cashToCustomer +
+        (outcome.balanceDelta < 0 ? -outcome.balanceDelta : 0);
   }
 
   Future<void> _confirm() async {
@@ -248,6 +337,7 @@ class _ProcessReturnScreenState extends ConsumerState<ProcessReturnScreen> {
           )
           .toList();
 
+      final outcome = _moneyOutcome;
       await ref
           .read(returnRepositoryProvider)
           .processReturn(
@@ -259,6 +349,8 @@ class _ProcessReturnScreenState extends ConsumerState<ProcessReturnScreen> {
             itemsValue: _itemsValue,
             customerOwes: _customerOwes,
             customerReceives: _customerReceives,
+            cashPaidToCustomer: outcome.cashToCustomer,
+            balanceDelta: outcome.balanceDelta,
             customerId: _customerIdForResolution,
             exchangeProduct: _exchangeProduct,
             deviceId: storeConfig?.deviceId ?? '',
@@ -268,6 +360,7 @@ class _ProcessReturnScreenState extends ConsumerState<ProcessReturnScreen> {
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(
           builder: (_) => ReturnSuccessScreen(
+            saleNumber: widget.sale.id,
             items: _chosenItems
                 .map(
                   (item) => (item, _selectedQty[item.productUuid] ?? 0),
@@ -288,7 +381,13 @@ class _ProcessReturnScreenState extends ConsumerState<ProcessReturnScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Could not process return: $e'),
+          content: Text(
+            friendlyErrorMessage(
+              e,
+              fallback: 'Could not process the return. Please try again or '
+                  'contact support.',
+            ),
+          ),
           backgroundColor: AppTheme.logoutRed,
         ),
       );
@@ -490,7 +589,8 @@ class _ProcessReturnScreenState extends ConsumerState<ProcessReturnScreen> {
           icon: Icons.payments_outlined,
           label: 'Refund',
           subtitle: widget.sale.paymentType == 'credit'
-              ? "Reduces the customer's outstanding balance"
+              ? "Settles against the customer's balance, or cash if "
+                    "they don't owe anything"
               : 'Cash handed back to the customer',
           selected: _resolutionType == 'refund',
           onTap: () => _selectResolution('refund'),
@@ -521,11 +621,31 @@ class _ProcessReturnScreenState extends ConsumerState<ProcessReturnScreen> {
           ),
           if (_exchangeProduct != null) ...[
             const SizedBox(height: 12),
-            _ExchangeDifferenceCard(
-              replacementPrice: _replacementPrice,
-              itemsValue: _itemsValue,
-              difference: _exchangeDifference,
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppTheme.background,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                children: [
+                  Text(
+                    'Replacement: R${_replacementPrice.toStringAsFixed(2)}',
+                    style: AppTheme.bodySubtitle,
+                  ),
+                  const Spacer(),
+                  Text(
+                    'Returned value: R${_itemsValue.toStringAsFixed(2)}',
+                    style: AppTheme.bodySubtitle,
+                  ),
+                ],
+              ),
             ),
+            if (_moneySummary != null) ...[
+              const SizedBox(height: 12),
+              _moneySummary!,
+            ],
           ],
         ],
         if (_resolutionType == 'store_credit') ...[
@@ -536,6 +656,41 @@ class _ProcessReturnScreenState extends ConsumerState<ProcessReturnScreen> {
                 setState(() => _selectedCustomer = customer),
             onClear: () => setState(() => _selectedCustomer = null),
           ),
+          if (_selectedCustomer != null && _selectedCustomer!.balance > 0) ...[
+            const SizedBox(height: 12),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppTheme.syncAmber.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(
+                    Icons.info_outline,
+                    color: AppTheme.syncAmber,
+                    size: 18,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Store credit isn\'t available for ${_selectedCustomer!.name} '
+                      'because they still owe '
+                      '${formatCreditBalance(_selectedCustomer!.balance)}. '
+                      'Use Refund instead.',
+                      style: const TextStyle(
+                        color: AppTheme.syncAmber,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ],
       ],
     );
@@ -648,89 +803,72 @@ class _ProcessReturnScreenState extends ConsumerState<ProcessReturnScreen> {
     );
   }
 
-  /// The credit customer a refund or store-credit resolution actually
-  /// affects - the sale's own customer for a refund against a credit sale,
-  /// or whoever the cashier picked for store credit. Null for a cash/card
-  /// refund or an exchange, neither of which touch a credit balance.
-  CreditCustomer? get _resolutionCustomer {
-    if (_resolutionType == 'refund' && widget.sale.paymentType == 'credit') {
-      return _saleCustomer;
-    }
-    if (_resolutionType == 'store_credit') return _selectedCustomer;
-    return null;
-  }
-
-  String _formatBalance(double balance) {
-    return balance < 0
-        ? '-R${(-balance).toStringAsFixed(2)}'
-        : 'R${balance.toStringAsFixed(2)}';
-  }
-
-  /// The summary step's money card - explicit balance-impact wording when a
-  /// credit customer's balance is actually involved (refund-on-credit-sale
-  /// or store credit), otherwise the plain cash-in-hand wording for an
-  /// exchange difference or a cash/card refund.
+  /// The summary step's money card - plain-language wording covering every
+  /// refund/exchange/store-credit scenario, whether the money moves as cash
+  /// over the counter, against a credit customer's balance, or a mix of
+  /// both when a balance can only partly cover it.
   Widget? get _moneySummary {
-    final customer = _resolutionCustomer;
-    if (customer != null && _customerReceives > 0) {
-      final newBalance = customer.balance - _customerReceives;
-      final isStoreCredit = _resolutionType == 'store_credit';
-      return _SummaryCard(
-        title: 'CUSTOMER BALANCE',
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              isStoreCredit
-                  ? 'R${_customerReceives.toStringAsFixed(2)} will be added to '
-                        "${customer.name}'s balance"
-                  : 'R${_customerReceives.toStringAsFixed(2)} will be deducted '
-                        "from ${customer.name}'s balance",
-              style: const TextStyle(
-                fontWeight: FontWeight.w600,
-                color: AppTheme.textPrimary,
-              ),
-            ),
-            const SizedBox(height: 10),
-            Row(
-              children: [
-                const Text('New Balance', style: AppTheme.bodySubtitle),
-                const Spacer(),
-                Text(
-                  _formatBalance(newBalance),
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
-                    // Colour reflects the DIRECTION of change, not the
-                    // absolute new balance - the customer owing less is
-                    // good news (green) even if they still owe something,
-                    // and owing more is worth flagging (red) even if the
-                    // balance is still small.
-                    color: newBalance < customer.balance
-                        ? AppTheme.syncGreen
-                        : (newBalance > customer.balance
-                              ? AppTheme.logoutRed
-                              : AppTheme.textPrimary),
-                  ),
-                ),
-              ],
-            ),
-          ],
+    final outcome = _moneyOutcome;
+    final customer = _resolutionType == 'store_credit'
+        ? _selectedCustomer
+        : _balanceCustomer;
+
+    if (_resolutionType == 'exchange' && _exchangeDifference == 0) {
+      return const _SummaryCard(
+        title: 'MONEY',
+        child: Text(
+          'Same price - no money changes hands.',
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 15,
+            color: AppTheme.syncGreen,
+          ),
         ),
       );
     }
 
-    if (_customerOwes > 0 || _customerReceives > 0) {
+    if (customer != null && outcome.balanceDelta != 0) {
+      final newBalance = customer.balance + outcome.balanceDelta;
+      final String message;
+      if (outcome.balanceDelta > 0) {
+        message = 'R${outcome.balanceDelta.toStringAsFixed(2)} is added to '
+            "${customer.name}'s balance. They now owe "
+            '${formatCreditBalance(newBalance)}.';
+      } else if (outcome.cashToCustomer > 0) {
+        message = "${customer.name}'s balance is cleared to R0.00. They "
+            'also receive R${outcome.cashToCustomer.toStringAsFixed(2)} in '
+            'cash.';
+      } else {
+        message = 'R${(-outcome.balanceDelta).toStringAsFixed(2)} is '
+            "deducted from ${customer.name}'s balance. New balance: "
+            '${formatCreditBalance(newBalance)}.';
+      }
+      return _SummaryCard(
+        title: 'CUSTOMER BALANCE',
+        child: Text(
+          message,
+          style: TextStyle(
+            fontWeight: FontWeight.w600,
+            fontSize: 15,
+            color: creditBalanceColor(newBalance),
+          ),
+        ),
+      );
+    }
+
+    if (outcome.cashFromCustomer > 0 || outcome.cashToCustomer > 0) {
       return _SummaryCard(
         title: 'MONEY',
         child: Text(
-          _customerOwes > 0
-              ? 'Customer pays R${_customerOwes.toStringAsFixed(2)}'
-              : 'Customer receives R${_customerReceives.toStringAsFixed(2)}',
+          outcome.cashFromCustomer > 0
+              ? 'Customer pays R${outcome.cashFromCustomer.toStringAsFixed(2)}.'
+              : 'Customer receives R${outcome.cashToCustomer.toStringAsFixed(2)} in cash.',
           style: TextStyle(
             fontWeight: FontWeight.bold,
-            fontSize: 16,
-            color: _customerOwes > 0 ? AppTheme.syncAmber : AppTheme.syncGreen,
+            fontSize: 15,
+            color: outcome.cashFromCustomer > 0
+                ? AppTheme.syncAmber
+                : AppTheme.syncGreen,
           ),
         ),
       );
@@ -1063,6 +1201,13 @@ class _ExchangeProductPickerState extends ConsumerState<_ExchangeProductPicker> 
     });
   }
 
+  void _clearSearch() {
+    setState(() {
+      _controller.clear();
+      _results = [];
+    });
+  }
+
   /// Matches StockScreen's own scan button exactly: opens the camera
   /// scanner and drops the result straight into the search field.
   Future<void> _openScanner() async {
@@ -1141,9 +1286,19 @@ class _ExchangeProductPickerState extends ConsumerState<_ExchangeProductPicker> 
             onChanged: _search,
             decoration: InputDecoration(
               prefixIcon: const Icon(Icons.search),
-              suffixIcon: IconButton(
-                icon: const Icon(Icons.qr_code_scanner, color: AppTheme.primary),
-                onPressed: _openScanner,
+              suffixIcon: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (_controller.text.isNotEmpty)
+                    IconButton(
+                      icon: const Icon(Icons.close, color: AppTheme.iconBorder),
+                      onPressed: _clearSearch,
+                    ),
+                  IconButton(
+                    icon: const Icon(Icons.qr_code_scanner, color: AppTheme.primary),
+                    onPressed: _openScanner,
+                  ),
+                ],
               ),
               hintText: 'Search for the replacement product...',
             ),
@@ -1196,70 +1351,37 @@ class _ExchangeProductPickerState extends ConsumerState<_ExchangeProductPicker> 
               ),
             )
           else if (_controller.text.trim().isNotEmpty)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 16),
-              child: Text('No in-stock products found', style: AppTheme.bodySubtitle),
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Row(
+                    children: [
+                      Icon(
+                        Icons.search_off,
+                        size: 20,
+                        color: AppTheme.iconBorder,
+                      ),
+                      SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'No in-stock products match - edit your search or '
+                          'clear it and try again',
+                          style: AppTheme.bodySubtitle,
+                        ),
+                      ),
+                    ],
+                  ),
+                  TextButton(
+                    onPressed: _clearSearch,
+                    child: const Text('Clear Search'),
+                  ),
+                ],
+              ),
             ),
         ],
       ],
-    );
-  }
-}
-
-class _ExchangeDifferenceCard extends StatelessWidget {
-  const _ExchangeDifferenceCard({
-    required this.replacementPrice,
-    required this.itemsValue,
-    required this.difference,
-  });
-
-  final double replacementPrice;
-  final double itemsValue;
-  final double difference;
-
-  @override
-  Widget build(BuildContext context) {
-    final owesMore = difference > 0;
-    final settled = difference == 0;
-    final color = settled
-        ? AppTheme.syncGreen
-        : (owesMore ? AppTheme.syncAmber : AppTheme.syncGreen);
-    final label = settled
-        ? 'Same price - no money changes hands'
-        : (owesMore
-              ? 'Customer pays R${difference.toStringAsFixed(2)}'
-              : 'Refund R${(-difference).toStringAsFixed(2)} to customer');
-
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Text(
-                'Replacement: R${replacementPrice.toStringAsFixed(2)}',
-                style: AppTheme.bodySubtitle,
-              ),
-              const Spacer(),
-              Text(
-                'Returned value: R${itemsValue.toStringAsFixed(2)}',
-                style: AppTheme.bodySubtitle,
-              ),
-            ],
-          ),
-          const SizedBox(height: 6),
-          Text(
-            label,
-            style: TextStyle(color: color, fontWeight: FontWeight.bold),
-          ),
-        ],
-      ),
     );
   }
 }
@@ -1482,16 +1604,29 @@ class _CustomerPickerState extends ConsumerState<_CustomerPicker> {
                 leading: ProductAvatar(name: customer.name, size: 36),
                 title: Text(customer.name),
                 subtitle: Text(
-                  'Balance: R${customer.balance.toStringAsFixed(2)}',
+                  'Balance: ${formatCreditBalance(customer.balance)}',
                 ),
                 onTap: () => widget.onSelected(customer),
               ),
           ] else
             const Padding(
               padding: EdgeInsets.only(bottom: 8),
-              child: Text(
-                'No credit customers yet.',
-                style: AppTheme.bodySubtitle,
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.people_outline,
+                    size: 20,
+                    color: AppTheme.iconBorder,
+                  ),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'No credit customers yet - add one below to give '
+                      'them store credit',
+                      style: AppTheme.bodySubtitle,
+                    ),
+                  ),
+                ],
               ),
             ),
           InkWell(

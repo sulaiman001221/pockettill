@@ -6,6 +6,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../shared/models/credit_customer.dart';
 import '../../shared/repositories/repositories.dart';
 import '../../shared/theme/app_theme.dart';
+import '../../shared/utils/credit_balance_display.dart';
+import '../../shared/utils/friendly_error.dart';
 import '../../shared/widgets/quick_stock_update_sheet.dart';
 import '../stock/stock_ui.dart';
 import 'cart_item.dart';
@@ -53,6 +55,12 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
   CreditCustomer? _selectedCustomer;
   List<CreditCustomer> _customers = [];
   bool _submitting = false;
+
+  // A mutable copy of widget.cartItems - kept in sync whenever a product's
+  // stock is adjusted from this screen (see _updateStockForAffectedItems)
+  // so later re-checks see the fresh stock instead of the stale snapshot
+  // this screen was originally pushed with.
+  late List<CartItem> _cartItems = widget.cartItems;
 
   @override
   void initState() {
@@ -154,7 +162,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
   /// it was added to the cart - the same snapshot [SaleRepository
   /// .completeSale] itself deducts from).
   List<CartItem> _stockWarningItems() {
-    return widget.cartItems
+    return _cartItems
         .where((item) => item.product.stock - item.quantity < 0)
         .toList();
   }
@@ -181,10 +189,11 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
     await _completeSale();
   }
 
-  /// Shows the quick stock update sheet for each affected item in turn, then
-  /// leaves the user back on this screen to review before tapping the
-  /// confirm button again - it deliberately does not auto-complete the sale
-  /// afterwards, since the corrected stock is worth a fresh look first.
+  /// Shows the quick stock update sheet for each affected item in turn,
+  /// keeping [_cartItems] in sync with each update as it lands. Once done,
+  /// re-checks stock against that fresh state - if every item now clears
+  /// its threshold, the sale proceeds immediately rather than making the
+  /// cashier tap Confirm again against data that's already correct.
   Future<void> _updateStockForAffectedItems(List<CartItem> affected) async {
     final repository = ref.read(productRepositoryProvider);
     for (final item in affected) {
@@ -208,16 +217,30 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
         ref
             .read(salesNotifierProvider.notifier)
             .refreshCartItemProduct(updated);
+        setState(() {
+          _cartItems = _cartItems
+              .map(
+                (cartItem) => cartItem.product.uuid == updated.uuid
+                    ? cartItem.copyWith(product: updated)
+                    : cartItem,
+              )
+              .toList();
+        });
       }
     }
 
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Stock updated. Tap Confirm again to continue.'),
-        ),
-      );
+    if (!mounted) return;
+
+    if (_stockWarningItems().isEmpty) {
+      await _completeSale();
+      return;
     }
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Stock updated. Tap Confirm again to continue.'),
+      ),
+    );
   }
 
   Future<void> _completeSale() async {
@@ -228,7 +251,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
       await ref
           .read(saleRepositoryProvider)
           .completeSale(
-            cartItems: widget.cartItems
+            cartItems: _cartItems
                 .map(
                   (item) => {
                     'product': item.product,
@@ -243,6 +266,8 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
             deviceId: storeConfig?.deviceId ?? '',
           );
 
+      final lowStockProducts = await _lowStockAfterSale();
+
       if (!mounted) return;
       // Pushing a new route doesn't reliably dismiss the keyboard on its
       // own - without this, a still-focused field (e.g. Cash Received)
@@ -252,11 +277,12 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(
           builder: (_) => PaymentSuccessScreen(
-            cartItems: widget.cartItems,
+            cartItems: _cartItems,
             total: widget.cartTotal,
             paymentMethod: _paymentMethod,
             saleNumber: _saleNumber,
             createdAt: DateTime.now(),
+            lowStockProducts: lowStockProducts,
           ),
         ),
       );
@@ -264,13 +290,40 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Could not complete sale: $e'),
+          content: Text(
+            friendlyErrorMessage(
+              e,
+              fallback: 'Could not complete the sale. Please try again or '
+                  'contact support.',
+            ),
+          ),
           backgroundColor: AppTheme.logoutRed,
         ),
       );
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
+  }
+
+  /// Re-fetches each sold product after [SaleRepository.completeSale] has
+  /// already deducted its stock, and flags any that are now at or below
+  /// their low-stock threshold - so the cashier notices right away instead
+  /// of finding out on the next sale attempt.
+  Future<List<LowStockAlert>> _lowStockAfterSale() async {
+    final repository = ref.read(productRepositoryProvider);
+    final alerts = <LowStockAlert>[];
+    for (final item in _cartItems) {
+      final updated = await repository.getByUuid(item.product.uuid);
+      if (updated != null && updated.stock <= updated.lowStockThreshold) {
+        alerts.add(
+          LowStockAlert(
+            productName: productDisplayName(updated),
+            stock: updated.stock,
+          ),
+        );
+      }
+    }
+    return alerts;
   }
 
   Future<void> _openNewCustomerSheet() async {
@@ -938,12 +991,12 @@ class _CustomerTile extends StatelessWidget {
                     ),
                   ),
                   Text(
-                    'Total Credit: R${customer.balance.toStringAsFixed(2)}',
+                    'Balance: ${formatCreditBalance(customer.balance)}',
                     style: TextStyle(
                       fontSize: 12,
                       color: hasBalance
                           ? AppTheme.syncAmber
-                          : AppTheme.textSecondary,
+                          : creditBalanceColor(customer.balance),
                     ),
                   ),
                 ],

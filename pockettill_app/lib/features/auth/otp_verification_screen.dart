@@ -7,10 +7,11 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/auth/auth_service.dart';
 import '../../shared/theme/app_theme.dart';
+import '../../shared/utils/friendly_error.dart';
 import '../../shared/widgets/pockettill_app_bar.dart';
 import 'welcome_screen.dart';
 
-const String _supportWhatsAppNumber = '27663352002';
+const String _supportWhatsAppNumber = '27625631968';
 
 /// What happens after the code is verified - all three modes send/verify
 /// the code identically; only [OtpVerificationScreen.onVerified] differs by
@@ -157,7 +158,13 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(error.toString()),
+            content: Text(
+              friendlyErrorMessage(
+                error,
+                fallback: 'Could not complete verification. Please try '
+                    'again or contact support.',
+              ),
+            ),
             backgroundColor: AppTheme.logoutRed,
           ),
         );

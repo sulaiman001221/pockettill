@@ -141,12 +141,20 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
       if (!mounted || results.isEmpty) return;
       final row = results.first;
       setState(() {
+        // A catalogue match always overwrites name/mass/category, even if
+        // the cashier already typed something in - the whole point of
+        // scanning is to trust the shared catalogue's data over a manual
+        // guess made before the lookup came back.
         final name = row['name'] as String?;
-        if (name != null && _nameController.text.trim().isEmpty) {
+        if (name != null && name.isNotEmpty) {
           _nameController.text = name;
         }
+        final mass = row['mass'] as String?;
+        if (mass != null && mass.isNotEmpty) {
+          _massController.text = mass;
+        }
         final category = row['category'] as String?;
-        if (category != null && _selectedCategoryChip == null) {
+        if (category != null && category.isNotEmpty) {
           _applyCategory(category);
         }
         _catalogueAutoFilled = true;

@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../shared/models/credit_customer.dart';
 import '../../shared/repositories/repositories.dart';
 import '../../shared/theme/app_theme.dart';
+import '../../shared/utils/credit_balance_display.dart';
 import '../../shared/widgets/pockettill_app_bar.dart';
 import '../stock/stock_ui.dart';
 import 'add_customer_screen.dart';
@@ -317,9 +318,11 @@ class _CreditScreenState extends ConsumerState<CreditScreen> {
           Expanded(
             child: _SummaryCard(
               label: 'Total Credit Taken',
-              value: 'R${_totalOwing.toStringAsFixed(0)}',
-              color: AppTheme.logoutRed,
-              background: AppTheme.logoutRed.withValues(alpha: 0.1),
+              value: _totalOwing < 0
+                  ? '-R${(-_totalOwing).toStringAsFixed(0)}'
+                  : 'R${_totalOwing.toStringAsFixed(0)}',
+              color: creditBalanceColor(_totalOwing),
+              background: creditBalanceColor(_totalOwing).withValues(alpha: 0.1),
             ),
           ),
           const SizedBox(width: 10),
@@ -507,9 +510,18 @@ class _CustomerListItem extends StatelessWidget {
             const SizedBox(width: 8),
             if (owing)
               Text(
-                'Owes R${customer.balance.toStringAsFixed(2)}',
+                'Owes ${formatCreditBalance(customer.balance)}',
                 style: const TextStyle(
                   color: AppTheme.logoutRed,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 13,
+                ),
+              )
+            else if (customer.balance < 0)
+              Text(
+                'Credit ${formatCreditBalance(customer.balance)}',
+                style: const TextStyle(
+                  color: AppTheme.syncGreen,
                   fontWeight: FontWeight.bold,
                   fontSize: 13,
                 ),

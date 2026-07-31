@@ -21,10 +21,11 @@ import '../../shared/theme/app_theme.dart';
 import '../../shared/utils/sync_status.dart';
 import '../../shared/widgets/confirmation_dialog.dart';
 import '../../shared/widgets/pockettill_app_bar.dart';
+import 'privacy_policy_screen.dart';
+import 'terms_of_service_screen.dart';
 import '../auth/welcome_screen.dart';
 
-// Placeholder until the real support number is available.
-const String _supportWhatsAppNumber = '27000000000';
+const String _supportWhatsAppNumber = '27625631968';
 
 /// "Today, 09:41 AM" / "Yesterday, 09:41 AM" / "12 Oct, 09:41 AM" / "Never".
 String _formatLastSynced(DateTime? lastSyncedAt) {
@@ -348,10 +349,16 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     );
   }
 
-  void _showPrivacyPolicyPlaceholder() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Privacy policy coming soon')),
-    );
+  void _openPrivacyPolicy() {
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const PrivacyPolicyScreen()));
+  }
+
+  void _openTermsOfService() {
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const TermsOfServiceScreen()));
   }
 
   void _confirmLogout() {
@@ -870,7 +877,18 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           _ActionRow(
             icon: Icons.privacy_tip_outlined,
             label: 'Privacy Policy',
-            onTap: _showPrivacyPolicyPlaceholder,
+            onTap: _openPrivacyPolicy,
+          ),
+          const Divider(
+            color: AppTheme.divider,
+            height: 1,
+            indent: 16,
+            endIndent: 16,
+          ),
+          _ActionRow(
+            icon: Icons.description_outlined,
+            label: 'Terms of Service',
+            onTap: _openTermsOfService,
             isLast: true,
           ),
         ],

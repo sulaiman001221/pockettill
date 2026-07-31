@@ -251,8 +251,11 @@ class AnalyticsNotifier extends StateNotifier<AnalyticsState> {
         creditAmount: creditAmount,
         chartLoading: false,
       );
-    } catch (e) {
-      state = state.copyWith(chartLoading: false, chartError: e.toString());
+    } catch (_) {
+      state = state.copyWith(
+        chartLoading: false,
+        chartError: 'Could not load chart data. Please try again.',
+      );
     }
   }
 
@@ -310,8 +313,11 @@ class AnalyticsNotifier extends StateNotifier<AnalyticsState> {
         basketChangePercent: basketChangePercent,
         performanceLoading: false,
       );
-    } catch (e) {
-      state = state.copyWith(performanceLoading: false, performanceError: e.toString());
+    } catch (_) {
+      state = state.copyWith(
+        performanceLoading: false,
+        performanceError: 'Could not load performance data. Please try again.',
+      );
     }
   }
 }

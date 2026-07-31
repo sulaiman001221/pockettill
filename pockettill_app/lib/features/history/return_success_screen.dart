@@ -1,18 +1,22 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
+import '../../main.dart';
 import '../../shared/models/sale_item.dart';
+import '../../shared/repositories/repositories.dart';
 import '../../shared/theme/app_theme.dart';
 import '../stock/stock_screen.dart';
 import 'process_return_screen.dart';
 
 /// Shown after a return is successfully processed. Styled like
 /// [PaymentSuccessScreen] - a checkmark, a details card, and navigation
-/// options - but with three options instead of two, since "back to the sale
-/// this came from" is a genuinely useful third destination here.
-class ReturnSuccessScreen extends StatefulWidget {
+/// options - but with an extra option, since "back to the sale this came
+/// from" is a genuinely useful destination here.
+class ReturnSuccessScreen extends ConsumerStatefulWidget {
   const ReturnSuccessScreen({
     super.key,
+    required this.saleNumber,
     required this.items,
     required this.reason,
     required this.resolutionType,
@@ -21,6 +25,8 @@ class ReturnSuccessScreen extends StatefulWidget {
     required this.customerReceives,
     this.exchangeProductName,
   });
+
+  final int saleNumber;
 
   /// Each returned [SaleItem] paired with how many units of it were
   /// returned in this transaction.
@@ -33,10 +39,11 @@ class ReturnSuccessScreen extends StatefulWidget {
   final String? exchangeProductName;
 
   @override
-  State<ReturnSuccessScreen> createState() => _ReturnSuccessScreenState();
+  ConsumerState<ReturnSuccessScreen> createState() =>
+      _ReturnSuccessScreenState();
 }
 
-class _ReturnSuccessScreenState extends State<ReturnSuccessScreen>
+class _ReturnSuccessScreenState extends ConsumerState<ReturnSuccessScreen>
     with SingleTickerProviderStateMixin {
   late final AnimationController _controller = AnimationController(
     vsync: this,
@@ -46,6 +53,8 @@ class _ReturnSuccessScreenState extends State<ReturnSuccessScreen>
     parent: _controller,
     curve: Curves.elasticOut,
   );
+
+  bool _printing = false;
 
   @override
   void initState() {
@@ -61,6 +70,44 @@ class _ReturnSuccessScreenState extends State<ReturnSuccessScreen>
 
   int get _totalQuantity =>
       widget.items.fold<int>(0, (sum, entry) => sum + entry.$2);
+
+  double get _itemsValue => widget.items.fold<double>(
+    0,
+    (sum, entry) => sum + entry.$1.unitPrice * entry.$2,
+  );
+
+  Future<void> _printReturnSlip() async {
+    final printer = ref.read(printerServiceProvider);
+    final available = await printer.isPrinterAvailable();
+    if (!mounted) return;
+
+    if (!available) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('No printer available')));
+      return;
+    }
+
+    setState(() => _printing = true);
+    final storeConfig = await ref.read(storeConfigRepositoryProvider).get();
+    await printer.printReceipt({
+      'storeName': storeConfig?.storeName ?? 'My Store',
+      'items': widget.items
+          .map(
+            (entry) => {
+              'name': entry.$1.productName,
+              'quantity': entry.$2,
+              'price': entry.$1.unitPrice,
+            },
+          )
+          .toList(),
+      'total': _itemsValue,
+      'paymentMethod': 'Return - ${resolutionLabel(widget.resolutionType)}',
+      'transactionNumber': widget.saleNumber,
+      'date': DateTime.now(),
+    });
+    if (mounted) setState(() => _printing = false);
+  }
 
   void _returnToSale() {
     // This screen replaced ProcessReturnScreen via pushReplacement, so
@@ -160,7 +207,26 @@ class _ReturnSuccessScreenState extends State<ReturnSuccessScreen>
               SizedBox(
                 width: double.infinity,
                 height: 52,
-                child: ElevatedButton(
+                child: ElevatedButton.icon(
+                  onPressed: _printing ? null : _printReturnSlip,
+                  icon: _printing
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Icon(Icons.print_outlined),
+                  label: const Text('Print Receipt'),
+                ),
+              ),
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                height: 52,
+                child: OutlinedButton(
                   onPressed: _returnToSale,
                   child: const Text('Return to Sale'),
                 ),
