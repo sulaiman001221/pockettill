@@ -324,7 +324,7 @@ class ReturnRepository {
     'customer_id': returnRecord.customerId,
     'exchange_product_uuid': returnRecord.exchangeProductUuid,
     'exchange_product_name': returnRecord.exchangeProductName,
-    'created_at': returnRecord.createdAt.toIso8601String(),
+    'created_at': returnRecord.createdAt.toUtc().toIso8601String(),
   };
 
   Map<String, dynamic> _returnItemToPayload(ReturnItem item) => {
@@ -349,8 +349,8 @@ class ReturnRepository {
     'stock': product.stock,
     'low_stock_threshold': product.lowStockThreshold,
     'is_verified': product.isVerified,
-    'created_at': product.createdAt.toIso8601String(),
-    'updated_at': product.updatedAt?.toIso8601String(),
+    'created_at': product.createdAt.toUtc().toIso8601String(),
+    'updated_at': product.updatedAt?.toUtc().toIso8601String(),
   };
 
   Map<String, dynamic> _transactionToPayload(CreditTransaction transaction) => {
@@ -362,6 +362,6 @@ class ReturnRepository {
     'note': transaction.note,
     'balance_before': transaction.balanceBefore,
     'balance_after': transaction.balanceAfter,
-    'created_at': transaction.createdAt.toIso8601String(),
+    'created_at': transaction.createdAt.toUtc().toIso8601String(),
   };
 }

@@ -103,6 +103,7 @@ class SyncService {
 
       await SupabaseService.supabaseClient.from('sync_log').insert({
         'device_id': storeConfig.deviceId,
+        'store_id': storeId,
         'events_pushed': pending.length,
         'events_pulled': pulledCount,
       });

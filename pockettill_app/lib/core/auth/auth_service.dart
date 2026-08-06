@@ -1,16 +1,33 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
 
+import '../../shared/models/credit_customer.dart';
+import '../../shared/models/credit_transaction.dart';
+import '../../shared/models/product.dart';
+import '../../shared/models/return_item.dart';
+import '../../shared/models/return_record.dart';
+import '../../shared/models/sale.dart';
+import '../../shared/models/sale_item.dart';
 import '../../shared/models/store_config.dart';
+import '../../shared/models/sync_event.dart';
 import '../../shared/repositories/store_config_repository.dart';
 import '../database/isar_service.dart';
 import '../supabase/supabase_service.dart';
+import '../sync/event_queue.dart';
+import '../sync/restore_service.dart';
+import '../sync/sync_service.dart';
 
 /// Registration, login, logout, and session state against Supabase Auth,
 /// using real phone OTP verification (Twilio Verify, WhatsApp channel) for
 /// registration and password reset, and phone + password for login (no OTP
-/// on the same device the store already trusts - see [login] for the
-/// new-device exception).
+/// once this exact device+store pairing has ever been verified before - see
+/// [login] for the new-device exception).
+///
+/// Device trust is per (device, store) pair, tracked in the `devices` table's
+/// `verified_at` column - not a single "trusted device" per store. The same
+/// physical device can independently hold verified rows for multiple store
+/// accounts at once; each pairing only ever needs one OTP, the first time
+/// it's used.
 ///
 /// Registration and password reset are split across [requestOtp],
 /// [verifyOtp], [setPassword], and (registration only) [createStore] so the
@@ -88,10 +105,12 @@ class AuthService {
     );
   }
 
-  /// Creates the `stores` row, registers this device as the store's trusted
-  /// device, and saves [StoreConfig] locally. Call after [verifyOtp] and
-  /// [setPassword] have both succeeded, so `auth.currentUser` is a real,
-  /// password-protected, phone-verified account.
+  /// Creates the `stores` row, marks this device+store pairing as verified
+  /// (the registration OTP just proved phone ownership, so there's no need
+  /// to challenge again immediately after), and saves [StoreConfig] locally.
+  /// Call after [verifyOtp] and [setPassword] have both succeeded, so
+  /// `auth.currentUser` is a real, password-protected, phone-verified
+  /// account.
   ///
   /// Founding store status is never granted here - it's earned later purely
   /// through usage (see `check_founding_store_qualification` in Supabase),
@@ -112,6 +131,10 @@ class AuthService {
 
     final repo = StoreConfigRepository(isar: IsarService.db);
     final existingConfig = await repo.get();
+    // deviceId identifies this physical install, not any one store - the
+    // same value is reused across every store account this device ever logs
+    // into, so its per-store verification history in `devices` means
+    // something (see the class doc comment).
     final deviceId = existingConfig?.deviceId ?? _uuid.v4();
 
     final store = await SupabaseService.supabaseClient
@@ -123,7 +146,6 @@ class AuthService {
           'address': address,
           'auth_user_id': user.id,
           'is_beta_adopter': false,
-          'active_device_id': deviceId,
           'otp_channel': otpChannel.name,
           'discount_rate': 1.0,
         })
@@ -133,8 +155,26 @@ class AuthService {
     await SupabaseService.supabaseClient.from('devices').upsert({
       'id': deviceId,
       'store_id': store['uuid'],
+      'verified_at': DateTime.now().toUtc().toIso8601String(),
       'last_seen_at': DateTime.now().toUtc().toIso8601String(),
     });
+
+    // Registering a brand-new store can never match whatever store was
+    // previously configured on this device, so any cached data left over
+    // from that old store must go the same way login's store-switch does -
+    // see the matching comment in _completeLogin for why.
+    if (existingConfig != null && existingConfig.storeId.isNotEmpty) {
+      await IsarService.db.writeTxn(() async {
+        await IsarService.db.products.clear();
+        await IsarService.db.sales.clear();
+        await IsarService.db.saleItems.clear();
+        await IsarService.db.creditCustomers.clear();
+        await IsarService.db.creditTransactions.clear();
+        await IsarService.db.returnRecords.clear();
+        await IsarService.db.returnItems.clear();
+        await IsarService.db.syncEvents.clear();
+      });
+    }
 
     final config = StoreConfig()
       ..id = 1
@@ -153,15 +193,17 @@ class AuthService {
   }
 
   /// Signs in an existing store - phone + password only, no OTP, UNLESS this
-  /// is a device the store hasn't already trusted (a fresh install, a
-  /// different phone, a wiped device - anything whose local [StoreConfig]
-  /// doesn't carry the store's `active_device_id`). In that case the
-  /// password alone isn't enough: the result comes back with
+  /// exact device+store pairing has never been verified before (checked
+  /// against `devices.verified_at`, keyed on both `id` and `store_id`). In
+  /// that case the password alone isn't enough: the result comes back with
   /// [LoginResult.needsDeviceVerification] set, an OTP has already been sent
   /// to the store owner's registered phone (via whichever channel they
   /// registered with), and the caller must show [OtpMode.newDeviceVerification]
   /// and call [completeNewDeviceLogin] once it succeeds before this device
-  /// is actually let in.
+  /// is actually let in. Once verified, this exact pairing never needs to be
+  /// challenged again - a different device logging into this store, or this
+  /// same device logging into a *different* store, each get their own
+  /// independent verification history.
   static Future<LoginResult> login({
     required String phone,
     required String password,
@@ -184,13 +226,13 @@ class AuthService {
     final repo = StoreConfigRepository(isar: IsarService.db);
     final existingConfig = await repo.get();
     final deviceId = existingConfig?.deviceId ?? _uuid.v4();
-    final activeDeviceId = store['active_device_id'] as String?;
 
-    // A null active_device_id means this store predates device tracking -
-    // don't retroactively challenge it since there's no real "original
-    // device" on record to compare against; this device becomes the record
-    // once _completeLogin runs below.
-    if (activeDeviceId != null && activeDeviceId != deviceId) {
+    final verified = await _isDeviceVerified(
+      deviceId: deviceId,
+      storeId: store['uuid'] as String,
+    );
+
+    if (!verified) {
       final channel = _channelFromName(store['otp_channel'] as String?);
       await requestOtp(formatted, channel: channel);
       return LoginResult._(
@@ -214,8 +256,8 @@ class AuthService {
 
   /// Finishes a login that [login] flagged as [LoginResult.needsDeviceVerification]
   /// - call once [OtpVerificationScreen] reports the code as verified. Marks
-  /// this device as the store's new trusted device server-side before
-  /// completing the same steps a same-device login does.
+  /// this device+store pairing as verified server-side before completing the
+  /// same steps an already-trusted login does.
   static Future<void> completeNewDeviceLogin(LoginResult result) async {
     final user = SupabaseService.supabaseClient.auth.currentUser;
     if (user == null) {
@@ -225,10 +267,12 @@ class AuthService {
     final store = result.store!;
     final deviceId = result.deviceId!;
 
-    await SupabaseService.supabaseClient
-        .from('stores')
-        .update({'active_device_id': deviceId})
-        .eq('uuid', store['uuid'] as String);
+    await SupabaseService.supabaseClient.from('devices').upsert({
+      'id': deviceId,
+      'store_id': store['uuid'],
+      'verified_at': DateTime.now().toUtc().toIso8601String(),
+      'last_seen_at': DateTime.now().toUtc().toIso8601String(),
+    });
 
     final repo = StoreConfigRepository(isar: IsarService.db);
     final existingConfig = await repo.get();
@@ -257,17 +301,17 @@ class AuthService {
   }
 
   /// Checked on every app open (see `SplashScreen`) for a device that
-  /// already holds a valid session: confirms the store's `active_device_id`
-  /// still matches this device before letting it straight into the app.
-  /// This is the backstop for [login]'s device check - it's what catches an
-  /// abandoned new-device verification that was never explicitly cancelled
-  /// (e.g. the app was killed instead), since that path never reaches
+  /// already holds a valid session: confirms this device+store pairing is
+  /// still verified before letting it straight into the app. This is the
+  /// backstop for [login]'s device check - it's what catches an abandoned
+  /// new-device verification that was never explicitly cancelled (e.g. the
+  /// app was killed instead), since that path never reaches
   /// [abandonNewDeviceVerification].
   ///
-  /// Returns null if this device is trusted (or trust can't currently be
-  /// checked - fails open on a network error, since PocketTill works fully
-  /// offline once set up and a connectivity blip shouldn't lock a
-  /// legitimately-trusted device out of its own app). Otherwise returns a
+  /// Returns null if this device is verified for this store (or trust can't
+  /// currently be checked - fails open on a network error, since PocketTill
+  /// works fully offline once set up and a connectivity blip shouldn't lock
+  /// a legitimately-trusted device out of its own app). Otherwise returns a
   /// [LoginResult] with an OTP already sent, ready for
   /// [OtpMode.newDeviceVerification] the same as a fresh login.
   static Future<LoginResult?> checkDeviceTrust() async {
@@ -282,10 +326,11 @@ class AuthService {
           .eq('uuid', config.storeId)
           .single();
 
-      final activeDeviceId = store['active_device_id'] as String?;
-      if (activeDeviceId == null || activeDeviceId == config.deviceId) {
-        return null;
-      }
+      final verified = await _isDeviceVerified(
+        deviceId: config.deviceId,
+        storeId: config.storeId,
+      );
+      if (verified) return null;
 
       final channel = _channelFromName(store['otp_channel'] as String?);
       final phone = config.authPhone ?? formatPhone(config.ownerPhone ?? '');
@@ -306,9 +351,25 @@ class AuthService {
     return name == 'sms' ? OtpChannel.sms : OtpChannel.whatsapp;
   }
 
+  /// Whether `devices` already has a verified row for this exact
+  /// (deviceId, storeId) pairing - the single source of truth for whether a
+  /// login needs the new-device OTP challenge.
+  static Future<bool> _isDeviceVerified({
+    required String deviceId,
+    required String storeId,
+  }) async {
+    final row = await SupabaseService.supabaseClient
+        .from('devices')
+        .select('verified_at')
+        .eq('id', deviceId)
+        .eq('store_id', storeId)
+        .maybeSingle();
+    return row != null && row['verified_at'] != null;
+  }
+
   /// Shared tail end of a successful login, whether it needed device
-  /// verification or not: revokes every other session, records this device
-  /// as the store's device, and saves [StoreConfig] locally.
+  /// verification or not: records this device as the store's device, and
+  /// saves [StoreConfig] locally.
   static Future<void> _completeLogin({
     required User user,
     required Map<String, dynamic> store,
@@ -316,22 +377,47 @@ class AuthService {
     required StoreConfig? existingConfig,
     required String formattedPhone,
   }) async {
-    // Single-device policy: logging in anywhere immediately ends every
-    // other session for this account, using this brand-new session's own
-    // authority (no service-role key needed). Deliberately not a "log out
-    // the old device first" block - that would permanently lock a store
-    // out if the old device is lost, stolen, or broken. This way a new
-    // login always works, and the old device just stops being authenticated
-    // next time it tries to use its session.
-    await SupabaseService.supabaseClient.auth.signOut(
-      scope: SignOutScope.others,
-    );
-
+    // A `signOut(scope: SignOutScope.others)` call used to sit here to kick
+    // out every other session on login - removed after confirming (via a
+    // direct RLS simulation against Supabase) that it was degrading this
+    // client's own just-established session to unauthenticated, causing
+    // every request right after login - including the very next call below
+    // - to be rejected by RLS. Every login was broken by this, not just a
+    // cross-device one. Old sessions are no longer forcibly revoked on a new
+    // login; [login]'s new-device OTP challenge is the remaining safeguard
+    // (it stops a stranger who only has the password from getting in
+    // silently, even though it no longer logs out an already-trusted device
+    // elsewhere).
     await SupabaseService.supabaseClient.from('devices').upsert({
       'id': deviceId,
       'store_id': store['uuid'],
       'last_seen_at': DateTime.now().toUtc().toIso8601String(),
     });
+
+    final isSwitchingStore =
+        existingConfig != null && existingConfig.storeId != store['uuid'];
+
+    // Every business-data collection is local-first with no store_id column
+    // of its own - the app was built assuming one physical device belongs to
+    // exactly one store forever, so nothing else ever scopes reads by store.
+    // Logging into a *different* store on a device that already has another
+    // store's data cached would otherwise keep showing that old store's
+    // products/sales/customers under the new login. Clearing it here is the
+    // only thing that makes the two stores' local data no longer collide -
+    // [RestoreService] below is what repopulates this store's own history
+    // afterward.
+    if (isSwitchingStore) {
+      await IsarService.db.writeTxn(() async {
+        await IsarService.db.products.clear();
+        await IsarService.db.sales.clear();
+        await IsarService.db.saleItems.clear();
+        await IsarService.db.creditCustomers.clear();
+        await IsarService.db.creditTransactions.clear();
+        await IsarService.db.returnRecords.clear();
+        await IsarService.db.returnItems.clear();
+        await IsarService.db.syncEvents.clear();
+      });
+    }
 
     final config = StoreConfig()
       ..id = 1
@@ -348,11 +434,29 @@ class AuthService {
       // Logging back in on a device that has already synced before isn't a
       // fresh start - carry the timestamp over rather than resetting it to
       // null, which would otherwise make the 30-day "never synced" warning
-      // fire on every single login regardless of real sync history.
-      ..lastSyncedAt = existingConfig?.lastSyncedAt;
+      // fire on every single login regardless of real sync history. A
+      // different store, though, has no shared history to carry over.
+      ..lastSyncedAt = isSwitchingStore ? null : existingConfig?.lastSyncedAt;
 
     final repo = StoreConfigRepository(isar: IsarService.db);
     await repo.save(config);
+
+    // Repopulates this store's own history whenever the local cache is
+    // empty - after the clear above, after a reinstall, or on a brand-new
+    // device logging into an existing account for the first time. Awaited
+    // here so it's covered by whichever loading spinner already wraps
+    // login/OTP verification - the user reaching the home screen is the
+    // signal their data is ready, not something they should have to wait on
+    // separately. Best-effort: a failed restore (e.g. connectivity drops
+    // mid-pull) must not block login itself - it just leaves local data
+    // empty until the next successful login retries it.
+    try {
+      await RestoreService(isar: IsarService.db).restoreIfEmpty(
+        store['uuid'] as String,
+      );
+    } catch (_) {
+      // Swallowed deliberately - see comment above.
+    }
   }
 
   /// Signs out of Supabase Auth. [StoreConfig] is kept (marked logged out
@@ -364,12 +468,33 @@ class AuthService {
   /// where force-stopping the app right after tapping Logout could leave a
   /// stale-but-still-valid session on disk, silently logging the device
   /// back in on next launch.
+  ///
+  /// Throws [UnsyncedChangesException] instead of signing out if there are
+  /// local changes still waiting to reach Supabase and no connectivity to
+  /// push them first. This is the last moment this store's own session can
+  /// push them under its own identity - once signed out, only a later login
+  /// to *this same store* would resync them safely; a different store
+  /// logging in on this device first would clear them for good (see the
+  /// isSwitchingStore note in [_completeLogin]), so they cannot be silently
+  /// left pending.
   static Future<void> logout() async {
+    final isar = IsarService.db;
+    final eventQueue = EventQueue(isar);
+
+    var pending = await eventQueue.pendingCount();
+    if (pending > 0) {
+      await SyncService(isar: isar, eventQueue: eventQueue).sync();
+      pending = await eventQueue.pendingCount();
+    }
+    if (pending > 0) {
+      throw const UnsyncedChangesException();
+    }
+
     await SupabaseService.supabaseClient.auth.signOut(
       scope: SignOutScope.global,
     );
 
-    final repo = StoreConfigRepository(isar: IsarService.db);
+    final repo = StoreConfigRepository(isar: isar);
     final config = await repo.get();
     if (config != null) {
       config.isLoggedIn = false;
@@ -387,8 +512,8 @@ class AuthService {
 /// Outcome of [AuthService.login] or [AuthService.checkDeviceTrust]. Either
 /// nothing more is needed, or this device must pass
 /// [OtpMode.newDeviceVerification] - [store], [deviceId], [phone], and
-/// [otpChannel] carry everything [completeNewDeviceLogin] and the OTP screen
-/// need to finish that.
+/// [otpChannel] carry everything [AuthService.completeNewDeviceLogin] and
+/// the OTP screen need to finish that.
 class LoginResult {
   const LoginResult._({
     required this.needsDeviceVerification,
@@ -403,4 +528,10 @@ class LoginResult {
   final String? deviceId;
   final String? phone;
   final OtpChannel? otpChannel;
+}
+
+/// Thrown by [AuthService.logout] when local changes haven't finished
+/// syncing and there's no connectivity to flush them before signing out.
+class UnsyncedChangesException implements Exception {
+  const UnsyncedChangesException();
 }

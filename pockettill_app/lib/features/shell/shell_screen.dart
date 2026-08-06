@@ -35,13 +35,11 @@ class _ShellScreenState extends State<ShellScreen> {
   @override
   void initState() {
     super.initState();
-    // AuthService.login()'s single-device policy revokes this device's
-    // session the moment the account logs in elsewhere. That revocation
-    // isn't pushed to this device - it's only discovered the next time the
-    // SDK's background auto-refresh tries to use the now-invalid refresh
-    // token, which surfaces here as a signedOut event with reason
-    // sessionExpired. Without this listener, the device would just start
-    // silently failing to sync forever with no explanation.
+    // Catches a session that's gone invalid without this screen doing
+    // anything itself - e.g. the SDK's background auto-refresh discovering
+    // a revoked/expired refresh token, surfaced as a signedOut event with
+    // reason sessionExpired. Without this listener, the device would just
+    // start silently failing to sync forever with no explanation.
     _authSubscription = SupabaseService.supabaseClient.auth.onAuthStateChange
         .listen(_onAuthStateChange);
     unawaited(_checkFoundingStoreQualification());
@@ -116,8 +114,7 @@ class _ShellScreenState extends State<ShellScreen> {
         ),
         title: const Text('Signed Out'),
         content: const Text(
-          'This account was signed in on another device, so this device '
-          'has been signed out.',
+          'Your session has expired. Please sign in again to continue.',
         ),
         actions: [
           TextButton(

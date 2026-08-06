@@ -34,8 +34,7 @@ Owning-account row per store. One row per Supabase Auth user (via
 | auth_user_id | uuid | FK `auth.users(id)`, UNIQUE |
 | created_at | timestamptz | |
 | active | boolean | default true |
-| active_device_id | text | nullable — single-device trust |
-| otp_channel | text | default `'whatsapp'` |
+| otp_channel | text | default `'whatsapp'` — which channel a new-device login challenges the owner on |
 | qualification_checked_at | timestamptz | nullable |
 | qualification_sales_count | integer | nullable |
 
@@ -112,11 +111,21 @@ PK: `(sale_uuid, product_uuid)`.
 | store_id | uuid | FK `stores(uuid)`, nullable, **populated on every row** |
 
 ### `devices`
+Tracks per-(device, store) verification, not a single trusted device per
+store — the same physical `id` can have one row per store account it's ever
+logged into, each verified independently (as of 2026-08-05; previously
+`id` alone was the PK, and `stores.active_device_id` tracked one trusted
+device per store — replaced because it couldn't represent one device
+holding trust for more than one store account at a time).
+
 | column | type | notes |
 |---|---|---|
-| id | text PK | |
+| id | text | part of composite PK — stable per physical device install, not per store |
+| store_id | uuid | FK `stores(uuid)`, part of composite PK |
+| verified_at | timestamptz | nullable — null means this (device, store) pairing has never passed the new-device OTP challenge; set once, on first successful verification, and never cleared |
 | last_seen_at | timestamptz | nullable |
-| store_id | uuid | FK `stores(uuid)`, nullable, **populated on every row** |
+
+PK: `(id, store_id)`.
 
 ### `sync_log`
 | column | type | notes |
@@ -195,7 +204,7 @@ by Supabase's security advisor as expected/intentional — see below).
 - **`current_store_id() returns uuid`** — `select uuid from stores where auth_user_id = auth.uid() limit 1`. The RLS resolver every `*_store_all` policy calls.
 - **`is_founding_store() returns boolean`** — `true` while fewer than 100 stores have `is_beta_adopter = true`.
 - **`check_founding_store_qualification(store_uuid uuid) returns table(...)`** — idempotent check/promote: a store qualifies once it's ≥7 days old, has ≥5 recorded sales, and founding slots remain; promotes it in the same call if so.
-- **`phone_has_account(check_phone text) returns boolean`** — checks `auth.users.phone` (stored **without** a leading `+`) against `ltrim(check_phone, '+')`, so the app can pass a `+27...`-formatted number directly.
+- **`phone_has_account(check_phone text) returns boolean`** — true only when the phone has **both** an `auth.users` row and a matching `stores` row (as of 2026-08-02; previously just checked `auth.users`, which permanently blocked re-registration for a phone whose registration was interrupted before its `stores` row was created). Checks `auth.users.phone` (stored **without** a leading `+`) against `ltrim(check_phone, '+')`, so the app can pass a `+27...`-formatted number directly.
 
 ## Known advisor warnings (accepted, not bugs)
 
