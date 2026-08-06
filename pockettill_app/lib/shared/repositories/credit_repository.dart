@@ -288,8 +288,8 @@ class CreditRepository {
     'phone': customer.phone,
     'balance': customer.balance,
     'credit_limit': customer.creditLimit,
-    'created_at': customer.createdAt.toIso8601String(),
-    'last_activity_at': customer.lastActivityAt?.toIso8601String(),
+    'created_at': customer.createdAt.toUtc().toIso8601String(),
+    'last_activity_at': customer.lastActivityAt?.toUtc().toIso8601String(),
   };
 
   Map<String, dynamic> _transactionToPayload(CreditTransaction transaction) => {
@@ -301,6 +301,6 @@ class CreditRepository {
     'note': transaction.note,
     'balance_before': transaction.balanceBefore,
     'balance_after': transaction.balanceAfter,
-    'created_at': transaction.createdAt.toIso8601String(),
+    'created_at': transaction.createdAt.toUtc().toIso8601String(),
   };
 }

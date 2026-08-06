@@ -139,11 +139,10 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
     } catch (_) {
       _clearCode();
       if (mounted) {
+        final source = _channel == OtpChannel.whatsapp ? 'WhatsApp' : 'SMS';
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Invalid or expired code. Check your WhatsApp and try again.',
-            ),
+          SnackBar(
+            content: Text('Invalid or expired code. Check your $source and try again.'),
             backgroundColor: AppTheme.logoutRed,
           ),
         );
@@ -282,23 +281,20 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
         child: Column(
           children: [
-            Icon(
-              _isNewDeviceMode
-                  ? Icons.security
-                  : (_channel == OtpChannel.whatsapp
-                        ? Icons.message
-                        : Icons.sms_outlined),
-              size: 64,
-              color: _isNewDeviceMode
-                  ? AppTheme.syncAmber
-                  : (_channel == OtpChannel.whatsapp
-                        ? const Color(0xFF25D366)
-                        : AppTheme.primary),
-            ),
-            const SizedBox(height: 20),
+            if (!_isNewDeviceMode)
+              Icon(
+                _channel == OtpChannel.whatsapp
+                    ? Icons.message
+                    : Icons.sms_outlined,
+                size: 64,
+                color: _channel == OtpChannel.whatsapp
+                    ? const Color(0xFF25D366)
+                    : AppTheme.primary,
+              ),
+            if (!_isNewDeviceMode) const SizedBox(height: 20),
             Text(
               _isNewDeviceMode
-                  ? 'New Device Detected'
+                  ? "Verify It's You"
                   : (_channel == OtpChannel.whatsapp
                         ? 'Check your WhatsApp'
                         : 'Check your SMS messages'),
@@ -308,41 +304,23 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                 color: AppTheme.textPrimary,
               ),
             ),
-            if (_isNewDeviceMode) ...[
-              const SizedBox(height: 16),
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFFFFBEB),
-                  borderRadius: BorderRadius.circular(12),
-                  border: const Border(
-                    left: BorderSide(color: AppTheme.syncAmber, width: 4),
-                  ),
-                ),
-                child: const Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Icon(Icons.info_outline, color: AppTheme.syncAmber, size: 18),
-                    SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        'Someone is trying to access your account from a new '
-                        "device. If this is you, enter the code below to "
-                        "continue. If it wasn't you, you can safely ignore "
-                        'this — your account stays safe.',
-                        style: TextStyle(fontSize: 13, color: AppTheme.textPrimary),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
             const SizedBox(height: 8),
             Text(
-              'We sent a 6-digit code to\n${widget.phone}',
+              _isNewDeviceMode
+                  ? "To confirm it's you, enter the 6-digit code sent to "
+                        '${widget.phone}'
+                  : 'We sent a 6-digit code to\n${widget.phone}',
               textAlign: TextAlign.center,
               style: const TextStyle(fontSize: 14, color: AppTheme.textSecondary),
             ),
+            if (_isNewDeviceMode) ...[
+              const SizedBox(height: 4),
+              const Text(
+                'This is only required once per device.',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 12, color: AppTheme.textSecondary),
+              ),
+            ],
             const SizedBox(height: 32),
             Row(
               mainAxisAlignment: MainAxisAlignment.center,

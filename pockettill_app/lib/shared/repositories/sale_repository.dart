@@ -380,7 +380,7 @@ class SaleRepository {
     'total': sale.total,
     'payment_type': sale.paymentType,
     'customer_id': sale.customerId,
-    'created_at': sale.createdAt.toIso8601String(),
+    'created_at': sale.createdAt.toUtc().toIso8601String(),
   };
 
   Map<String, dynamic> _saleItemToPayload(SaleItem item) => {
@@ -401,6 +401,6 @@ class SaleRepository {
     'type': transaction.type,
     'sale_uuid': transaction.saleUuid,
     'note': transaction.note,
-    'created_at': transaction.createdAt.toIso8601String(),
+    'created_at': transaction.createdAt.toUtc().toIso8601String(),
   };
 }

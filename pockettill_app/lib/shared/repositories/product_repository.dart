@@ -186,7 +186,7 @@ class ProductRepository {
     'stock': product.stock,
     'low_stock_threshold': product.lowStockThreshold,
     'is_verified': product.isVerified,
-    'created_at': product.createdAt.toIso8601String(),
-    'updated_at': product.updatedAt?.toIso8601String(),
+    'created_at': product.createdAt.toUtc().toIso8601String(),
+    'updated_at': product.updatedAt?.toUtc().toIso8601String(),
   };
 }

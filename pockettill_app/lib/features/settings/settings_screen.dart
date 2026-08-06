@@ -376,12 +376,39 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   }
 
   Future<void> _performLogout() async {
-    await AuthService.logout();
+    try {
+      await AuthService.logout();
+    } on UnsyncedChangesException {
+      if (!mounted) return;
+      await _showUnsyncedChangesDialog();
+      return;
+    }
     ref.read(storeConfigProvider.notifier).refresh();
     if (!mounted) return;
     Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute(builder: (_) => const WelcomeScreen()),
       (route) => false,
+    );
+  }
+
+  Future<void> _showUnsyncedChangesDialog() {
+    return showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        icon: const Icon(Icons.cloud_off, size: 48, color: AppTheme.syncGrey),
+        title: const Text('Unsynced Changes'),
+        content: const Text(
+          "You have sales or changes that haven't synced yet. Connect to "
+          'the internet and try again, so this device can save them '
+          'before you log out.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
     );
   }
 
