@@ -18,6 +18,7 @@ import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { NAV_ITEMS } from "@/config/nav";
+import { displayFont } from "@/lib/fonts";
 
 export function SiteHeader() {
   const pathname = usePathname();
@@ -56,6 +57,11 @@ export function SiteHeader() {
           })}
         </BreadcrumbList>
       </Breadcrumb>
+      <div className="hidden flex-1 items-center justify-center md:flex">
+        <span className={`${displayFont.className} text-2xl tracking-wide text-[#5170FF] dark:text-white/90`}>
+          DataMaster
+        </span>
+      </div>
       <form action="/stores" className="relative ml-auto w-full max-w-sm">
         <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
         <Input name="q" placeholder="Search users…" className="h-9 pl-8" />
