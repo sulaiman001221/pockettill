@@ -1,5 +1,6 @@
 import "server-only";
 import { unstable_cache } from "next/cache";
+import { describeError } from "@/lib/errors";
 import { createServiceRoleClient } from "@/lib/supabase/server";
 
 // Verified 2026-08-10 against the real Management API and this project.
@@ -78,7 +79,7 @@ async function _getSupabaseCostData(): Promise<SupabaseCostResult> {
       },
     };
   } catch (err) {
-    return { status: "error", message: err instanceof Error ? err.message : "Unknown error" };
+    return { status: "error", message: describeError(err) };
   }
 }
 
