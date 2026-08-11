@@ -1,5 +1,6 @@
 import "server-only";
 import { unstable_cache } from "next/cache";
+import { describeError } from "@/lib/errors";
 
 // Verified 2026-08-10 against a real Twilio account.
 //
@@ -147,7 +148,7 @@ async function _getTwilioCostData(): Promise<TwilioCostResult> {
       },
     };
   } catch (err) {
-    return { status: "error", message: err instanceof Error ? err.message : "Unknown error" };
+    return { status: "error", message: describeError(err) };
   }
 }
 

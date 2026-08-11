@@ -1,6 +1,7 @@
 import "server-only";
 import { unstable_cache } from "next/cache";
 import { BetaAnalyticsDataClient } from "@google-analytics/data";
+import { describeError } from "@/lib/errors";
 
 // NOTE: built against the documented GA4 Data API (a mature, stable
 // Google API), but never exercised against a real property — no
@@ -168,7 +169,7 @@ async function _getWebsiteTrafficData(days: number): Promise<GA4Result> {
       data: { kpis, dailyVisitors, channelSplit, topPages, topCountries },
     };
   } catch (err) {
-    return { status: "error", message: err instanceof Error ? err.message : "Unknown error" };
+    return { status: "error", message: describeError(err) };
   }
 }
 
