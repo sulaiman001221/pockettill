@@ -40,7 +40,11 @@ function roleLabel(role: AdminIdentity["role"]) {
 }
 
 export function NavUser({ admin }: { admin: AdminIdentity }) {
-  const { isMobile } = useSidebar();
+  const { isMobile, setOpenMobile } = useSidebar();
+
+  function handleNavClick() {
+    if (isMobile) setOpenMobile(false);
+  }
 
   return (
     <SidebarMenu>
@@ -83,12 +87,17 @@ export function NavUser({ admin }: { admin: AdminIdentity }) {
               </div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuItem render={<Link href="/settings" />}>
+            <DropdownMenuItem render={<Link href="/settings" onClick={handleNavClick} />}>
               <Settings />
               Account settings
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => logout()}>
+            <DropdownMenuItem
+              onClick={() => {
+                handleNavClick();
+                logout();
+              }}
+            >
               <LogOut />
               Sign out
             </DropdownMenuItem>

@@ -27,8 +27,12 @@ export function NavMain({ badgeCounts = {} }: { badgeCounts?: NavBadgeCounts }) 
   // that's what made fast repeated clicks in expanded mode feel like they
   // needed a second click to register. Skip the wrapper entirely when it
   // can't show anything anyway.
-  const { state, isMobile } = useSidebar();
+  const { state, isMobile, setOpenMobile } = useSidebar();
   const showTooltips = state === "collapsed" && !isMobile;
+
+  function handleNavClick() {
+    if (isMobile) setOpenMobile(false);
+  }
 
   return (
     <>
@@ -47,7 +51,7 @@ export function NavMain({ badgeCounts = {} }: { badgeCounts?: NavBadgeCounts }) 
                     isActive={isActive}
                     tooltip={showTooltips ? item.title : undefined}
                     render={
-                      <Link href={item.href}>
+                      <Link href={item.href} onClick={handleNavClick}>
                         <item.icon />
                         <span>{item.title}</span>
                       </Link>
