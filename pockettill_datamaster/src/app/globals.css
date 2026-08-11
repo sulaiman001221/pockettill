@@ -1,0 +1,187 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+/*
+ * tw-animate-css@1.4.0 defines the --animate-in/--animate-out theme
+ * variables and all the fade/zoom/slide modifier utilities, but doesn't
+ * itself emit the base `animate-in`/`animate-out` utility classes every
+ * shadcn/Base UI component's open/close transition depends on. Without
+ * them, `data-open:animate-in ... data-closed:animate-out` compiles to no
+ * animation at all, so Base UI's exit-transition can't detect completion
+ * and leaves closed dialogs/sheets/menus mounted with a full-viewport,
+ * pointer-events:auto backdrop stuck over the page. Defining them
+ * ourselves from the same variables the package already ships fixes it.
+ */
+@utility animate-in {
+  animation: var(--animate-in);
+}
+@utility animate-out {
+  animation: var(--animate-out);
+}
+
+/*
+ * Defensive backstop for the same issue, independent of whether the
+ * animate-in/out utilities above actually take effect: Base UI's overlay
+ * backdrops (Dialog, Sheet) only carry a `data-open` attribute while open.
+ * If exit-animation detection ever fails to unmount/disable a closed one,
+ * it must not stay clickable regardless.
+ */
+[data-slot="dialog-overlay"]:not([data-open]),
+[data-slot="sheet-overlay"]:not([data-open]) {
+  pointer-events: none;
+}
+
+@utility animate-blob {
+  animation: blob 12s ease-in-out infinite;
+}
+@utility animate-fade-up {
+  animation: fade-up 0.7s ease-out both;
+}
+
+@keyframes blob {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+  33% {
+    transform: translate(24px, -32px) scale(1.12);
+  }
+  66% {
+    transform: translate(-18px, 18px) scale(0.94);
+  }
+}
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+}
+
+:root {
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.145 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.145 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.145 0 0);
+  --primary: #5170ff;
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.97 0 0);
+  --secondary-foreground: oklch(0.205 0 0);
+  --muted: oklch(0.97 0 0);
+  --muted-foreground: oklch(0.556 0 0);
+  --accent: oklch(0.97 0 0);
+  --accent-foreground: oklch(0.205 0 0);
+  --destructive: oklch(0.577 0.245 27.325);
+  --border: oklch(0.922 0 0);
+  --input: oklch(0.922 0 0);
+  --ring: #5170ff;
+  --chart-1: oklch(0.87 0 0);
+  --chart-2: oklch(0.556 0 0);
+  --chart-3: oklch(0.439 0 0);
+  --chart-4: oklch(0.371 0 0);
+  --chart-5: oklch(0.269 0 0);
+  --radius: 1rem;
+  --sidebar: oklch(0.985 0 0);
+  --sidebar-foreground: oklch(0.145 0 0);
+  --sidebar-primary: #5170ff;
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.97 0 0);
+  --sidebar-accent-foreground: oklch(0.205 0 0);
+  --sidebar-border: oklch(0.922 0 0);
+  --sidebar-ring: #5170ff;
+}
+
+.dark {
+  --background: #0d0f14;
+  --foreground: #f5f6f8;
+  --card: #0d0f14;
+  --card-foreground: #f5f6f8;
+  --popover: #15171e;
+  --popover-foreground: #f5f6f8;
+  --primary: #5170ff;
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: #1c1f28;
+  --secondary-foreground: #f5f6f8;
+  --muted: #1c1f28;
+  --muted-foreground: #9298a8;
+  --accent: #1c1f28;
+  --accent-foreground: #f5f6f8;
+  --destructive: oklch(0.704 0.191 22.216);
+  --border: oklch(1 0 0 / 14%);
+  --input: oklch(1 0 0 / 12%);
+  --ring: #5170ff;
+  --chart-1: oklch(0.87 0 0);
+  --chart-2: oklch(0.556 0 0);
+  --chart-3: oklch(0.439 0 0);
+  --chart-4: oklch(0.371 0 0);
+  --chart-5: oklch(0.269 0 0);
+  --sidebar: #0d0f14;
+  --sidebar-foreground: #f5f6f8;
+  --sidebar-primary: #5170ff;
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: #1c1f28;
+  --sidebar-accent-foreground: #f5f6f8;
+  --sidebar-border: oklch(1 0 0 / 9%);
+  --sidebar-ring: #5170ff;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+}
