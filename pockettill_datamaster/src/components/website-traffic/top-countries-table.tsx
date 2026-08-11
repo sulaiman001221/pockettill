@@ -1,0 +1,38 @@
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import type { GA4TopCountry } from "@/lib/integrations/ga4";
+
+export function TopCountriesTable({ countries }: { countries: GA4TopCountry[] }) {
+  return (
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <TableHead>Country</TableHead>
+          <TableHead className="text-right">Visitors</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {countries.length === 0 ? (
+          <TableRow>
+            <TableCell colSpan={2} className="h-20 text-center text-muted-foreground">
+              No visitors yet.
+            </TableCell>
+          </TableRow>
+        ) : (
+          countries.map((c) => (
+            <TableRow key={c.country}>
+              <TableCell>{c.country}</TableCell>
+              <TableCell className="text-right">{c.users}</TableCell>
+            </TableRow>
+          ))
+        )}
+      </TableBody>
+    </Table>
+  );
+}
