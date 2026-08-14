@@ -17,6 +17,7 @@ import { NAV_GROUPS, NAV_ITEMS } from "@/config/nav";
 export interface NavBadgeCounts {
   pendingCatalogue?: number;
   syncAlerts?: number;
+  newSupport?: number;
 }
 
 export function NavMain({ badgeCounts = {} }: { badgeCounts?: NavBadgeCounts }) {
