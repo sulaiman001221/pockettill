@@ -7,6 +7,7 @@ import {
   BarChart3,
   Server,
   Globe,
+  LifeBuoy,
   ShieldCheck,
 } from "lucide-react";
 
@@ -21,7 +22,7 @@ export interface NavItem {
   description: string;
   group: NavGroup;
   /** Key into the sidebar badge-count map built in the dashboard layout. */
-  badgeKey?: "pendingCatalogue" | "syncAlerts";
+  badgeKey?: "pendingCatalogue" | "syncAlerts" | "newSupport";
 }
 
 export const NAV_ITEMS: NavItem[] = [
@@ -54,6 +55,14 @@ export const NAV_ITEMS: NavItem[] = [
     description: "Verification queue and verified list",
     group: "Operations",
     badgeKey: "pendingCatalogue",
+  },
+  {
+    title: "Support",
+    href: "/support",
+    icon: LifeBuoy,
+    description: "Contact enquiries from the website",
+    group: "Operations",
+    badgeKey: "newSupport",
   },
   {
     title: "Analytics",

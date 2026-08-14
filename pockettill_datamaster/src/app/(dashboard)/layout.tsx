@@ -6,6 +6,7 @@ import { SiteHeader } from "@/components/layout/site-header";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { getCurrentAdmin } from "@/lib/auth";
 import { getPendingCatalogueItems } from "@/lib/data/catalogue";
+import { getNewSupportCount } from "@/lib/data/support";
 import { getSyncHealthData } from "@/lib/data/sync-health";
 
 export default async function DashboardLayout({
@@ -19,14 +20,16 @@ export default async function DashboardLayout({
     redirect("/login");
   }
 
-  const [pendingCatalogue, syncHealth] = await Promise.all([
+  const [pendingCatalogue, syncHealth, newSupport] = await Promise.all([
     getPendingCatalogueItems(),
     getSyncHealthData(),
+    getNewSupportCount(),
   ]);
 
   const badgeCounts = {
     pendingCatalogue: pendingCatalogue.length,
     syncAlerts: syncHealth.critical.length + syncHealth.warning.length,
+    newSupport,
   };
 
   return (
