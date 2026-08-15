@@ -6,7 +6,7 @@ export default function Hero() {
   return (
     <section
       id="home"
-      className="relative isolate flex min-h-[82vh] flex-col justify-center overflow-hidden bg-white px-6 pb-8 pt-24 sm:min-h-screen sm:px-10 sm:pb-16 sm:pt-32"
+      className="relative isolate flex flex-col justify-center overflow-hidden bg-white px-6 pb-10 pt-24 sm:min-h-screen sm:px-10 sm:pb-16 sm:pt-32"
     >
       <div className="mx-auto grid w-full max-w-6xl items-center gap-8 sm:gap-12 lg:grid-cols-2 lg:gap-10">
         <div className="order-2 text-center lg:order-1 lg:text-left">
