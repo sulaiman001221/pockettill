@@ -8,52 +8,52 @@ export default function Hero() {
       id="home"
       className="relative isolate flex min-h-screen flex-col overflow-hidden bg-white px-6 pb-10 pt-24 sm:px-10 sm:pb-16 sm:pt-32 lg:justify-center"
     >
-      <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col lg:flex-none lg:grid lg:grid-cols-2 lg:items-center lg:gap-10">
-        <div className="order-2 mt-8 flex flex-1 flex-col text-center sm:mt-10 lg:order-1 lg:mt-0 lg:flex-none lg:block lg:text-left">
-          <div>
-            <h1 className="text-3xl font-black leading-[1.1] tracking-tight text-ink sm:text-5xl lg:text-[4rem] lg:leading-[1.05]">
-              Run Your Shop.
-              <br />
-              All in Your Pocket.
-            </h1>
-            <p className="mx-auto mt-6 hidden max-w-md text-lg text-ink/60 sm:block lg:mx-0">
-              PocketTill helps shop owners manage sales, stock and customer
-              credit from one simple app.
-            </p>
-          </div>
+      {/* Pushes the phone/heading/CTA block down from the nav on mobile,
+          so the flexible space lives above the content instead of between
+          the heading and the button (which used to risk clipping the
+          tagline off the bottom on taller devices). No-op on desktop. */}
+      <div aria-hidden className="flex-1 lg:hidden" />
 
-          <div className="mt-auto pt-6 lg:mt-8 lg:pt-0">
-            <div className="flex justify-center lg:justify-start">
-              <a
-                href={siteConfig.playStoreUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-2.5 rounded-xl bg-ink px-4 py-2.5 text-white shadow-lg shadow-ink/20 transition hover:bg-ink/90"
-              >
-                <Image
-                  src="/google-play-store-svgrepo-com.svg"
-                  alt=""
-                  width={18}
-                  height={18}
-                  unoptimized
-                  priority
-                  className="invert"
-                />
-                <span className="text-left leading-tight">
-                  <span className="block text-[10px] uppercase tracking-wide text-white/70">
-                    Get it
-                  </span>
-                  <span className="block text-base font-bold">
-                    Google Play
-                  </span>
+      <div className="mx-auto flex w-full max-w-6xl flex-col lg:grid lg:grid-cols-2 lg:items-center lg:gap-10">
+        <div className="order-2 mt-8 text-center sm:mt-10 lg:order-1 lg:mt-0 lg:text-left">
+          <h1 className="text-3xl font-black leading-[1.1] tracking-tight text-ink sm:text-5xl lg:text-[4rem] lg:leading-[1.05]">
+            Run Your Shop.
+            <br />
+            All in Your Pocket.
+          </h1>
+          <p className="mx-auto mt-6 max-w-md text-base text-ink/60 sm:text-lg lg:mx-0">
+            PocketTill helps shop owners manage sales, stock and customer
+            credit from one simple app.
+          </p>
+
+          <div className="mt-6 flex justify-center sm:mt-8 lg:justify-start">
+            <a
+              href={siteConfig.playStoreUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-2.5 rounded-xl bg-ink px-4 py-2.5 text-white shadow-lg shadow-ink/20 transition hover:bg-ink/90"
+            >
+              <Image
+                src="/google-play-store-svgrepo-com.svg"
+                alt=""
+                width={18}
+                height={18}
+                unoptimized
+                priority
+                className="invert"
+              />
+              <span className="text-left leading-tight">
+                <span className="block text-[10px] uppercase tracking-wide text-white/70">
+                  Get it
                 </span>
-              </a>
-            </div>
-
-            <p className="mt-4 text-sm text-ink/50 sm:mt-5">
-              Built for South African informal retailers.
-            </p>
+                <span className="block text-base font-bold">Google Play</span>
+              </span>
+            </a>
           </div>
+
+          <p className="mt-4 text-sm text-ink/50 sm:mt-5">
+            Built for South African informal retailers.
+          </p>
         </div>
 
         <div className="relative order-1 mx-auto w-full max-w-[215px] sm:max-w-[260px] lg:order-2 lg:max-w-[340px]">
