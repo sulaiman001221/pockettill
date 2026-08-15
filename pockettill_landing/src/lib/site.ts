@@ -10,6 +10,8 @@ export const siteConfig = {
   whatsappUrl:
     "https://wa.me/27625631968?text=I%20want%20to%20be%20notified%20about%20the%20PocketTill%20terminal",
   email: "hello@pockettill.co.za",
+  facebookUrl: "https://www.facebook.com/profile.php?id=61592687962762",
+  linkedinUrl: "https://www.linkedin.com/company/144492932",
   keywords: [
     "spaza shop app",
     "spaza shop pos",
