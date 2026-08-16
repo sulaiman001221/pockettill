@@ -62,13 +62,23 @@ const StoreConfigSchema = CollectionSchema(
       name: r'ownerPhone',
       type: IsarType.string,
     ),
-    r'storeId': PropertySchema(
+    r'paymentSoundEnabled': PropertySchema(
       id: 9,
+      name: r'paymentSoundEnabled',
+      type: IsarType.bool,
+    ),
+    r'scanSoundEnabled': PropertySchema(
+      id: 10,
+      name: r'scanSoundEnabled',
+      type: IsarType.bool,
+    ),
+    r'storeId': PropertySchema(
+      id: 11,
       name: r'storeId',
       type: IsarType.string,
     ),
     r'storeName': PropertySchema(
-      id: 10,
+      id: 12,
       name: r'storeName',
       type: IsarType.string,
     )
@@ -144,8 +154,10 @@ void _storeConfigSerialize(
   writer.writeDateTime(offsets[6], object.lastSyncedAt);
   writer.writeString(offsets[7], object.ownerName);
   writer.writeString(offsets[8], object.ownerPhone);
-  writer.writeString(offsets[9], object.storeId);
-  writer.writeString(offsets[10], object.storeName);
+  writer.writeBool(offsets[9], object.paymentSoundEnabled);
+  writer.writeBool(offsets[10], object.scanSoundEnabled);
+  writer.writeString(offsets[11], object.storeId);
+  writer.writeString(offsets[12], object.storeName);
 }
 
 StoreConfig _storeConfigDeserialize(
@@ -165,8 +177,10 @@ StoreConfig _storeConfigDeserialize(
   object.lastSyncedAt = reader.readDateTimeOrNull(offsets[6]);
   object.ownerName = reader.readStringOrNull(offsets[7]);
   object.ownerPhone = reader.readStringOrNull(offsets[8]);
-  object.storeId = reader.readString(offsets[9]);
-  object.storeName = reader.readString(offsets[10]);
+  object.paymentSoundEnabled = reader.readBool(offsets[9]);
+  object.scanSoundEnabled = reader.readBool(offsets[10]);
+  object.storeId = reader.readString(offsets[11]);
+  object.storeName = reader.readString(offsets[12]);
   return object;
 }
 
@@ -196,8 +210,12 @@ P _storeConfigDeserializeProp<P>(
     case 8:
       return (reader.readStringOrNull(offset)) as P;
     case 9:
-      return (reader.readString(offset)) as P;
+      return (reader.readBool(offset)) as P;
     case 10:
+      return (reader.readBool(offset)) as P;
+    case 11:
+      return (reader.readString(offset)) as P;
+    case 12:
       return (reader.readString(offset)) as P;
     default:
       throw IsarError('Unknown property with id $propertyId');
@@ -1347,6 +1365,26 @@ extension StoreConfigQueryFilter
     });
   }
 
+  QueryBuilder<StoreConfig, StoreConfig, QAfterFilterCondition>
+      paymentSoundEnabledEqualTo(bool value) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'paymentSoundEnabled',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<StoreConfig, StoreConfig, QAfterFilterCondition>
+      scanSoundEnabledEqualTo(bool value) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'scanSoundEnabled',
+        value: value,
+      ));
+    });
+  }
+
   QueryBuilder<StoreConfig, StoreConfig, QAfterFilterCondition> storeIdEqualTo(
     String value, {
     bool caseSensitive = true,
@@ -1736,6 +1774,34 @@ extension StoreConfigQuerySortBy
     });
   }
 
+  QueryBuilder<StoreConfig, StoreConfig, QAfterSortBy>
+      sortByPaymentSoundEnabled() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'paymentSoundEnabled', Sort.asc);
+    });
+  }
+
+  QueryBuilder<StoreConfig, StoreConfig, QAfterSortBy>
+      sortByPaymentSoundEnabledDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'paymentSoundEnabled', Sort.desc);
+    });
+  }
+
+  QueryBuilder<StoreConfig, StoreConfig, QAfterSortBy>
+      sortByScanSoundEnabled() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'scanSoundEnabled', Sort.asc);
+    });
+  }
+
+  QueryBuilder<StoreConfig, StoreConfig, QAfterSortBy>
+      sortByScanSoundEnabledDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'scanSoundEnabled', Sort.desc);
+    });
+  }
+
   QueryBuilder<StoreConfig, StoreConfig, QAfterSortBy> sortByStoreId() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'storeId', Sort.asc);
@@ -1885,6 +1951,34 @@ extension StoreConfigQuerySortThenBy
     });
   }
 
+  QueryBuilder<StoreConfig, StoreConfig, QAfterSortBy>
+      thenByPaymentSoundEnabled() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'paymentSoundEnabled', Sort.asc);
+    });
+  }
+
+  QueryBuilder<StoreConfig, StoreConfig, QAfterSortBy>
+      thenByPaymentSoundEnabledDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'paymentSoundEnabled', Sort.desc);
+    });
+  }
+
+  QueryBuilder<StoreConfig, StoreConfig, QAfterSortBy>
+      thenByScanSoundEnabled() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'scanSoundEnabled', Sort.asc);
+    });
+  }
+
+  QueryBuilder<StoreConfig, StoreConfig, QAfterSortBy>
+      thenByScanSoundEnabledDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'scanSoundEnabled', Sort.desc);
+    });
+  }
+
   QueryBuilder<StoreConfig, StoreConfig, QAfterSortBy> thenByStoreId() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'storeId', Sort.asc);
@@ -1972,6 +2066,20 @@ extension StoreConfigQueryWhereDistinct
     });
   }
 
+  QueryBuilder<StoreConfig, StoreConfig, QDistinct>
+      distinctByPaymentSoundEnabled() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'paymentSoundEnabled');
+    });
+  }
+
+  QueryBuilder<StoreConfig, StoreConfig, QDistinct>
+      distinctByScanSoundEnabled() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'scanSoundEnabled');
+    });
+  }
+
   QueryBuilder<StoreConfig, StoreConfig, QDistinct> distinctByStoreId(
       {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
@@ -2047,6 +2155,19 @@ extension StoreConfigQueryProperty
   QueryBuilder<StoreConfig, String?, QQueryOperations> ownerPhoneProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'ownerPhone');
+    });
+  }
+
+  QueryBuilder<StoreConfig, bool, QQueryOperations>
+      paymentSoundEnabledProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'paymentSoundEnabled');
+    });
+  }
+
+  QueryBuilder<StoreConfig, bool, QQueryOperations> scanSoundEnabledProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'scanSoundEnabled');
     });
   }
 

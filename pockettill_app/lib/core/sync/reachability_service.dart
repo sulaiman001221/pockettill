@@ -45,6 +45,22 @@ class ReachabilityService {
   /// The most recently determined reachability state.
   bool get currentlyReachable => _currentlyReachable;
 
+  /// Confirms reachability before a caller spends something scarce (an OTP
+  /// send, a registration attempt) on the strength of "are we online" and
+  /// can't afford a false negative. [currentlyReachable] alone isn't safe
+  /// for that: it's only as fresh as the last periodic ping (up to
+  /// [_pingInterval] old), or still the cold-start default `false` if no
+  /// ping has completed yet - checking it right when a screen opens can
+  /// false-positive as offline with a perfectly good connection. When it
+  /// already reads true, that's trusted as-is (no need to pay for another
+  /// ping just to confirm good news); when it reads false, this runs one
+  /// fresh check before believing it.
+  Future<bool> ensureReachable() async {
+    if (_currentlyReachable) return true;
+    await _pingHealthEndpoint();
+    return _currentlyReachable;
+  }
+
   /// Starts listening for connectivity changes and runs an initial check.
   Future<void> init() async {
     _connectivitySubscription = _connectivity.onConnectivityChanged.listen(

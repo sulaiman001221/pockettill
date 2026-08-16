@@ -18,4 +18,9 @@ class StoreConfig {
   String? authPhone; // formatted +27 phone used to register
   bool isBetaAdopter = false;
   bool isLoggedIn = false;
+
+  // Local device preferences (Settings > Sound) - not synced to Supabase,
+  // never included in any push payload. Both on by default.
+  bool scanSoundEnabled = true;
+  bool paymentSoundEnabled = true;
 }

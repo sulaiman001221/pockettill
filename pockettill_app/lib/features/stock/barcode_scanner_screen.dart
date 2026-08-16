@@ -1,12 +1,15 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
 import '../../core/hardware/camera_scanner_service.dart';
 import '../../core/hardware/scanner_service.dart';
+import '../../core/hardware/sound_service.dart';
 import '../../main.dart';
+import '../../shared/theme/system_ui.dart';
 
 /// Lazily initializes whichever [ScannerService] this device uses, exactly
 /// once for the app's lifetime - [ScannerService.init] binds hardware (the
@@ -29,7 +32,17 @@ class BarcodeScannerScreen extends ConsumerStatefulWidget {
 
 class _BarcodeScannerScreenState extends ConsumerState<BarcodeScannerScreen> {
   @override
+  void initState() {
+    super.initState();
+    // This screen's background is black (a full-screen camera view), so it
+    // needs light status bar icons - same imperative init/dispose pattern
+    // as SplashScreen, see the doc comment on blackScreenStatusBar.
+    SystemChrome.setSystemUIOverlayStyle(blackScreenStatusBar);
+  }
+
+  @override
   void dispose() {
+    SystemChrome.setSystemUIOverlayStyle(lightScreenStatusBar);
     // Pause the camera (if this device has one) rather than disposing the
     // service - the same ScannerService instance is reused for the next
     // scan, and its stream must stay open for that to work.
@@ -98,7 +111,7 @@ class _ScannerBodyState extends ConsumerState<_ScannerBody> {
     super.dispose();
   }
 
-  void _handleBarcode(String barcode) {
+  void _handleBarcode(String barcode, {bool fromScanner = true}) {
     if (_handled || barcode.isEmpty) return;
     // Ignore detections in the first moment after this screen opens: the
     // camera can still be delivering a buffered/residual decode left over
@@ -108,6 +121,10 @@ class _ScannerBodyState extends ConsumerState<_ScannerBody> {
       return;
     }
     _handled = true;
+    // Only for a genuine scan, not a manually-typed barcode (see
+    // _promptManualEntry) - SoundService itself decides whether this
+    // device/setting actually plays anything.
+    if (fromScanner) unawaited(SoundService.scanSuccess());
     widget.onScanned(barcode);
   }
 
@@ -166,7 +183,7 @@ class _ScannerBodyState extends ConsumerState<_ScannerBody> {
       ),
     );
     if (barcode != null && barcode.isNotEmpty) {
-      _handleBarcode(barcode);
+      _handleBarcode(barcode, fromScanner: false);
     }
   }
 }

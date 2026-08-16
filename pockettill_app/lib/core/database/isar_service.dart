@@ -4,6 +4,7 @@ import 'package:path_provider/path_provider.dart';
 
 import '../../shared/models/credit_customer.dart';
 import '../../shared/models/credit_transaction.dart';
+import '../../shared/models/extra_income.dart';
 import '../../shared/models/product.dart';
 import '../../shared/models/return_item.dart';
 import '../../shared/models/return_record.dart';
@@ -45,6 +46,7 @@ class IsarService {
         ReturnItemSchema,
         SyncEventSchema,
         StoreConfigSchema,
+        ExtraIncomeSchema,
       ],
       directory: directory.path,
     );

@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -7,6 +8,8 @@ import '../../shared/repositories/store_config_provider.dart';
 import '../../shared/theme/app_theme.dart';
 import '../../shared/utils/friendly_error.dart';
 import '../../shared/widgets/pockettill_app_bar.dart';
+import '../settings/privacy_policy_screen.dart';
+import '../settings/terms_of_service_screen.dart';
 import '../shell/shell_screen.dart';
 import 'otp_verification_screen.dart';
 
@@ -37,6 +40,16 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
   bool _submitting = false;
+  bool _agreedToTerms = false;
+
+  late final _termsTapRecognizer = TapGestureRecognizer()
+    ..onTap = () => Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const TermsOfServiceScreen()),
+    );
+  late final _privacyTapRecognizer = TapGestureRecognizer()
+    ..onTap = () => Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const PrivacyPolicyScreen()),
+    );
 
   @override
   void initState() {
@@ -68,6 +81,8 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     _passwordController.dispose();
     _confirmPasswordController.dispose();
     _addressController.dispose();
+    _termsTapRecognizer.dispose();
+    _privacyTapRecognizer.dispose();
     super.dispose();
   }
 
@@ -84,7 +99,8 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
       _ownerNameValid &&
       _phoneValid &&
       _passwordValid &&
-      _confirmPasswordValid;
+      _confirmPasswordValid &&
+      _agreedToTerms;
 
   Future<void> _showNoInternetDialog() {
     return showDialog<void>(
@@ -121,12 +137,19 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   Future<void> _submit() async {
     if (!_canSubmit || _submitting) return;
 
-    if (!ref.read(reachabilityServiceProvider).currentlyReachable) {
+    setState(() => _submitting = true);
+
+    // currentlyReachable alone is only as fresh as the last periodic ping
+    // (or still the cold-start default false if none has completed yet) -
+    // trusting it directly here false-positived as offline on a perfectly
+    // good connection. ensureReachable() runs one fresh check before
+    // believing a "false", so a real (rate-limited, worth not wasting)
+    // OTP send isn't skipped over a stale reading.
+    if (!await ref.read(reachabilityServiceProvider).ensureReachable()) {
+      setState(() => _submitting = false);
       await _showNoInternetDialog();
       return;
     }
-
-    setState(() => _submitting = true);
 
     final storeName = _storeNameController.text.trim();
     final ownerName = _ownerNameController.text.trim();
@@ -305,7 +328,9 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                 labelText: 'Address',
               ),
             ),
-            const SizedBox(height: 28),
+            const SizedBox(height: 24),
+            _buildTermsCheckbox(),
+            const SizedBox(height: 20),
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
@@ -347,6 +372,48 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildTermsCheckbox() {
+    const linkStyle = TextStyle(
+      color: AppTheme.primary,
+      fontWeight: FontWeight.w600,
+      decoration: TextDecoration.underline,
+    );
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Checkbox(
+          value: _agreedToTerms,
+          onChanged: (value) =>
+              setState(() => _agreedToTerms = value ?? false),
+        ),
+        Expanded(
+          child: Padding(
+            padding: const EdgeInsets.only(top: 12),
+            child: RichText(
+              text: TextSpan(
+                style: const TextStyle(fontSize: 13, color: AppTheme.textPrimary),
+                children: [
+                  const TextSpan(text: 'I agree to the '),
+                  TextSpan(
+                    text: 'Terms of Service',
+                    style: linkStyle,
+                    recognizer: _termsTapRecognizer,
+                  ),
+                  const TextSpan(text: ' and '),
+                  TextSpan(
+                    text: 'Privacy Policy',
+                    style: linkStyle,
+                    recognizer: _privacyTapRecognizer,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 

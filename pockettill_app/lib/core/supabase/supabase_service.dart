@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 /// Initializes the Supabase client used as PocketTill's background sync
@@ -12,6 +14,8 @@ class SupabaseService {
   static const String url = String.fromEnvironment('SUPABASE_URL');
   static const String anonKey = String.fromEnvironment('SUPABASE_ANON_KEY');
 
+  static final Completer<void> _sessionRestored = Completer<void>();
+
   /// Maps a [SyncEvent.entityType] to the Supabase table it syncs to.
   static const Map<String, String> _entityTables = {
     'sale': 'sales',
@@ -22,6 +26,7 @@ class SupabaseService {
     'return': 'returns',
     'return_item': 'return_items',
     'store_profile': 'stores',
+    'extra_income': 'extra_income',
   };
 
   /// Initializes the Supabase client.
@@ -32,6 +37,36 @@ class SupabaseService {
       );
     }
     await Supabase.initialize(url: url, publishableKey: anonKey);
+
+    // `Supabase.initialize()` resolving does not guarantee
+    // `auth.currentSession` is already populated - restoring a persisted
+    // session from local storage finishes asynchronously afterward, and is
+    // signalled by the SDK's first `onAuthStateChange` event
+    // (`AuthChangeEvent.initialSession`, fired exactly once per client
+    // lifetime whether or not a session was actually found). Subscribing
+    // here, immediately after initialize() returns, guarantees this app
+    // never misses it - waiting to subscribe until SplashScreen runs would
+    // risk racing past it on a fast device where restoration finishes
+    // before Splash even starts checking. See [waitForSessionRestore].
+    supabaseClient.auth.onAuthStateChange.first.then((_) {
+      if (!_sessionRestored.isCompleted) _sessionRestored.complete();
+    });
+  }
+
+  /// Resolves once Supabase has finished restoring (or failing to find) a
+  /// persisted session - see the subscription set up in [init]. Callers
+  /// that decide UI based on [SupabaseClient.currentSession] (e.g.
+  /// SplashScreen's routing) must await this first, or they risk reading a
+  /// still-null session that simply hasn't finished loading yet - this was
+  /// the cause of the app occasionally flashing the login screen before
+  /// correcting itself, worse on slower devices where restoration takes
+  /// longer. A timeout guards against a stream hiccup hanging the splash
+  /// screen forever.
+  static Future<void> waitForSessionRestore() {
+    return _sessionRestored.future.timeout(
+      const Duration(seconds: 5),
+      onTimeout: () {},
+    );
   }
 
   /// The initialized Supabase client.

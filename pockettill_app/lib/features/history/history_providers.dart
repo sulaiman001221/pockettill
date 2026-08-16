@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../shared/models/credit_transaction.dart';
+import '../../shared/models/extra_income.dart';
 import '../../shared/models/return_record.dart';
 import '../../shared/models/sale.dart';
 import '../../shared/repositories/repositories.dart';
@@ -88,6 +89,24 @@ final filteredReturnsProvider = FutureProvider<List<ReturnRecord>>((ref) async {
   return repo.getDateRange(from, to);
 });
 
+/// Extra income (non-sale) entries within the currently selected period -
+/// same period [filteredSalesProvider] uses, so an entry always shows up
+/// alongside sales from the same window.
+final filteredExtraIncomeProvider = FutureProvider<List<ExtraIncome>>((
+  ref,
+) async {
+  final filter = ref.watch(historyFilterProvider);
+  final customRange = ref.watch(historyCustomRangeProvider);
+  final repo = ref.watch(extraIncomeRepositoryProvider);
+  final (from, to) = _resolveRange(filter, customRange);
+
+  if (filter == HistoryFilter.today ||
+      (filter == HistoryFilter.custom && customRange == null)) {
+    return repo.getByDate(from);
+  }
+  return repo.getDateRange(from, to);
+});
+
 /// A single row in the Sales History list - either a [Sale] or a
 /// [ReturnRecord], sorted together by when each happened. Returns are their
 /// own entries rather than being folded into the sale they came from, since
@@ -114,15 +133,27 @@ class ReturnHistoryEntry extends HistoryEntry {
   DateTime get createdAt => returnRecord.createdAt;
 }
 
-/// Sales and returns for the current period, merged into one newest-first
-/// list for the history screen to group and render.
+class ExtraIncomeHistoryEntry extends HistoryEntry {
+  ExtraIncomeHistoryEntry(this.extraIncome);
+
+  final ExtraIncome extraIncome;
+
+  @override
+  DateTime get createdAt => extraIncome.createdAt;
+}
+
+/// Sales, returns, and extra income for the current period, merged into one
+/// newest-first list for the history screen to group and render.
 final combinedHistoryProvider = Provider<List<HistoryEntry>>((ref) {
   final sales = ref.watch(filteredSalesProvider).valueOrNull ?? const [];
   final returns = ref.watch(filteredReturnsProvider).valueOrNull ?? const [];
+  final extraIncome =
+      ref.watch(filteredExtraIncomeProvider).valueOrNull ?? const [];
 
   final entries = <HistoryEntry>[
     ...sales.map(SaleHistoryEntry.new),
     ...returns.map(ReturnHistoryEntry.new),
+    ...extraIncome.map(ExtraIncomeHistoryEntry.new),
   ]..sort((a, b) => b.createdAt.compareTo(a.createdAt));
   return entries;
 });
@@ -153,6 +184,8 @@ class HistorySummary {
 final historySummaryProvider = Provider<HistorySummary>((ref) {
   final sales = ref.watch(filteredSalesProvider).valueOrNull ?? const [];
   final returns = ref.watch(filteredReturnsProvider).valueOrNull ?? const [];
+  final extraIncome =
+      ref.watch(filteredExtraIncomeProvider).valueOrNull ?? const [];
 
   final grossSales = sales.fold<double>(0, (sum, sale) => sum + sale.total);
   // Nets in returns so this matches the transaction list's own per-day
@@ -162,8 +195,14 @@ final historySummaryProvider = Provider<HistorySummary>((ref) {
     0,
     (sum, r) => sum + r.netMoneyMovement,
   );
-  final total = grossSales + returnsNet;
+  final extraIncomeTotal = extraIncome.fold<double>(
+    0,
+    (sum, e) => sum + e.amount,
+  );
+  final total = grossSales + returnsNet + extraIncomeTotal;
 
+  // Deliberately keyed off sales alone - extra income isn't a sale, so it
+  // must not shift the sale count or the average sale value.
   final count = sales.length;
   final average = count == 0 ? 0.0 : grossSales / count;
 
@@ -202,12 +241,14 @@ class EndOfDaySummary {
     required this.cardRepaymentsCollected,
     required this.hasReturns,
     required this.returnsNet,
+    required this.extraIncomeTotal,
     required this.totalExpected,
   });
 
-  /// All sales regardless of payment type, net of today's returns - the
-  /// same figure [historySummaryProvider] shows on the Sales History summary
-  /// card. Includes credit sales not yet received as cash.
+  /// All sales regardless of payment type, net of today's returns and
+  /// including extra income - the same figure [historySummaryProvider] shows
+  /// on the Sales History summary card. Includes credit sales not yet
+  /// received as cash.
   final double totalRevenue;
 
   final double cashSales;
@@ -234,9 +275,16 @@ class EndOfDaySummary {
   /// lower-value exchange), zero if there were none or they cancelled out.
   final double returnsNet;
 
-  /// Cash + card sales, plus all repayments collected, plus/minus today's
-  /// returns - the actual money that came into the business today, excluding
-  /// credit sales that were recorded but not yet paid.
+  /// Today's one-off income that isn't a sale (airtime, electricity tokens,
+  /// etc.) - real money received, so it's folded into [totalRevenue] and
+  /// [totalExpected], but has no payment-type split of its own (the entry
+  /// form has no field for one).
+  final double extraIncomeTotal;
+
+  /// Cash + card sales, plus all repayments collected, plus extra income,
+  /// plus/minus today's returns - the actual money that came into the
+  /// business today, excluding credit sales that were recorded but not yet
+  /// paid.
   final double totalExpected;
 }
 
@@ -262,17 +310,23 @@ final _dailyCreditPaymentsProvider =
       return ref.watch(creditRepositoryProvider).getRepaymentsInRange(date, date);
     });
 
+final _dailyExtraIncomeProvider =
+    FutureProvider.family<List<ExtraIncome>, DateTime>((ref, date) {
+      return ref.watch(extraIncomeRepositoryProvider).getByDate(date);
+    });
+
 /// Forces a fresh read of the End of Day summary for [date] - invalidating
 /// only [endOfDaySummaryProvider] isn't enough, since it just recomputes
 /// from whatever [_dailySalesProvider]/[_dailyReturnsProvider]/
-/// [_dailyCreditPaymentsProvider] last cached; those are plain (non-
-/// autoDispose) families too, so each one keeps its own stale result until
-/// invalidated in turn.
+/// [_dailyCreditPaymentsProvider]/[_dailyExtraIncomeProvider] last cached;
+/// those are plain (non-autoDispose) families too, so each one keeps its own
+/// stale result until invalidated in turn.
 void refreshEndOfDaySummary(WidgetRef ref, DateTime date) {
   final day = DateTime(date.year, date.month, date.day);
   ref.invalidate(_dailySalesProvider(day));
   ref.invalidate(_dailyReturnsProvider(day));
   ref.invalidate(_dailyCreditPaymentsProvider(day));
+  ref.invalidate(_dailyExtraIncomeProvider(day));
   ref.invalidate(endOfDaySummaryProvider(day));
 }
 
@@ -285,6 +339,7 @@ final endOfDaySummaryProvider =
   final sales = await ref.watch(_dailySalesProvider(date).future);
   final returns = await ref.watch(_dailyReturnsProvider(date).future);
   final repayments = await ref.watch(_dailyCreditPaymentsProvider(date).future);
+  final extraIncome = await ref.watch(_dailyExtraIncomeProvider(date).future);
 
   final cashSales = sales
       .where((s) => s.paymentType == 'cash')
@@ -308,10 +363,19 @@ final endOfDaySummaryProvider =
     0,
     (sum, r) => sum + r.netMoneyMovement,
   );
+  final extraIncomeTotal = extraIncome.fold<double>(
+    0,
+    (sum, e) => sum + e.amount,
+  );
 
-  final totalRevenue = grossSales + returnsNet;
+  final totalRevenue = grossSales + returnsNet + extraIncomeTotal;
   final totalExpected =
-      cashSales + cardSales + cashRepayments + cardRepayments + returnsNet;
+      cashSales +
+      cardSales +
+      cashRepayments +
+      cardRepayments +
+      returnsNet +
+      extraIncomeTotal;
 
   return EndOfDaySummary(
     totalRevenue: totalRevenue,
@@ -322,6 +386,7 @@ final endOfDaySummaryProvider =
     cardRepaymentsCollected: cardRepayments,
     hasReturns: returns.isNotEmpty,
     returnsNet: returnsNet,
+    extraIncomeTotal: extraIncomeTotal,
     totalExpected: totalExpected,
   );
 });

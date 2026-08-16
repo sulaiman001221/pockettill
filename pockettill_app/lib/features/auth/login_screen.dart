@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/auth/auth_service.dart';
 import '../../core/sync/reachability_service.dart';
@@ -11,9 +12,18 @@ import '../shell/shell_screen.dart';
 import 'otp_verification_screen.dart';
 import 'reset_password_screen.dart';
 
+const String _supportWhatsAppNumber = '27625631968';
+
 /// Sign-in for an existing store, on this device or a fresh install.
 class LoginScreen extends ConsumerStatefulWidget {
-  const LoginScreen({super.key});
+  const LoginScreen({super.key, this.showKickedByOtherDeviceBanner = false});
+
+  /// Set when [ShellScreen] routed here specifically because this device's
+  /// session was revoked by a newer login elsewhere - shows a banner
+  /// explaining why, instead of leaving the user to wonder why they were
+  /// signed out. Never set for a manual logout or a natural session expiry,
+  /// which land here (or on WelcomeScreen) with no banner as before.
+  final bool showKickedByOtherDeviceBanner;
 
   @override
   ConsumerState<LoginScreen> createState() => _LoginScreenState();
@@ -168,6 +178,62 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     }
   }
 
+  Future<void> _contactSupport() async {
+    final uri = Uri.parse('https://wa.me/$_supportWhatsAppNumber');
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
+  }
+
+  Widget _buildKickedByOtherDeviceBanner() {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 20),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppTheme.logoutRed.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppTheme.logoutRed.withValues(alpha: 0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
+            children: [
+              Icon(Icons.info_outline, color: AppTheme.logoutRed, size: 20),
+              SizedBox(width: 8),
+              Text(
+                'Signed Out',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: AppTheme.logoutRed,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'You have been signed out because your account was accessed '
+            "from another device. If this wasn't you, contact support "
+            'immediately.',
+            style: TextStyle(fontSize: 13, color: AppTheme.textPrimary, height: 1.4),
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: _contactSupport,
+              icon: const Icon(Icons.chat_outlined, size: 18),
+              label: const Text('Contact Support on WhatsApp'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppTheme.logoutRed,
+                side: const BorderSide(color: AppTheme.logoutRed),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _showForgotPasswordSheet() {
     final phoneController = TextEditingController();
     var sending = false;
@@ -220,16 +286,17 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   onPressed: sending
                       ? null
                       : () async {
-                          if (!ref
-                              .read(reachabilityServiceProvider)
-                              .currentlyReachable) {
-                            await _showNoInternetDialog();
-                            return;
-                          }
                           setSheetState(() {
                             sending = true;
                             errorText = null;
                           });
+                          if (!await ref
+                              .read(reachabilityServiceProvider)
+                              .ensureReachable()) {
+                            setSheetState(() => sending = false);
+                            await _showNoInternetDialog();
+                            return;
+                          }
                           try {
                             final formatted = AuthService.formatPhone(
                               phoneController.text,
@@ -328,6 +395,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               style: TextStyle(fontSize: 14, color: AppTheme.textSecondary),
             ),
             const SizedBox(height: 32),
+            if (widget.showKickedByOtherDeviceBanner)
+              _buildKickedByOtherDeviceBanner(),
             TextField(
               controller: _phoneController,
               keyboardType: TextInputType.phone,
