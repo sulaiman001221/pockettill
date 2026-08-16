@@ -6,9 +6,9 @@ import { siteConfig } from "@/lib/site";
 import ContactModal from "./ContactModal";
 
 const links = [
-  { label: "Home", href: "#home" },
-  { label: "Features", href: "#features" },
-  { label: "Product", href: "#product" },
+  { label: "Home", href: "/#home" },
+  { label: "Features", href: "/#features" },
+  { label: "Product", href: "/#product" },
 ];
 
 export default function Navbar() {
@@ -38,7 +38,7 @@ export default function Navbar() {
               scrolled ? "py-4" : "py-5 sm:py-6"
             }`}
           >
-            <a href="#home" className="shrink-0">
+            <a href="/#home" className="shrink-0">
               <Image
                 src="/pockettill_logo.png"
                 alt={siteConfig.name}

@@ -46,12 +46,12 @@ export default function Footer() {
           </h3>
           <ul className="mt-4 space-y-2.5 text-sm text-white/75">
             <li>
-              <a href="#features" className="hover:text-white">
+              <a href="/#features" className="hover:text-white">
                 Features
               </a>
             </li>
             <li>
-              <a href="#product" className="hover:text-white">
+              <a href="/#product" className="hover:text-white">
                 Coming Soon
               </a>
             </li>
@@ -62,7 +62,7 @@ export default function Footer() {
             </li>
             <li>
               <Link href="/terms" className="hover:text-white">
-                Terms of Service
+                Terms of Use
               </Link>
             </li>
           </ul>
