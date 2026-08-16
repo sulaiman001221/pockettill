@@ -7,23 +7,22 @@ import '../theme/app_theme.dart';
 /// Shows a hamburger icon that opens the drawer ([showMenuIcon] true, used
 /// by the shell) or a back arrow that pops the current route ([showMenuIcon]
 /// false, used by every pushed screen). The centre shows the PocketTill
-/// icon by default, or [title] when provided. The trailing icon is a
-/// notification bell by default (not yet wired to anything); pass
-/// [trailingIcon]/[onTrailingTap] together to replace it for a screen that
-/// has a more relevant action there.
+/// icon by default, or [title] when provided.
+///
+/// Nothing sits on the trailing edge - a notification bell used to, but it
+/// was never wired to anything and no screen ever gave it a real action, so
+/// tapping it did nothing and shop owners reasonably asked what it was for.
+/// The space is kept (see [_trailingWidth]) purely so the centre stays
+/// optically centred against the leading icon.
 class CustomAppBar extends StatelessWidget implements PreferredSizeWidget {
-  const CustomAppBar({
-    super.key,
-    this.showMenuIcon = true,
-    this.title,
-    this.trailingIcon,
-    this.onTrailingTap,
-  });
+  const CustomAppBar({super.key, this.showMenuIcon = true, this.title});
+
+  /// Matches the leading [IconButton]'s footprint so the centred logo/title
+  /// isn't pushed off-centre by having a control on one side only.
+  static const double _trailingWidth = 48;
 
   final bool showMenuIcon;
   final String? title;
-  final IconData? trailingIcon;
-  final VoidCallback? onTrailingTap;
 
   @override
   Widget build(BuildContext context) {
@@ -40,14 +39,7 @@ class CustomAppBar extends StatelessWidget implements PreferredSizeWidget {
             children: [
               _Leading(showMenuIcon: showMenuIcon),
               Expanded(child: Center(child: _Centre(title: title))),
-              IconButton(
-                icon: Icon(
-                  trailingIcon ?? Icons.notifications_none,
-                  color: AppTheme.textPrimary,
-                  size: 28,
-                ),
-                onPressed: onTrailingTap ?? () {},
-              ),
+              const SizedBox(width: _trailingWidth, height: _trailingWidth),
             ],
           ),
         ),

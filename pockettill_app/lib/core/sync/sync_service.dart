@@ -40,10 +40,24 @@ class SyncService {
   final StreamController<SyncStatus> _statusController =
       StreamController<SyncStatus>.broadcast();
 
+  final StreamController<void> _displacedController =
+      StreamController<void>.broadcast();
+
   bool _isSyncing = false;
 
   /// Emits the current phase of the sync cycle.
   Stream<SyncStatus> get syncStatus => _statusController.stream;
+
+  /// Emits once this device has been displaced - someone logged into this
+  /// store on another device, which revokes this one's session server-side.
+  ///
+  /// This needs its own signal because nothing else notices promptly:
+  /// revoking the refresh token doesn't invalidate the access token already
+  /// on this device (a JWT is verified by signature, not by a lookup), so
+  /// this device keeps working - and keeps syncing - until that token
+  /// expires up to an hour later. Sync is the app's regular check-in with
+  /// the server, so it's also where being displaced gets noticed.
+  Stream<void> get displacedByAnotherDevice => _displacedController.stream;
 
   /// Runs one full sync cycle: push pending events, then pull catalogue
   /// updates. A no-op if a cycle is already in progress.
@@ -110,6 +124,19 @@ class SyncService {
       });
 
       _statusController.add(SyncStatus.success);
+
+      // Deliberately last, after everything above has pushed: this device's
+      // access token is still valid until it expires, so a displaced device
+      // can still upload the sales it recorded before being displaced -
+      // signing it out first would strand them locally until the owner
+      // logged back in on this device.
+      if (storeConfig.isLoggedIn) {
+        final displaced = await SupabaseService.isDisplacedByAnotherDevice(
+          storeId: storeId,
+          deviceId: storeConfig.deviceId,
+        );
+        if (displaced) _displacedController.add(null);
+      }
     } catch (_) {
       _statusController.add(SyncStatus.error);
     } finally {
