@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'app.dart';
@@ -15,6 +16,7 @@ import 'core/hardware/sunmi_scanner_service.dart';
 import 'core/supabase/supabase_service.dart';
 import 'core/sync/reachability_service.dart';
 import 'core/sync/sync_service.dart';
+import 'shared/theme/system_ui.dart';
 
 /// The [ScannerService] appropriate for this device, chosen once at app
 /// start based on [HardwareDetector] and injected via [ProviderScope]
@@ -32,6 +34,13 @@ final printerServiceProvider = Provider<PrinterService>((ref) {
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Every screen except SplashScreen (which overrides this itself for its
+  // blue background - see its own init/dispose) sits on CustomAppBar's white
+  // top bar - matching the status bar to it makes the two blend into one
+  // continuous area instead of Android's default (dark) status bar cutting
+  // across the top of the screen.
+  SystemChrome.setSystemUIOverlayStyle(lightScreenStatusBar);
 
   await HardwareDetector.init();
   await IsarService.init();

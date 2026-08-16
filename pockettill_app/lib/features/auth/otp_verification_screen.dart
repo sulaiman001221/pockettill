@@ -105,6 +105,14 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
   String get _code => _controllers.map((c) => c.text).join();
 
   void _onDigitChanged(int index, String value) {
+    // A paste into one box isn't stopped at 1 character by `maxLength` (see
+    // MaxLengthEnforcement.none on _DigitBox) - it lands here as the full
+    // pasted string instead, so it can be spread across this box and the
+    // ones after it rather than only filling the one it landed in.
+    if (value.length > 1) {
+      _distributePaste(index, value);
+      return;
+    }
     if (value.isNotEmpty && index < _digitCount - 1) {
       _focusNodes[index + 1].requestFocus();
     }
@@ -112,6 +120,23 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
       _focusNodes[index - 1].requestFocus();
     }
     setState(() {});
+    if (_code.length == _digitCount) {
+      FocusScope.of(context).unfocus();
+      _verify();
+    }
+  }
+
+  void _distributePaste(int index, String digits) {
+    for (var i = 0; i < digits.length && index + i < _digitCount; i++) {
+      _controllers[index + i].text = digits[i];
+    }
+    setState(() {});
+    final lastFilledIndex = (index + digits.length - 1).clamp(0, _digitCount - 1);
+    if (lastFilledIndex < _digitCount - 1) {
+      _focusNodes[lastFilledIndex + 1].requestFocus();
+    } else {
+      FocusScope.of(context).unfocus();
+    }
     if (_code.length == _digitCount) {
       FocusScope.of(context).unfocus();
       _verify();
@@ -230,27 +255,6 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
     }
   }
 
-  /// Fallback for stores without WhatsApp (lost account, never had one, or
-  /// just prefer SMS) - not gated by the resend cooldown, since a user who
-  /// already knows they have no WhatsApp shouldn't have to wait it out
-  /// first.
-  Future<void> _sendViaSms() async {
-    if (_resending) return;
-    setState(() => _resending = true);
-    try {
-      await AuthService.requestOtp(widget.phone, channel: OtpChannel.sms);
-      setState(() => _channel = OtpChannel.sms);
-      _startResendCooldown();
-    } catch (_) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Could not send code via SMS. Try again.')),
-      );
-    } finally {
-      if (mounted) setState(() => _resending = false);
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final scaffold = Scaffold(
@@ -282,22 +286,18 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
         child: Column(
           children: [
             if (!_isNewDeviceMode)
-              Icon(
-                _channel == OtpChannel.whatsapp
-                    ? Icons.message
-                    : Icons.sms_outlined,
+              // Generic, not channel-specific - the code could land via
+              // either WhatsApp or SMS depending on how Twilio's delivery
+              // falls back, so there's no single channel this icon can
+              // commit to.
+              const Icon(
+                Icons.chat_outlined,
                 size: 64,
-                color: _channel == OtpChannel.whatsapp
-                    ? const Color(0xFF25D366)
-                    : AppTheme.primary,
+                color: AppTheme.primary,
               ),
             if (!_isNewDeviceMode) const SizedBox(height: 20),
             Text(
-              _isNewDeviceMode
-                  ? "Verify It's You"
-                  : (_channel == OtpChannel.whatsapp
-                        ? 'Check your WhatsApp'
-                        : 'Check your SMS messages'),
+              _isNewDeviceMode ? "Verify It's You" : 'Check your messages',
               style: const TextStyle(
                 fontSize: 22,
                 fontWeight: FontWeight.bold,
@@ -309,7 +309,8 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
               _isNewDeviceMode
                   ? "To confirm it's you, enter the 6-digit code sent to "
                         '${widget.phone}'
-                  : 'We sent a 6-digit code to\n${widget.phone}',
+                  : "You'll receive a 6-digit code via WhatsApp or SMS\n"
+                        '${widget.phone}',
               textAlign: TextAlign.center,
               style: const TextStyle(fontSize: 14, color: AppTheme.textSecondary),
             ),
@@ -366,20 +367,6 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                       ),
               ],
             ),
-            if (_channel == OtpChannel.whatsapp) ...[
-              const SizedBox(height: 12),
-              GestureDetector(
-                onTap: _resending ? null : _sendViaSms,
-                child: const Text(
-                  'Not on WhatsApp? Send code via SMS instead',
-                  style: TextStyle(
-                    color: AppTheme.primary,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-            ],
             const SizedBox(height: 20),
             // Subtle, not a prominent CTA - deliberately smaller/quieter
             // than the resend/SMS-fallback rows above it.
@@ -461,7 +448,11 @@ class _DigitBox extends StatelessWidget {
             focusNode: focusNode,
             textAlign: TextAlign.center,
             keyboardType: TextInputType.number,
-            maxLength: 1,
+            // No length limit here (and no maxLengthEnforcement to clip
+            // it) - a multi-digit paste needs to reach onChanged whole so
+            // the screen can spread it across the other boxes; each box's
+            // own controller is truncated back to one digit right after,
+            // in _distributePaste.
             style: const TextStyle(
               fontSize: 22,
               fontWeight: FontWeight.bold,

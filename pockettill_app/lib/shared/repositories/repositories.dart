@@ -4,6 +4,7 @@ import 'package:isar/isar.dart';
 import '../../core/database/isar_service.dart';
 import '../../core/sync/event_queue.dart';
 import 'credit_repository.dart';
+import 'extra_income_repository.dart';
 import 'product_repository.dart';
 import 'return_repository.dart';
 import 'sale_repository.dart';
@@ -49,4 +50,12 @@ final returnRepositoryProvider = Provider<ReturnRepository>((ref) {
 /// [StoreConfigRepository] singleton.
 final storeConfigRepositoryProvider = Provider<StoreConfigRepository>((ref) {
   return StoreConfigRepository(isar: ref.watch(isarServiceProvider));
+});
+
+/// [ExtraIncomeRepository] singleton.
+final extraIncomeRepositoryProvider = Provider<ExtraIncomeRepository>((ref) {
+  return ExtraIncomeRepository(
+    isar: ref.watch(isarServiceProvider),
+    eventQueue: ref.watch(eventQueueProvider),
+  );
 });

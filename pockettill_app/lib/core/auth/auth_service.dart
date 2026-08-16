@@ -187,7 +187,11 @@ class AuthService {
       ..authUserId = user.id
       ..authPhone = user.phone
       ..isBetaAdopter = false
-      ..isLoggedIn = true;
+      ..isLoggedIn = true
+      // This physical device's own settings, not the new store's - see the
+      // matching comment in _completeLogin.
+      ..scanSoundEnabled = existingConfig?.scanSoundEnabled ?? true
+      ..paymentSoundEnabled = existingConfig?.paymentSoundEnabled ?? true;
 
     await repo.save(config);
   }
@@ -377,22 +381,36 @@ class AuthService {
     required StoreConfig? existingConfig,
     required String formattedPhone,
   }) async {
-    // A `signOut(scope: SignOutScope.others)` call used to sit here to kick
-    // out every other session on login - removed after confirming (via a
-    // direct RLS simulation against Supabase) that it was degrading this
-    // client's own just-established session to unauthenticated, causing
-    // every request right after login - including the very next call below
-    // - to be rejected by RLS. Every login was broken by this, not just a
-    // cross-device one. Old sessions are no longer forcibly revoked on a new
-    // login; [login]'s new-device OTP challenge is the remaining safeguard
-    // (it stops a stranger who only has the password from getting in
-    // silently, even though it no longer logs out an already-trusted device
-    // elsewhere).
     await SupabaseService.supabaseClient.from('devices').upsert({
       'id': deviceId,
       'store_id': store['uuid'],
       'last_seen_at': DateTime.now().toUtc().toIso8601String(),
     });
+
+    // This device is now the store's single active device - stamped before
+    // the revoke below so `signed_out_by_new_device` has something to
+    // compare against the moment the other device's refresh fails.
+    await SupabaseService.supabaseClient
+        .from('stores')
+        .update({'active_device_id': deviceId})
+        .eq('uuid', store['uuid']);
+
+    // A `signOut(scope: SignOutScope.others)` call used to sit here to kick
+    // out every other session on login - removed after confirming (via a
+    // direct RLS simulation against Supabase) that it was degrading this
+    // client's own just-established session to unauthenticated, causing
+    // every request right after login - including the call above - to be
+    // rejected by RLS. Re-added now that the installed gotrue-dart's own
+    // `_signOut` was checked directly (package:gotrue 2.26.0) and only
+    // removes the *local* session when `scope != SignOutScope.others` -
+    // with `others`, this client's own session is left untouched, so the
+    // failure mode that caused the original removal no longer applies.
+    // Best-effort: a failure here must not block this device's own login.
+    try {
+      await SupabaseService.supabaseClient.auth.signOut(
+        scope: SignOutScope.others,
+      );
+    } catch (_) {}
 
     final isSwitchingStore =
         existingConfig != null && existingConfig.storeId != store['uuid'];
@@ -436,7 +454,13 @@ class AuthService {
       // null, which would otherwise make the 30-day "never synced" warning
       // fire on every single login regardless of real sync history. A
       // different store, though, has no shared history to carry over.
-      ..lastSyncedAt = isSwitchingStore ? null : existingConfig?.lastSyncedAt;
+      ..lastSyncedAt = isSwitchingStore ? null : existingConfig?.lastSyncedAt
+      // Sound preferences are this physical device's own settings, not the
+      // store's - carry them forward on every login (switch or not) rather
+      // than silently resetting to the class default, which is what a
+      // fresh `StoreConfig()` here would otherwise do every single login.
+      ..scanSoundEnabled = existingConfig?.scanSoundEnabled ?? true
+      ..paymentSoundEnabled = existingConfig?.paymentSoundEnabled ?? true;
 
     final repo = StoreConfigRepository(isar: IsarService.db);
     await repo.save(config);
@@ -506,6 +530,31 @@ class AuthService {
   static Future<bool> get isLoggedIn async {
     final session = SupabaseService.supabaseClient.auth.currentSession;
     return session != null && !session.isExpired;
+  }
+
+  /// Whether this device's session was just invalidated because a
+  /// *different* device logged into this store more recently, as opposed to
+  /// a natural token expiry - the two are otherwise indistinguishable, since
+  /// both surface through gotrue-dart as the same
+  /// `SignOutReason.sessionExpired` (a revoked refresh token fails to
+  /// refresh exactly the same way an actually-expired one does). Used by
+  /// [ShellScreen] to decide which message to show after an involuntary
+  /// sign-out. Best-effort: returns false on any error (e.g. offline) rather
+  /// than throwing, since the caller's fallback (a generic "session
+  /// expired" message) is the safe default when this can't be confirmed.
+  static Future<bool> wasSignedOutByNewDevice({
+    required String storeId,
+    required String deviceId,
+  }) async {
+    try {
+      final result = await SupabaseService.supabaseClient.rpc(
+        'signed_out_by_new_device',
+        params: {'p_store_id': storeId, 'p_device_id': deviceId},
+      );
+      return result as bool? ?? false;
+    } catch (_) {
+      return false;
+    }
   }
 }
 

@@ -2,6 +2,7 @@ import 'package:isar/isar.dart';
 
 import '../../shared/models/credit_customer.dart';
 import '../../shared/models/credit_transaction.dart';
+import '../../shared/models/extra_income.dart';
 import '../../shared/models/product.dart';
 import '../../shared/models/return_item.dart';
 import '../../shared/models/return_record.dart';
@@ -41,13 +42,15 @@ class RestoreService {
     final creditTransactions = await _fetchAll('credit_transactions', storeId);
     final returns = await _fetchAll('returns', storeId);
     final returnItems = await _fetchAll('return_items', storeId);
+    final extraIncome = await _fetchAll('extra_income', storeId);
 
     // A genuinely brand-new store with no history yet - nothing to write,
     // and an empty writeTxn would be pointless.
     if (products.isEmpty &&
         sales.isEmpty &&
         creditCustomers.isEmpty &&
-        returns.isEmpty) {
+        returns.isEmpty &&
+        extraIncome.isEmpty) {
       return;
     }
 
@@ -66,6 +69,9 @@ class RestoreService {
       );
       await _isar.returnItems.putAll(
         returnItems.map(_returnItemFromRow).toList(),
+      );
+      await _isar.extraIncomes.putAll(
+        extraIncome.map(_extraIncomeFromRow).toList(),
       );
     });
   }
@@ -190,4 +196,11 @@ class RestoreService {
     ..unitPrice = (row['unit_price'] as num).toDouble()
     ..quantity = row['quantity'] as int
     ..synced = true;
+
+  ExtraIncome _extraIncomeFromRow(Map<String, dynamic> row) => ExtraIncome()
+    ..uuid = row['uuid'] as String
+    ..amount = (row['amount'] as num).toDouble()
+    ..description = row['description'] as String
+    ..synced = true
+    ..createdAt = _parseLocal(row['created_at'] as String);
 }

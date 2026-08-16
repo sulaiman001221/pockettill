@@ -68,6 +68,7 @@ class _EndOfDayScreenState extends ConsumerState<EndOfDayScreen> {
       'cashRepaymentsCollected': summary.cashRepaymentsCollected,
       'cardRepaymentsCollected': summary.cardRepaymentsCollected,
       'returnsNet': summary.returnsNet,
+      'extraIncomeTotal': summary.extraIncomeTotal,
       'totalExpected': summary.totalExpected,
     });
     if (mounted) setState(() => _printing = false);
@@ -280,6 +281,16 @@ class _EndOfDayContent extends StatelessWidget {
         ),
         const SizedBox(height: 18),
         _PendingRow(amount: summary.creditSales),
+
+        if (summary.extraIncomeTotal > 0) ...[
+          const SizedBox(height: 18),
+          _CalculationRow(
+            label: 'Extra Income',
+            sublabel: 'Airtime, electricity tokens, and other non-sale income',
+            amount: summary.extraIncomeTotal,
+            sign: _RowSign.plus,
+          ),
+        ],
 
         if (summary.hasReturns) ...[
           const SizedBox(height: 18),

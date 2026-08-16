@@ -109,6 +109,8 @@ class SunmiPrinterService implements PrinterService {
     final cardRepayments =
         (summaryData['cardRepaymentsCollected'] as num? ?? 0).toDouble();
     final returnsNet = (summaryData['returnsNet'] as num? ?? 0).toDouble();
+    final extraIncomeTotal =
+        (summaryData['extraIncomeTotal'] as num? ?? 0).toDouble();
     final totalExpected =
         (summaryData['totalExpected'] as num? ?? 0).toDouble();
 
@@ -147,6 +149,9 @@ class SunmiPrinterService implements PrinterService {
     }
     if (cardRepayments > 0) {
       await row('Card Repayments', 'R${cardRepayments.toStringAsFixed(2)}');
+    }
+    if (extraIncomeTotal > 0) {
+      await row('Extra Income', 'R${extraIncomeTotal.toStringAsFixed(2)}');
     }
     if (returnsNet != 0) {
       final label = returnsNet < 0 ? 'Returns (refunds given)' : 'Returns (extra paid)';

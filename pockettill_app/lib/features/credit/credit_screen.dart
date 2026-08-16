@@ -322,7 +322,7 @@ class _CreditScreenState extends ConsumerState<CreditScreen> {
                   ? '-R${(-_totalOwing).toStringAsFixed(0)}'
                   : 'R${_totalOwing.toStringAsFixed(0)}',
               color: creditBalanceColor(_totalOwing),
-              background: creditBalanceColor(_totalOwing).withValues(alpha: 0.1),
+              background: AppTheme.surface,
             ),
           ),
           const SizedBox(width: 10),
@@ -331,7 +331,7 @@ class _CreditScreenState extends ConsumerState<CreditScreen> {
               label: 'Settled Customers',
               value: '${_countFor(_CreditFilter.settled)}',
               color: AppTheme.syncGreen,
-              background: AppTheme.syncGreen.withValues(alpha: 0.12),
+              background: AppTheme.surface,
             ),
           ),
         ],
@@ -509,50 +509,62 @@ class _CustomerListItem extends StatelessWidget {
             ),
             const SizedBox(width: 8),
             if (owing)
-              Text(
-                'Owes ${formatCreditBalance(customer.balance)}',
-                style: const TextStyle(
-                  color: AppTheme.logoutRed,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 13,
-                ),
+              _BalanceBadge(
+                color: AppTheme.logoutRed,
+                label: 'Owes ${formatCreditBalance(customer.balance)}',
               )
             else if (customer.balance < 0)
-              Text(
-                'Credit ${formatCreditBalance(customer.balance)}',
-                style: const TextStyle(
-                  color: AppTheme.syncGreen,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 13,
-                ),
+              _BalanceBadge(
+                color: AppTheme.syncGreen,
+                label: 'Credit ${formatCreditBalance(customer.balance)}',
               )
             else
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    width: 6,
-                    height: 6,
-                    decoration: const BoxDecoration(
-                      color: AppTheme.syncGreen,
-                      shape: BoxShape.circle,
-                    ),
-                  ),
-                  const SizedBox(width: 4),
-                  const Text(
-                    'Settled',
-                    style: TextStyle(
-                      color: AppTheme.syncGreen,
-                      fontWeight: FontWeight.w600,
-                      fontSize: 12,
-                    ),
-                  ),
-                ],
-              ),
+              const _BalanceBadge(color: AppTheme.syncGreen, label: 'Settled'),
             const SizedBox(width: 4),
             const Icon(Icons.chevron_right, color: AppTheme.iconBorder),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Pill badge for a customer's balance state (owes/credit/settled) - same
+/// visual language as [StockStatusBadge] on the Stock screen.
+class _BalanceBadge extends StatelessWidget {
+  const _BalanceBadge({required this.color, required this.label});
+
+  final Color color;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 6,
+            height: 6,
+            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+          ),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: color,
+              fontWeight: FontWeight.w700,
+              fontSize: 12,
+            ),
+          ),
+        ],
       ),
     );
   }

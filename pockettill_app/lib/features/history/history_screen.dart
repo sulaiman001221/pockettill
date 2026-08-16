@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
+import '../../shared/models/extra_income.dart';
 import '../../shared/models/return_record.dart';
 import '../../shared/models/sale.dart';
 import '../../shared/models/sale_item.dart';
@@ -9,6 +10,7 @@ import '../../shared/repositories/repositories.dart';
 import '../../shared/theme/app_theme.dart';
 import '../../shared/widgets/pockettill_app_bar.dart';
 import '../credit/date_range_sheet.dart';
+import 'add_extra_income_sheet.dart';
 import 'end_of_day_screen.dart';
 import 'history_providers.dart';
 import 'return_detail_screen.dart';
@@ -76,12 +78,23 @@ class HistoryScreen extends ConsumerWidget {
     return map;
   }
 
+  Future<void> _addExtraIncome(BuildContext context, WidgetRef ref) async {
+    final added = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => const AddExtraIncomeSheet(),
+    );
+    if (added != true) return;
+    ref.invalidate(filteredExtraIncomeProvider);
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final filter = ref.watch(historyFilterProvider);
     final customRange = ref.watch(historyCustomRangeProvider);
     final salesAsync = ref.watch(filteredSalesProvider);
     final returnsAsync = ref.watch(filteredReturnsProvider);
+    final extraIncomeAsync = ref.watch(filteredExtraIncomeProvider);
     final combined = ref.watch(combinedHistoryProvider);
     final summary = ref.watch(historySummaryProvider);
 
@@ -118,6 +131,7 @@ class HistoryScreen extends ConsumerWidget {
         onRefresh: () => Future.wait([
           ref.refresh(filteredSalesProvider.future),
           ref.refresh(filteredReturnsProvider.future),
+          ref.refresh(filteredExtraIncomeProvider.future),
         ]),
         child: CustomScrollView(
           slivers: [
@@ -127,6 +141,7 @@ class HistoryScreen extends ConsumerWidget {
                 child: _SummaryCard(
                   filterLabel: historyFilterLabel(filter),
                   summary: summary,
+                  onAddExtraIncome: () => _addExtraIncome(context, ref),
                 ),
               ),
             ),
@@ -134,7 +149,9 @@ class HistoryScreen extends ConsumerWidget {
               child: _buildFilterChips(context, ref, filter),
             ),
             const SliverToBoxAdapter(child: SizedBox(height: 16)),
-            if (salesAsync.isLoading || returnsAsync.isLoading)
+            if (salesAsync.isLoading ||
+                returnsAsync.isLoading ||
+                extraIncomeAsync.isLoading)
               const SliverFillRemaining(
                 hasScrollBody: false,
                 child: Center(child: CircularProgressIndicator()),
@@ -151,6 +168,15 @@ class HistoryScreen extends ConsumerWidget {
                 hasScrollBody: false,
                 child: Center(
                   child: Text('Could not load returns: ${returnsAsync.error}'),
+                ),
+              )
+            else if (extraIncomeAsync.hasError)
+              SliverFillRemaining(
+                hasScrollBody: false,
+                child: Center(
+                  child: Text(
+                    'Could not load extra income: ${extraIncomeAsync.error}',
+                  ),
                 ),
               )
             else
@@ -231,7 +257,7 @@ class HistoryScreen extends ConsumerWidget {
                 ),
                 const SizedBox(height: 16),
                 Text(
-                  'No sales or returns for this period',
+                  'No transactions for this period',
                   style: AppTheme.mainTitle,
                   textAlign: TextAlign.center,
                 ),
@@ -262,6 +288,8 @@ class HistoryScreen extends ConsumerWidget {
                   SaleHistoryEntry(:final sale) => sum + sale.total,
                   ReturnHistoryEntry(:final returnRecord) =>
                     sum + returnRecord.netMoneyMovement,
+                  ExtraIncomeHistoryEntry(:final extraIncome) =>
+                    sum + extraIncome.amount,
                 };
               }),
             ),
@@ -285,6 +313,8 @@ class HistoryScreen extends ConsumerWidget {
                     ),
                   ),
                 ),
+                ExtraIncomeHistoryEntry(:final extraIncome) =>
+                  _ExtraIncomeListItem(extraIncome: extraIncome),
               },
             ),
             const SizedBox(height: 8),
@@ -296,10 +326,15 @@ class HistoryScreen extends ConsumerWidget {
 }
 
 class _SummaryCard extends StatelessWidget {
-  const _SummaryCard({required this.filterLabel, required this.summary});
+  const _SummaryCard({
+    required this.filterLabel,
+    required this.summary,
+    required this.onAddExtraIncome,
+  });
 
   final String filterLabel;
   final HistorySummary summary;
+  final VoidCallback onAddExtraIncome;
 
   @override
   Widget build(BuildContext context) {
@@ -357,13 +392,19 @@ class _SummaryCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 12),
-          Text(
-            'R${summary.total.toStringAsFixed(2)}',
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 32,
-              fontWeight: FontWeight.bold,
-            ),
+          Row(
+            children: [
+              Text(
+                'R${summary.total.toStringAsFixed(2)}',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 32,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(width: 10),
+              _AddExtraIncomeButton(onTap: onAddExtraIncome),
+            ],
           ),
           const SizedBox(height: 20),
           Row(
@@ -392,6 +433,30 @@ class _SummaryCard extends StatelessWidget {
             ],
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Small circular "+" button next to the Total Revenue amount - opens
+/// [AddExtraIncomeSheet] for recording one-off income that isn't a sale.
+class _AddExtraIncomeButton extends StatelessWidget {
+  const _AddExtraIncomeButton({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.white.withValues(alpha: 0.2),
+      shape: const CircleBorder(),
+      child: InkWell(
+        customBorder: const CircleBorder(),
+        onTap: onTap,
+        child: const Padding(
+          padding: EdgeInsets.all(6),
+          child: Icon(Icons.add, color: Colors.white, size: 20),
+        ),
       ),
     );
   }
@@ -672,6 +737,141 @@ class _ReturnListItem extends StatelessWidget {
                       ],
                     ),
                   ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// An extra income entry's own row in the list - visually distinct from a
+/// sale (green accent, "+" icon, "Extra Income" badge) since it isn't one.
+/// Tapping opens [AddExtraIncomeSheet] in edit mode (edit or delete) - no
+/// separate detail screen, since Amount/Description/Date is everything
+/// there is to show, unlike a sale with line items or a return with a
+/// linked sale.
+class _ExtraIncomeListItem extends ConsumerWidget {
+  const _ExtraIncomeListItem({required this.extraIncome});
+
+  final ExtraIncome extraIncome;
+
+  Future<void> _edit(BuildContext context, WidgetRef ref) async {
+    final changed = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => AddExtraIncomeSheet(existing: extraIncome),
+    );
+    if (changed != true) return;
+    ref.invalidate(filteredExtraIncomeProvider);
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final timeText = DateFormat('HH:mm').format(extraIncome.createdAt);
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 40,
+            child: Padding(
+              padding: const EdgeInsets.only(top: 16),
+              child: Text(timeText, style: AppTheme.bodySubtitle),
+            ),
+          ),
+          Expanded(
+            // The rounded shadowed background lives on this outer Container
+            // (unclipped, so the shadow isn't cut off) - the Material below
+            // is transparency-only and just supplies the ink ripple, clipped
+            // to the same radius so it doesn't overflow the card's corners.
+            // Layering the ripple's own opaque white *inside* the shadowed
+            // box (as an earlier version of this did) doubled up the two
+            // backgrounds and showed as a faint white seam along the top
+            // edge.
+            child: Container(
+              decoration: BoxDecoration(
+                color: AppTheme.surface,
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.04),
+                    offset: const Offset(0, 2),
+                    blurRadius: 4,
+                  ),
+                ],
+              ),
+              child: Material(
+                type: MaterialType.transparency,
+                borderRadius: BorderRadius.circular(12),
+                clipBehavior: Clip.antiAlias,
+                child: InkWell(
+                  onTap: () => _edit(context, ref),
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Row(
+                    children: [
+                      Container(
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          color: AppTheme.syncGreen.withValues(alpha: 0.12),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.add_circle_outline,
+                          color: AppTheme.syncGreen,
+                          size: 20,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              '+R${extraIncome.amount.toStringAsFixed(2)}',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                                color: AppTheme.syncGreen,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              extraIncome.description,
+                              style: AppTheme.bodySubtitle,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 3,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppTheme.syncGreen.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(9999),
+                        ),
+                        child: const Text(
+                          'Extra Income',
+                          style: TextStyle(
+                            color: AppTheme.syncGreen,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ],
+                    ),
+                  ),
                 ),
               ),
             ),

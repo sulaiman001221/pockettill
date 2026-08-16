@@ -27,6 +27,7 @@ dependencies:
   fl_chart: ^0.68.0
   url_launcher: ^6.3.1
   audioplayers: ^6.1.0
+  http: ^1.2.2
 
 dev_dependencies:
   flutter_test:
@@ -45,6 +46,7 @@ flutter:
     - assets/images/pockettill_icon_no_text.png
     - assets/images/pockettill_icon_padded.png
     - assets/sounds/payment_success.mp3
+    - assets/sounds/scan_beep.wav
 
 flutter_launcher_icons:
   android: true

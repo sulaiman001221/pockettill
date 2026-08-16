@@ -3,12 +3,14 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../core/auth/auth_service.dart';
 import '../../core/database/isar_service.dart';
 import '../../core/supabase/supabase_service.dart';
 import '../../shared/repositories/store_config_repository.dart';
 import '../../shared/theme/app_theme.dart';
 import '../../shared/widgets/pockettill_app_bar.dart';
 import '../auth/founding_store_screen.dart';
+import '../auth/login_screen.dart';
 import '../auth/welcome_screen.dart';
 import '../sales/sales_screen.dart';
 import 'app_drawer.dart';
@@ -102,6 +104,30 @@ class _ShellScreenState extends State<ShellScreen> {
       await repo.save(config);
     }
     if (!mounted) return;
+
+    // Both a revoked-by-new-device session and a naturally expired one
+    // surface identically as SignOutReason.sessionExpired (see
+    // AuthService.wasSignedOutByNewDevice) - this is the only way to tell
+    // them apart, so it's checked before deciding which screen/message to
+    // show.
+    final kickedByNewDevice =
+        config != null && config.storeId.isNotEmpty
+        ? await AuthService.wasSignedOutByNewDevice(
+            storeId: config.storeId,
+            deviceId: config.deviceId,
+          )
+        : false;
+    if (!mounted) return;
+
+    if (kickedByNewDevice) {
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(
+          builder: (_) => const LoginScreen(showKickedByOtherDeviceBanner: true),
+        ),
+        (route) => false,
+      );
+      return;
+    }
 
     await showDialog<void>(
       context: context,

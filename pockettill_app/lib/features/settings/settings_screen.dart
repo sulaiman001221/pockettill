@@ -196,6 +196,18 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     if (mounted) setState(() {});
   }
 
+  /// Local-only preference (Settings > Sound) - deliberately not
+  /// [_saveConfig], which also enqueues a `store_profile` sync event; a
+  /// sound toggle has nothing to do with the store's own profile and should
+  /// never touch the network.
+  Future<void> _saveSoundPreference(void Function(StoreConfig config) mutate) async {
+    final config = _config;
+    if (config == null) return;
+    mutate(config);
+    await ref.read(storeConfigRepositoryProvider).save(config);
+    if (mounted) setState(() {});
+  }
+
   /// Queues a `store_profile` sync event so the edit reaches the `stores`
   /// row on the next sync. A no-op before registration - there's no store
   /// row yet to update.
@@ -434,6 +446,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 ],
                 const SizedBox(height: 16),
                 _buildDeviceInfoCard(),
+                const SizedBox(height: 16),
+                _buildSoundCard(),
                 const SizedBox(height: 16),
                 _buildSupportCard(),
                 const SizedBox(height: 16),
@@ -874,6 +888,43 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     );
   }
 
+  /// Scan sound only shows on a phone - Sunmi's hardware scanner already
+  /// beeps on its own, so a toggle for it here would control a sound that
+  /// never plays.
+  Widget _buildSoundCard() {
+    final config = _config;
+    final showScanSoundToggle = !HardwareDetector.isSunmiDevice();
+
+    return _SettingsCard(
+      child: Column(
+        children: [
+          if (showScanSoundToggle) ...[
+            _ToggleRow(
+              label: 'Scan Sound',
+              subtitle: 'Play a sound when a barcode is scanned',
+              value: config?.scanSoundEnabled ?? true,
+              onChanged: (value) => _saveSoundPreference(
+                (c) => c.scanSoundEnabled = value,
+              ),
+            ),
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 12),
+              child: Divider(color: AppTheme.divider, height: 1),
+            ),
+          ],
+          _ToggleRow(
+            label: 'Payment Success Sound',
+            subtitle: 'Play a sound when a sale is completed',
+            value: config?.paymentSoundEnabled ?? true,
+            onChanged: (value) => _saveSoundPreference(
+              (c) => c.paymentSoundEnabled = value,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildSupportCard() {
     return _SettingsCard(
       padding: EdgeInsets.zero,
@@ -1111,6 +1162,55 @@ class _EditableRow extends StatelessWidget {
           if (!isLast) const Divider(color: AppTheme.divider, height: 1),
         ],
       ),
+    );
+  }
+}
+
+/// A label + subtitle with a toggle switch on the trailing edge - used for
+/// the Sound section, matching [_EditableRow]'s layout otherwise.
+class _ToggleRow extends StatelessWidget {
+  const _ToggleRow({
+    required this.label,
+    required this.subtitle,
+    required this.value,
+    required this.onChanged,
+  });
+
+  final String label;
+  final String subtitle;
+  final bool value;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: const TextStyle(
+                  color: AppTheme.textPrimary,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                subtitle,
+                style: const TextStyle(
+                  color: AppTheme.textSecondary,
+                  fontSize: 12,
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(width: 12),
+        Switch(value: value, onChanged: onChanged),
+      ],
     );
   }
 }
