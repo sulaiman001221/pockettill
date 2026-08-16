@@ -526,10 +526,40 @@ class AuthService {
     }
   }
 
-  /// Whether there's a live, unexpired Supabase session right now.
+  /// Whether this device still has a usable session.
+  ///
+  /// Deliberately not just `session != null && !session.isExpired`:
+  /// [Session.isExpired] describes the *access* token, which lives about an
+  /// hour, while the refresh token behind it lives far longer. Treating an
+  /// expired access token as "logged out" signed users out of a perfectly
+  /// good session any time the app had been closed longer than the access
+  /// token's lifetime - and it self-corrected on the *next* open (Supabase
+  /// refreshes in the background at startup, so by then the stored token
+  /// was fresh again), which is exactly the "login screen once, then fine"
+  /// behaviour that made it look intermittent.
+  ///
+  /// So an expired access token is refreshed here before deciding, and only
+  /// a definitively rejected refresh token counts as signed out.
   static Future<bool> get isLoggedIn async {
-    final session = SupabaseService.supabaseClient.auth.currentSession;
-    return session != null && !session.isExpired;
+    final auth = SupabaseService.supabaseClient.auth;
+    final session = auth.currentSession;
+    if (session == null) return false;
+    if (!session.isExpired) return true;
+
+    try {
+      final response = await auth.refreshSession();
+      return response.session != null;
+    } on AuthRetryableFetchException {
+      // Offline/unreachable - can't confirm either way. PocketTill works
+      // fully offline once set up, so a connectivity blip must never eject
+      // a user whose refresh token is almost certainly still valid; the
+      // next successful refresh (or a real rejection) settles it later.
+      return true;
+    } catch (_) {
+      // The refresh token itself was rejected - revoked (e.g. by a login on
+      // another device) or genuinely expired. A real sign-out.
+      return false;
+    }
   }
 
   /// Whether this device's session was just invalidated because a
@@ -545,16 +575,11 @@ class AuthService {
   static Future<bool> wasSignedOutByNewDevice({
     required String storeId,
     required String deviceId,
-  }) async {
-    try {
-      final result = await SupabaseService.supabaseClient.rpc(
-        'signed_out_by_new_device',
-        params: {'p_store_id': storeId, 'p_device_id': deviceId},
-      );
-      return result as bool? ?? false;
-    } catch (_) {
-      return false;
-    }
+  }) {
+    return SupabaseService.isDisplacedByAnotherDevice(
+      storeId: storeId,
+      deviceId: deviceId,
+    );
   }
 }
 

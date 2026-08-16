@@ -1,11 +1,13 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/auth/auth_service.dart';
 import '../../core/database/isar_service.dart';
 import '../../core/supabase/supabase_service.dart';
+import '../../core/sync/sync_service.dart';
 import '../../shared/repositories/store_config_repository.dart';
 import '../../shared/theme/app_theme.dart';
 import '../../shared/widgets/pockettill_app_bar.dart';
@@ -23,16 +25,23 @@ import 'app_drawer.dart';
 /// once its close animation finishes, so anything stored there is lost the
 /// next time the drawer opens. [ShellScreen] persists for the app's whole
 /// lifetime, so state lives here instead.
-class ShellScreen extends StatefulWidget {
+class ShellScreen extends ConsumerStatefulWidget {
   const ShellScreen({super.key});
 
   @override
-  State<ShellScreen> createState() => _ShellScreenState();
+  ConsumerState<ShellScreen> createState() => _ShellScreenState();
 }
 
-class _ShellScreenState extends State<ShellScreen> {
+class _ShellScreenState extends ConsumerState<ShellScreen> {
   String _activeRoute = 'sales';
   StreamSubscription<AuthState>? _authSubscription;
+  StreamSubscription<void>? _displacedSubscription;
+
+  /// Two independent signals can report the same sign-out (a sync cycle
+  /// spotting the displacement, then the auth listener seeing the refresh
+  /// fail) - without this, the second one would stack a duplicate dialog
+  /// and navigation on top of the first.
+  bool _signingOut = false;
 
   @override
   void initState() {
@@ -44,6 +53,15 @@ class _ShellScreenState extends State<ShellScreen> {
     // start silently failing to sync forever with no explanation.
     _authSubscription = SupabaseService.supabaseClient.auth.onAuthStateChange
         .listen(_onAuthStateChange);
+    // The auth listener above only fires once a token refresh actually
+    // fails, which can be up to an hour after another device displaced this
+    // one (the access token already on this device stays valid until it
+    // expires). SyncService notices far sooner - see its
+    // displacedByAnotherDevice doc comment.
+    _displacedSubscription = ref
+        .read(syncServiceProvider)
+        .displacedByAnotherDevice
+        .listen((_) => unawaited(_handleSignedOut(kickedByNewDevice: true)));
     unawaited(_checkFoundingStoreQualification());
   }
 
@@ -93,33 +111,53 @@ class _ShellScreenState extends State<ShellScreen> {
       // mode this dialog's wording doesn't apply to.
       return;
     }
-    unawaited(_handleInvoluntarySignOut());
+    unawaited(_handleSignedOut());
   }
 
-  Future<void> _handleInvoluntarySignOut() async {
+  /// Signs this device out locally and explains why.
+  ///
+  /// [kickedByNewDevice] null means "work it out" - the auth-listener path
+  /// can't tell a revoked session from a naturally expired one, since both
+  /// surface as `SignOutReason.sessionExpired`, so it has to ask the server.
+  /// The sync path already knows, and passes true.
+  Future<void> _handleSignedOut({bool? kickedByNewDevice}) async {
+    if (_signingOut) return;
+    _signingOut = true;
+
     final repo = StoreConfigRepository(isar: IsarService.db);
     final config = await repo.get();
     if (config != null) {
       config.isLoggedIn = false;
       await repo.save(config);
     }
+
+    // Only reached via the sync path, where the session hasn't actually
+    // been torn down on this client yet - the server revoked it, but this
+    // device still holds a usable access token. Clearing it locally is what
+    // makes the sign-out real here.
+    if (kickedByNewDevice == true) {
+      try {
+        await SupabaseService.supabaseClient.auth.signOut(
+          scope: SignOutScope.local,
+        );
+      } catch (_) {
+        // Already gone, or no connectivity to confirm - the local
+        // StoreConfig flag above is what actually gates re-entry.
+      }
+    }
     if (!mounted) return;
 
-    // Both a revoked-by-new-device session and a naturally expired one
-    // surface identically as SignOutReason.sessionExpired (see
-    // AuthService.wasSignedOutByNewDevice) - this is the only way to tell
-    // them apart, so it's checked before deciding which screen/message to
-    // show.
-    final kickedByNewDevice =
-        config != null && config.storeId.isNotEmpty
-        ? await AuthService.wasSignedOutByNewDevice(
-            storeId: config.storeId,
-            deviceId: config.deviceId,
-          )
-        : false;
+    final displaced =
+        kickedByNewDevice ??
+        (config != null && config.storeId.isNotEmpty
+            ? await AuthService.wasSignedOutByNewDevice(
+                storeId: config.storeId,
+                deviceId: config.deviceId,
+              )
+            : false);
     if (!mounted) return;
 
-    if (kickedByNewDevice) {
+    if (displaced) {
       Navigator.of(context).pushAndRemoveUntil(
         MaterialPageRoute(
           builder: (_) => const LoginScreen(showKickedByOtherDeviceBanner: true),
@@ -161,6 +199,7 @@ class _ShellScreenState extends State<ShellScreen> {
   @override
   void dispose() {
     _authSubscription?.cancel();
+    _displacedSubscription?.cancel();
     super.dispose();
   }
 

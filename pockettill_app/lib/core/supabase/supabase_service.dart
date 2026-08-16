@@ -166,6 +166,30 @@ class SupabaseService {
     });
   }
 
+  /// Whether a *different* device has since become this store's active
+  /// device - i.e. someone logged into this account elsewhere and this
+  /// device has been displaced.
+  ///
+  /// A `SECURITY DEFINER` RPC rather than a direct `stores` read so it also
+  /// answers for a device whose session has already been revoked (no valid
+  /// JWT left to satisfy RLS with). Best-effort: any failure returns false,
+  /// since wrongly reporting "you were displaced" would sign out a
+  /// legitimate user over what might just be a connectivity blip.
+  static Future<bool> isDisplacedByAnotherDevice({
+    required String storeId,
+    required String deviceId,
+  }) async {
+    try {
+      final result = await supabaseClient.rpc(
+        'signed_out_by_new_device',
+        params: {'p_store_id': storeId, 'p_device_id': deviceId},
+      );
+      return result as bool? ?? false;
+    } catch (_) {
+      return false;
+    }
+  }
+
   /// Fetches verified shared-catalogue products created after [since].
   static Future<List<Map<String, dynamic>>> pullCatalogueUpdates(
     DateTime since,
