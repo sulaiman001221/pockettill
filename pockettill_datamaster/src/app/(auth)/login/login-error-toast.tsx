@@ -10,8 +10,15 @@ export function LoginErrorToast() {
   const pathname = usePathname();
 
   useEffect(() => {
-    if (searchParams.get("error") === "link_expired") {
+    const error = searchParams.get("error");
+
+    if (error === "link_expired") {
       toast.error("That link has expired or was already used. Request a new one.");
+      router.replace(pathname);
+    } else if (error === "invite_expired") {
+      toast.error(
+        "Your invite link has expired or was already used. Ask an admin to send you a new invite from Admin Accounts."
+      );
       router.replace(pathname);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
