@@ -1,0 +1,24 @@
+version: 2
+updates:
+  # pockettill_app - Flutter/Dart packages (mobile_scanner, sunmi_printer_plus,
+  # supabase_flutter, etc.) - this is what surfaces plugin deprecation notices
+  # like the Kotlin Gradle Plugin warning from the release build.
+  - package-ecosystem: "pub"
+    directory: "/pockettill_app"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+
+  # pockettill_datamaster - Next.js admin dashboard
+  - package-ecosystem: "npm"
+    directory: "/pockettill_datamaster"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+
+  # pockettill_landing - Next.js marketing site
+  - package-ecosystem: "npm"
+    directory: "/pockettill_landing"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
