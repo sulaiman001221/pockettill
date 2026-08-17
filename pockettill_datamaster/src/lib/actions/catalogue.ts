@@ -4,6 +4,7 @@ import { revalidatePath, revalidateTag } from "next/cache";
 
 import { logAudit } from "@/lib/audit";
 import { canManageStores, getCurrentAdmin } from "@/lib/auth";
+import { formatProductMass, formatProductName } from "@/lib/catalogue-format";
 import { CATALOGUE_CACHE_TAG } from "@/lib/data/catalogue";
 import { createServiceRoleClient } from "@/lib/supabase/server";
 
@@ -30,21 +31,28 @@ export async function approveProduct(barcode: string, edits: ProductEdits): Prom
     return { error: err instanceof Error ? err.message : "Not authorized." };
   }
 
+  // Authoritative formatting pass: the panel pre-formats on open so the
+  // admin isn't surprised by a diff, but this is the only step that can't
+  // be bypassed by client state — it re-runs on whatever the admin actually
+  // submitted, catching manual edits that don't follow the convention.
+  const name = formatProductName(edits.name);
+  const mass = formatProductMass(edits.mass);
+
   const supabase = createServiceRoleClient();
   const { error } = await supabase
     .from("products")
     .update({
       is_verified: true,
-      name: edits.name,
+      name,
       category: edits.category,
-      mass: edits.mass,
+      mass,
       verified_at: new Date().toISOString(),
     })
     .eq("barcode", barcode);
 
   if (error) return { error: error.message };
 
-  await logAudit(admin.id, "product.approved", barcode, { name: edits.name, category: edits.category });
+  await logAudit(admin.id, "product.approved", barcode, { name, category: edits.category });
 
   revalidateTag(CATALOGUE_CACHE_TAG);
   revalidatePath("/product-catalogue");
