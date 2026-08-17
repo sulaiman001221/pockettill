@@ -4,6 +4,7 @@ import { useEffect, useState, useTransition } from "react";
 import { toast } from "sonner";
 
 import { approveProduct, updateVerifiedProduct } from "@/lib/actions/catalogue";
+import { formatProductMass, formatProductName } from "@/lib/catalogue-format";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -47,8 +48,12 @@ export function ProductPanel({
 
   useEffect(() => {
     if (item) {
-      setName(item.name);
-      setMass(item.mass);
+      // Approving is the point where a product enters the shared catalogue,
+      // so the admin sees (and can still hand-correct) the canonical form
+      // up front rather than being surprised by a diff after saving. Editing
+      // an already-verified product shows the stored value as-is.
+      setName(mode === "approve" ? formatProductName(item.name) : item.name);
+      setMass(mode === "approve" ? formatProductMass(item.mass) : item.mass);
       if (item.category && categories.includes(item.category)) {
         setCategorySelect(item.category);
         setCustomCategory("");
