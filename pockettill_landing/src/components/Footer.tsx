@@ -110,6 +110,13 @@ export default function Footer() {
           </div>
 
           <a
+            href={`mailto:${siteConfig.email}`}
+            className="mt-4 block text-sm text-white/75 hover:text-white"
+          >
+            {siteConfig.email}
+          </a>
+
+          <a
             href={siteConfig.playStoreUrl}
             target="_blank"
             rel="noopener noreferrer"
