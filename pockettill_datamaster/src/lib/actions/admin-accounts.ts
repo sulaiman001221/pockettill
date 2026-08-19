@@ -44,8 +44,12 @@ export async function inviteAdmin(
 
   const supabase = createServiceRoleClient();
 
+  // This becomes the `next` destination baked into the Invite User email
+  // template's /auth/confirm link (via {{ .RedirectTo }}) — see
+  // src/app/auth/confirm/route.ts. It is NOT the literal link the admin
+  // receives; the template builds that from {{ .TokenHash }}/{{ .Type }}.
   const { data, error } = await supabase.auth.admin.inviteUserByEmail(email, {
-    redirectTo: `${siteOrigin()}/auth/callback?next=/reset-password`,
+    redirectTo: `${siteOrigin()}/set-password`,
   });
   if (error || !data.user) {
     return { error: error?.message ?? "Failed to send invite." };
