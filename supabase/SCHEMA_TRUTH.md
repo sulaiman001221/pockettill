@@ -262,9 +262,35 @@ that was backfilled.
 
 Logged actions: `admin.invited`, `admin.role_changed`, `admin.deactivated`/
 `admin.reactivated`, `store.deactivated`/`store.reactivated`,
-`store.founding_toggled`, `product.approved`, `product.rejected`. Product
+`store.founding_toggled`, `product.approved`, `product.rejected`,
+`support.status_changed`, `support.notes_updated`. Product
 edit/unverify (Verified Catalogue's Edit/Remove) are **not** logged — only
 the actions explicitly requested were wired up.
+
+### `support_queries`
+Contact-form enquiries from the **pockettill_landing** marketing site, shown
+in pockettill_datamaster's Support section. Added 2026-08-14. RLS enabled
+with **zero policies** (same deny-all posture as `audit_log`) — the only
+writer is the landing site's `/api/contact` route and the only reader is the
+dashboard, both via service-role. There is deliberately no `anon` insert
+policy, so the table is not a public write target.
+
+| column | type | notes |
+|---|---|---|
+| id | uuid PK | `gen_random_uuid()` |
+| name | text | submitter's name |
+| contact | text | email **or** SA phone, validated in `pockettill_landing/src/lib/validate.ts` (shared by the browser and the API route) |
+| message | text | capped at 4000 chars by the API route |
+| status | text | `new` \| `in_progress` \| `resolved`, CHECK-constrained, default `new` |
+| source | text | default `landing` — room for future intake channels |
+| internal_notes | text | nullable, admin-only, never shown to the submitter |
+| handled_by | uuid | nullable, FK `admin_users(id)` `on delete set null` — stamped when status leaves `new`, cleared if pushed back to `new` |
+| handled_at | timestamptz | nullable, set/cleared alongside `handled_by` |
+| created_at | timestamptz | default `now()` |
+
+Indexed on `created_at desc`, `(status, created_at desc)`, and `handled_by`.
+Viewers can read enquiries but not change status or notes
+(`canManageStores()` gate in `src/lib/actions/support.ts`).
 
 ## Naming gotchas for pockettill_datamaster
 
@@ -410,6 +436,8 @@ replaced.
 | return_items | `return_items_store_all` | ALL | `store_id = current_store_id()` |
 | risk_log | `risk_log_store_all` | ALL | `store_id = current_store_id()` |
 | admin_users | `admin_users_select_own` | SELECT | `id = auth.uid()` |
+| audit_log | *(none — deny all)* | — | service-role only |
+| support_queries | *(none — deny all)* | — | service-role only |
 
 `catalogue_products` has **no** INSERT/UPDATE/DELETE policy for
 `anon`/`authenticated` at all, by design — only `service_role`
