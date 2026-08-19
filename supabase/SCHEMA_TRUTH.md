@@ -37,11 +37,19 @@ Owning-account row per store. One row per Supabase Auth user (via
 | otp_channel | text | default `'whatsapp'` — which channel a new-device login challenges the owner on |
 | qualification_checked_at | timestamptz | nullable |
 | qualification_sales_count | integer | nullable |
+| active_device_id | text | nullable — added 2026-08-16, single-active-device enforcement. See the naming-collision note under `devices` below before assuming this is the same feature as `devices.verified_at`. |
 
 ### `products`
-Shared cross-store catalogue **and** per-store stock/pricing in one table
-(no separate `store_products` table — that design was drafted once, in the
-now-deleted root `schema.sql`, but never built).
+A store's own private inventory — **only** that, as of 2026-08-17. Until
+then this table also doubled as the shared cross-store catalogue
+(`is_verified`/`verified_at` columns, a second RLS policy exposing verified
+rows to every store); that conflation meant a store deleting its own
+product could destroy catalogue data other stores' barcode lookups
+depended on, so the catalogue was split out into its own table — see
+`catalogue_products` below. `store_id` went back to `NOT NULL` in the same
+migration (it had briefly been made nullable to support an interim
+"detach instead of delete" workaround, since removed along with the
+`release_verified_product` function that implemented it).
 
 | column | type | notes |
 |---|---|---|
@@ -55,11 +63,30 @@ now-deleted root `schema.sql`, but never built).
 | cost_price | numeric | nullable |
 | stock | integer | |
 | low_stock_threshold | integer | default 5 |
-| is_verified | boolean | default false — gates cross-store catalogue visibility |
 | created_at | timestamptz | |
 | updated_at | timestamptz | nullable |
-| store_id | uuid | FK `stores(uuid)`, nullable, **populated on every row** |
-| verified_at | timestamptz | nullable — added 2026-08-09; set when a product is approved via pockettill_datamaster, null for anything verified before that column existed |
+| store_id | uuid | FK `stores(uuid)`, **NOT NULL** |
+
+### `catalogue_products`
+The shared, admin-moderated cross-store catalogue. Added 2026-08-17,
+split out of `products` (see above). One row per barcode — `barcode` is
+the primary key, not a separate `uuid`. No `store_id` ownership: a
+store's authenticated client has **read-only** access via RLS (see
+below), and only pockettill_datamaster's service-role client can write to
+it. This is what makes the catalogue structurally safe from a store's own
+inventory management, not just conditionally protected by app-code
+checks.
+
+| column | type | notes |
+|---|---|---|
+| barcode | text PK | |
+| name | text | |
+| mass | text | nullable |
+| category | text | nullable |
+| verified_at | timestamptz | default `now()` |
+| submitted_by_store_id | uuid | FK `stores(uuid)` **`on delete set null`**, nullable — attribution only (which store's submission this originated from, for admin reference), never used to grant that store any special access to this row |
+| created_at | timestamptz | default `now()` |
+| updated_at | timestamptz | nullable |
 
 ### `sales`
 | column | type | notes |
@@ -119,6 +146,15 @@ logged into, each verified independently (as of 2026-08-05; previously
 device per store — replaced because it couldn't represent one device
 holding trust for more than one store account at a time).
 
+**Naming collision, read carefully**: `stores.active_device_id` was
+re-added 2026-08-16, undocumented here until now, for an entirely
+different purpose than the column this table's PK migration removed -
+single-active-device enforcement (kicking every other device's session on
+a fresh login), not device-trust/OTP-challenge tracking, which stays on
+this `devices` table exactly as described above. The two features are
+independent and both currently exist; don't assume one replaced the
+other just because the column name repeats.
+
 | column | type | notes |
 |---|---|---|
 | id | text | part of composite PK — stable per physical device install, not per store |
@@ -168,6 +204,26 @@ PK: `(id, store_id)`.
 | product_name | text | |
 | unit_price | numeric | |
 | quantity | integer | |
+
+### `risk_log`
+Append-only audit trail of potentially suspicious stock/credit activity
+(manual stock reductions, product deletions, price changes, manual credit
+additions, credit write-offs), surfaced on the Flutter app's Risk Log
+screen (Stock screen's ⋮ menu) for the store owner to review. Added
+2026-08-19. Not documented until now: `extra_income` (added 2026-08-15,
+same `store_id`-owned shape) is also missing from this file — a
+pre-existing gap, not introduced by this entry.
+
+| column | type | notes |
+|---|---|---|
+| uuid | uuid PK | `gen_random_uuid()` |
+| type | text | `manual_stock_reduction` \| `product_deleted` \| `price_changed` \| `manual_credit` \| `credit_writeoff` |
+| description | text | |
+| before_value | text | nullable — freeform display string, not necessarily a raw number |
+| after_value | text | nullable |
+| entity_name | text | product or customer name |
+| created_at | timestamptz | |
+| store_id | uuid | FK `stores(uuid)`, nullable, **populated on every row** |
 
 ### `admin_users`
 Backs the **pockettill_datamaster** admin dashboard, not the Flutter app. A
@@ -274,43 +330,43 @@ that stops being true.
 Verification Queue — one row per barcode across all stores' unverified
 submissions, deduplicated. Uses `mode() within group` (most-frequent-value)
 so the approve panel can pre-fill with the most common submission, not just
-an arbitrary or alphabetically-first one.
+an arbitrary or alphabetically-first one. Redefined 2026-08-17 for the
+`catalogue_products` split: "pending" is no longer a per-row flag, it's "a
+barcode some store has in its own inventory that doesn't yet have a
+canonical `catalogue_products` entry" — which also means unverifying an
+entry (deleting it from `catalogue_products`) correctly makes any store's
+existing submission for that barcode reappear here for re-review, same as
+the old flag-flip behavior did.
 
 ```sql
 select
-  barcode,
-  array_agg(distinct name) as name_variations,
-  array_agg(distinct category) as category_variations,
-  count(distinct store_id) as store_count,
-  min(created_at) as first_submitted,
-  mode() within group (order by name) as most_common_name,
-  mode() within group (order by category) as most_common_category,
-  mode() within group (order by mass) as most_common_mass
-from public.products
-where is_verified = false
-group by barcode;
+  p.barcode,
+  array_agg(distinct p.name) as name_variations,
+  array_agg(distinct p.category) as category_variations,
+  count(distinct p.store_id) as store_count,
+  min(p.created_at) as first_submitted,
+  mode() within group (order by p.name) as most_common_name,
+  mode() within group (order by p.category) as most_common_category,
+  mode() within group (order by p.mass) as most_common_mass
+from public.products p
+where not exists (
+  select 1 from public.catalogue_products cp where cp.barcode = p.barcode
+)
+group by p.barcode;
 ```
 
 ### `verified_catalogue_items`
-`security_invoker = true`. Added 2026-08-09, same shape idea as above but
-for `is_verified = true` rows — one row per barcode. `name`/`category` are
-forced uniform across every row sharing a barcode by the approve action (a
-single `UPDATE ... WHERE barcode = X`), so `mode()` on them is really just
-reading that shared value back; `mass` genuinely can still vary per store
-(different pack sizes), so `mode()` there picks the most common one for
-display purposes only — it is not written back anywhere.
+`security_invoker = true`. Added 2026-08-09; redefined 2026-08-17 as a
+straight passthrough over `catalogue_products` (which is already one row
+per barcode) rather than an aggregation over `products` — the old
+`store_count`/multi-row-mode() logic no longer applies now that
+verification is a single canonical admin action per barcode, not a
+per-store flag. `pockettill_datamaster`'s `VerifiedCatalogueItem` type
+dropped `storeCount` accordingly (it was already unrendered in the UI).
 
 ```sql
-select
-  barcode,
-  mode() within group (order by name) as name,
-  mode() within group (order by category) as category,
-  mode() within group (order by mass) as mass,
-  max(verified_at) as verified_at,
-  count(distinct store_id) as store_count
-from public.products
-where is_verified = true
-group by barcode;
+select barcode, name, category, mass, verified_at, submitted_by_store_id
+from public.catalogue_products;
 ```
 
 ### `sales_daily_stats`
@@ -343,7 +399,7 @@ replaced.
 | stores | `stores_insert` | INSERT | check: `auth_user_id = auth.uid()` |
 | stores | `stores_update` | UPDATE | `auth_user_id = auth.uid()` |
 | products | `products_store_all` | ALL | `store_id = current_store_id()` |
-| products | `products_verified_catalogue` | SELECT | `is_verified = true` |
+| catalogue_products | `catalogue_products_select` | SELECT (to `authenticated`) | `true` |
 | sales | `sales_store_all` | ALL | `store_id = current_store_id()` |
 | sale_items | `sale_items_store_all` | ALL | `store_id = current_store_id()` |
 | credit_customers | `credit_customers_store_all` | ALL | `store_id = current_store_id()` |
@@ -352,12 +408,16 @@ replaced.
 | sync_log | `sync_log_store_all` | ALL | `store_id = current_store_id()` |
 | returns | `returns_store_all` | ALL | `store_id = current_store_id()` |
 | return_items | `return_items_store_all` | ALL | `store_id = current_store_id()` |
+| risk_log | `risk_log_store_all` | ALL | `store_id = current_store_id()` |
 | admin_users | `admin_users_select_own` | SELECT | `id = auth.uid()` |
 
-`products` has **two** permissive policies (combined with OR): a store
-either owns the row, or the row is a verified catalogue entry anyone can
-read — this is what lets barcode-scan autofill pull in another store's
-verified product data.
+`catalogue_products` has **no** INSERT/UPDATE/DELETE policy for
+`anon`/`authenticated` at all, by design — only `service_role`
+(pockettill_datamaster's admin actions, which bypass RLS entirely) can
+write to it. This is what lets barcode-scan autofill read another store's
+(or admin-approved) catalogue data via a plain `authenticated` SELECT,
+while making the catalogue structurally un-writable from a store's own
+client, not just conditionally protected.
 
 ## RPC functions
 
@@ -373,6 +433,7 @@ they don't need elevated privilege, so they run under the caller's own RLS.
 - **`phone_has_account(check_phone text) returns boolean`** — true only when the phone has **both** an `auth.users` row and a matching `stores` row (as of 2026-08-02; previously just checked `auth.users`, which permanently blocked re-registration for a phone whose registration was interrupted before its `stores` row was created). Checks `auth.users.phone` (stored **without** a leading `+`) against `ltrim(check_phone, '+')`, so the app can pass a `+27...`-formatted number directly.
 - **`median_sync_gap_hours() returns numeric`** — `security invoker`, `set search_path = ''`. Added 2026-08-07 for pockettill_datamaster's Sync Health summary stat. Platform-wide median of the gaps (in hours) between consecutive `sync_log` rows for the same store (`lag()` partitioned by `store_id`). Runs under the caller's RLS, so calling it as `anon`/`authenticated` only aggregates over rows that role can see — the dashboard calls it via the service-role client to get the true platform-wide figure.
 - **`category_sales_stats(days integer) returns table(category text, total_quantity bigint)`** — `security invoker`, `set search_path = ''`. Added 2026-08-09 for pockettill_datamaster's Analytics page. Joins `sale_items` → `sales` (for the date bound) → `products` (for category) in raw SQL, sidestepping the missing FK on `sale_items` noted above. `days` is how far back from `now()` to include.
+- **`signed_out_by_new_device(p_store_id uuid, p_device_id text) returns boolean`** — `security definer`, `set search_path = 'public'`. Added 2026-08-16. Lets a device that's just been signed out (no valid JWT left) distinguish "revoked because a different device logged into this account" from a natural session expiry — both surface identically client-side as `SignOutReason.sessionExpired`, so this is the only way to tell them apart. Compares `stores.active_device_id` (see the correction below) against the caller-supplied `p_device_id`; true means a different device is now active. Callable by `anon` (mirrors `phone_has_account`'s pre-auth-callable pattern).
 - **`database_usage_bytes() returns table(db_size_bytes bigint, storage_size_bytes bigint)`** — `security definer`, `set search_path = ''`, **execute revoked from `public`/`anon`/`authenticated`** (only the service-role client can call it — this one actually needs to be locked down, unlike the others in this list, since it exposes infra sizing that shouldn't be publicly queryable). Added 2026-08-10 for pockettill_datamaster's Infrastructure Costs page, after discovering Supabase's public Management API has **no endpoint for database/storage size** despite what the page's original spec assumed (`GET /v1/projects/{ref}/usage` doesn't exist — confirmed 404 against the real API; the only real usage endpoints are `analytics/endpoints/usage.api-counts` and `usage.api-requests-count`). `pg_database_size(current_database())` and a `sum` over `storage.objects.metadata->>'size'` are the actual, reliable sources. Note when creating any new `security definer` function: **Postgres grants `EXECUTE` to `PUBLIC` by default** — `revoke ... from anon, authenticated` alone does not remove a standing `PUBLIC` grant; revoke from `public` explicitly too, or the security advisor will still flag it (this bit us once already, see `20260810141855_fix_database_usage_bytes_grants.sql`).
 
 ## Known advisor warnings (accepted, not bugs)
