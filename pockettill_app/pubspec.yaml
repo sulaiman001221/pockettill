@@ -21,7 +21,7 @@ dependencies:
   sunmi_printer_plus: ^4.1.1
   mobile_scanner: ^7.4.0
   device_info_plus: ^13.2.0
-  uuid: ^4.5.3
+  uuid: ^4.6.0
   intl: ^0.20.3
   path_provider: ^2.1.6
   fl_chart: ^0.68.0
