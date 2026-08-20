@@ -29,7 +29,11 @@ export function CatalogueFilters({
     if (q) params.set("q", q);
     if (cat && cat !== "all") params.set("category", cat);
     const qs = params.toString();
-    router.push(qs ? `${pathname}?${qs}` : pathname);
+    // scroll: false — otherwise every search/filter change resets scroll
+    // position, which reads as the search bar "jumping" since the real
+    // content (KPI cards + chart above the filters) is taller than the
+    // loading skeleton it briefly replaces.
+    router.push(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
   }
 
   useEffect(() => {
