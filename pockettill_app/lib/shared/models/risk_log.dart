@@ -7,7 +7,8 @@ part 'risk_log.g.dart';
 /// never edited or deleted once recorded.
 ///
 /// [type] is one of: `manual_stock_reduction`, `product_deleted`,
-/// `price_changed`, `manual_credit`, `credit_writeoff` - a plain string
+/// `price_changed`, `manual_credit`, `credit_writeoff`,
+/// `customer_deleted_with_balance` - a plain string
 /// (not a Dart enum) to match every other `type`/`reason`-style field in
 /// this app (see `Sale.paymentType`, `ReturnRecord.reason`), and because
 /// it's written unchanged straight into the `risk_log` table's own `type`

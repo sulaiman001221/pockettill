@@ -8,6 +8,8 @@ import '../../shared/repositories/repositories.dart';
 import '../../shared/theme/app_theme.dart';
 import '../../shared/utils/credit_balance_display.dart';
 import '../../shared/widgets/pockettill_app_bar.dart';
+import '../stock/risk_log_providers.dart';
+import '../stock/risk_log_screen.dart';
 import '../stock/stock_ui.dart';
 import 'add_customer_screen.dart';
 import 'customer_detail_screen.dart';
@@ -169,7 +171,33 @@ class _CreditScreenState extends ConsumerState<CreditScreen> {
           _searchFocusNode.unfocus(disposition: UnfocusDisposition.scope),
       behavior: HitTestBehavior.opaque,
       child: Scaffold(
-        appBar: const CustomAppBar(showMenuIcon: false, title: 'Customers'),
+        appBar: CustomAppBar(
+          showMenuIcon: false,
+          title: 'Customers',
+          trailing: PopupMenuButton<String>(
+            icon: const Icon(Icons.more_vert, color: AppTheme.textPrimary),
+            onSelected: (value) {
+              if (value == 'risk_log') {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) =>
+                        const RiskLogScreen(category: RiskLogCategory.credit),
+                  ),
+                );
+              }
+            },
+            itemBuilder: (context) => [
+              const PopupMenuItem(
+                value: 'risk_log',
+                child: ListTile(
+                  leading: Icon(Icons.shield_outlined),
+                  title: Text('Risk Log'),
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ),
+            ],
+          ),
+        ),
         backgroundColor: AppTheme.background,
         floatingActionButton: FloatingActionButton.extended(
           onPressed: _openAddCustomer,
@@ -500,27 +528,23 @@ class _CustomerListItem extends StatelessWidget {
                     ),
                     overflow: TextOverflow.ellipsis,
                   ),
-                  if ((customer.phone ?? '').isNotEmpty) ...[
-                    const SizedBox(height: 2),
-                    Text(customer.phone!, style: AppTheme.bodySubtitle),
-                  ],
+                  const SizedBox(height: 4),
+                  if (owing)
+                    _BalanceBadge(
+                      color: AppTheme.logoutRed,
+                      label: 'Owes ${formatCreditBalance(customer.balance)}',
+                    )
+                  else if (customer.balance < 0)
+                    _BalanceBadge(
+                      color: AppTheme.syncGreen,
+                      label: 'Credit ${formatCreditBalance(customer.balance)}',
+                    )
+                  else
+                    const _BalanceBadge(color: AppTheme.syncGreen, label: 'Settled'),
                 ],
               ),
             ),
             const SizedBox(width: 8),
-            if (owing)
-              _BalanceBadge(
-                color: AppTheme.logoutRed,
-                label: 'Owes ${formatCreditBalance(customer.balance)}',
-              )
-            else if (customer.balance < 0)
-              _BalanceBadge(
-                color: AppTheme.syncGreen,
-                label: 'Credit ${formatCreditBalance(customer.balance)}',
-              )
-            else
-              const _BalanceBadge(color: AppTheme.syncGreen, label: 'Settled'),
-            const SizedBox(width: 4),
             const Icon(Icons.chevron_right, color: AppTheme.iconBorder),
           ],
         ),

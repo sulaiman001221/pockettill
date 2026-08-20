@@ -217,7 +217,7 @@ pre-existing gap, not introduced by this entry.
 | column | type | notes |
 |---|---|---|
 | uuid | uuid PK | `gen_random_uuid()` |
-| type | text | `manual_stock_reduction` \| `product_deleted` \| `price_changed` \| `manual_credit` \| `credit_writeoff` |
+| type | text | `manual_stock_reduction` \| `product_deleted` \| `price_changed` \| `manual_credit` \| `credit_writeoff` \| `customer_deleted_with_balance` (added 2026-08-21) |
 | description | text | |
 | before_value | text | nullable — freeform display string, not necessarily a raw number |
 | after_value | text | nullable |
@@ -352,7 +352,11 @@ simplification while the store count is small and near-static; revisit if
 that stops being true.
 
 ### `pending_catalogue_items`
-`security_invoker = true`. Added 2026-08-09 for pockettill_datamaster's
+`security_invoker = true` (briefly lost when the 2026-08-17 catalogue-split
+migration recreated this view without re-specifying it - a real regression
+caught by Supabase's security advisor during a 2026-08-20 sanity check and
+restored the same day; see `20260820190000_restore_catalogue_views_security_invoker.sql`).
+Added 2026-08-09 for pockettill_datamaster's
 Verification Queue — one row per barcode across all stores' unverified
 submissions, deduplicated. Uses `mode() within group` (most-frequent-value)
 so the approve panel can pre-fill with the most common submission, not just
@@ -382,7 +386,8 @@ group by p.barcode;
 ```
 
 ### `verified_catalogue_items`
-`security_invoker = true`. Added 2026-08-09; redefined 2026-08-17 as a
+`security_invoker = true` (same 2026-08-17 regression/2026-08-20 fix as
+`pending_catalogue_items` above). Added 2026-08-09; redefined 2026-08-17 as a
 straight passthrough over `catalogue_products` (which is already one row
 per barcode) rather than an aggregation over `products` — the old
 `store_count`/multi-row-mode() logic no longer applies now that
