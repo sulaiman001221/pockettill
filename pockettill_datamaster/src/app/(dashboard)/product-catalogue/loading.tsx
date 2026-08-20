@@ -1,5 +1,5 @@
 import { PageHeader } from "@/components/shared/page-header";
-import { TableSkeleton } from "@/components/shared/skeletons";
+import { ChartCardSkeleton, KpiCardsSkeleton, TableSkeleton } from "@/components/shared/skeletons";
 import { Skeleton } from "@/components/ui/skeleton";
 
 export default function ProductCatalogueLoading() {
@@ -9,6 +9,12 @@ export default function ProductCatalogueLoading() {
       <div className="flex gap-2">
         <Skeleton className="h-9 w-40" />
         <Skeleton className="h-9 w-32" />
+      </div>
+      <KpiCardsSkeleton count={2} />
+      <ChartCardSkeleton height="h-48" />
+      <div className="flex gap-2">
+        <Skeleton className="h-9 w-full max-w-sm" />
+        <Skeleton className="h-9 w-48" />
       </div>
       <TableSkeleton rows={8} cols={5} />
     </div>

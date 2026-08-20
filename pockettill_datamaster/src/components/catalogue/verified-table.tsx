@@ -47,7 +47,14 @@ export function VerifiedTable({
 
   return (
     <>
-      <div className="overflow-hidden rounded-xl bg-card ring-1 ring-border">
+      {/*
+        min-h keeps this container from collapsing to a sliver when a search
+        narrows the result set down to nothing/one row - without it, the
+        page's total height would suddenly shrink by hundreds of pixels and
+        the search bar above (still scrolled past, mid-page) would appear to
+        jump toward the bottom of a now much-shorter page.
+      */}
+      <div className="min-h-[26rem] overflow-hidden rounded-xl bg-card ring-1 ring-border">
         <Table>
           <TableHeader>
             <TableRow>
@@ -62,7 +69,7 @@ export function VerifiedTable({
           <TableBody>
             {visibleItems.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={canManage ? 6 : 5} className="h-24 text-center text-muted-foreground">
+                <TableCell colSpan={canManage ? 6 : 5} className="h-96 text-center text-muted-foreground">
                   No verified products match your filters.
                 </TableCell>
               </TableRow>
