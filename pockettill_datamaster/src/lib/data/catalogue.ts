@@ -22,7 +22,6 @@ export interface VerifiedCatalogueItem {
   category: string | null;
   mass: string | null;
   verifiedAt: string | null;
-  storeCount: number;
 }
 
 export interface CatalogueStats {
@@ -67,7 +66,7 @@ async function _getVerifiedCatalogue(
 
   let query = supabase
     .from("verified_catalogue_items")
-    .select("barcode, name, category, mass, verified_at, store_count");
+    .select("barcode, name, category, mass, verified_at");
 
   const search = params.search?.trim().replace(/[(),]/g, "");
   if (search) {
@@ -88,7 +87,6 @@ async function _getVerifiedCatalogue(
     category: r.category,
     mass: r.mass,
     verifiedAt: r.verified_at,
-    storeCount: r.store_count,
   }));
 }
 

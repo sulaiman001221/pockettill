@@ -39,16 +39,25 @@ export async function approveProduct(barcode: string, edits: ProductEdits): Prom
   const mass = formatProductMass(edits.mass);
 
   const supabase = createServiceRoleClient();
-  const { error } = await supabase
+
+  // Attribution only, for admin reference - picks any one of the store(s)
+  // that had this barcode pending, since the review panel aggregates
+  // submissions across every store that independently added it.
+  const { data: submitter } = await supabase
     .from("products")
-    .update({
-      is_verified: true,
-      name,
-      category: edits.category,
-      mass,
-      verified_at: new Date().toISOString(),
-    })
-    .eq("barcode", barcode);
+    .select("store_id")
+    .eq("barcode", barcode)
+    .limit(1)
+    .maybeSingle();
+
+  const { error } = await supabase.from("catalogue_products").upsert({
+    barcode,
+    name,
+    category: edits.category,
+    mass,
+    verified_at: new Date().toISOString(),
+    submitted_by_store_id: submitter?.store_id ?? null,
+  });
 
   if (error) return { error: error.message };
 
@@ -66,8 +75,12 @@ export async function rejectProduct(barcode: string): Promise<CatalogueActionRes
     return { error: err instanceof Error ? err.message : "Not authorized." };
   }
 
+  // No is_verified filter needed - products no longer carries that concept,
+  // and this action is only ever reachable from the pending-review panel,
+  // which by construction only lists barcodes with no catalogue_products
+  // entry yet.
   const supabase = createServiceRoleClient();
-  const { error } = await supabase.from("products").delete().eq("barcode", barcode).eq("is_verified", false);
+  const { error } = await supabase.from("products").delete().eq("barcode", barcode);
 
   if (error) return { error: error.message };
 
@@ -89,10 +102,14 @@ export async function updateVerifiedProduct(
 
   const supabase = createServiceRoleClient();
   const { error } = await supabase
-    .from("products")
-    .update({ name: edits.name, category: edits.category, mass: edits.mass })
-    .eq("barcode", barcode)
-    .eq("is_verified", true);
+    .from("catalogue_products")
+    .update({
+      name: edits.name,
+      category: edits.category,
+      mass: edits.mass,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("barcode", barcode);
 
   if (error) return { error: error.message };
 
@@ -107,8 +124,11 @@ export async function unverifyProduct(barcode: string): Promise<CatalogueActionR
     return { error: err instanceof Error ? err.message : "Not authorized." };
   }
 
+  // Removes it from the shared catalogue entirely (rather than flipping a
+  // flag, which no longer exists) - any store that still has this barcode
+  // in its own inventory correctly reappears in the pending-review list.
   const supabase = createServiceRoleClient();
-  const { error } = await supabase.from("products").update({ is_verified: false }).eq("barcode", barcode);
+  const { error } = await supabase.from("catalogue_products").delete().eq("barcode", barcode);
 
   if (error) return { error: error.message };
 
