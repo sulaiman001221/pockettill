@@ -9,6 +9,7 @@ import '../../shared/theme/app_theme.dart';
 import '../../shared/widgets/pockettill_app_bar.dart';
 import 'add_product_screen.dart';
 import 'barcode_scanner_screen.dart';
+import 'risk_log_providers.dart';
 import 'risk_log_screen.dart';
 import 'stock_ui.dart';
 
@@ -205,9 +206,12 @@ class _StockScreenState extends ConsumerState<StockScreen> {
             icon: const Icon(Icons.more_vert, color: AppTheme.textPrimary),
             onSelected: (value) {
               if (value == 'risk_log') {
-                Navigator.of(
-                  context,
-                ).push(MaterialPageRoute(builder: (_) => const RiskLogScreen()));
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) =>
+                        const RiskLogScreen(category: RiskLogCategory.stock),
+                  ),
+                );
               }
             },
             itemBuilder: (context) => [

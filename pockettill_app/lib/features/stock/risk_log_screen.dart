@@ -10,10 +10,18 @@ import 'risk_log_providers.dart';
 
 /// Risk Log: a period-filtered list of potentially suspicious stock/credit
 /// activity - manual stock reductions, product deletions, price changes,
-/// manual credit additions, and credit write-offs. Mirrors HistoryScreen's
-/// Today / This Week / This Month / Custom filter tabs.
+/// manual credit additions, credit write-offs, and customers deleted while
+/// still owing money. Mirrors HistoryScreen's Today / This Week / This
+/// Month / Custom filter tabs.
+///
+/// [category] narrows the list to just the entries relevant to whichever
+/// page opened this screen (Stock vs Customers) - see
+/// [categoryForRiskType]. Both entry points read the same underlying table
+/// and share the same date-filter state; only the displayed subset differs.
 class RiskLogScreen extends ConsumerWidget {
-  const RiskLogScreen({super.key});
+  const RiskLogScreen({super.key, required this.category});
+
+  final RiskLogCategory category;
 
   Future<void> _pickCustomRange(BuildContext context, WidgetRef ref) async {
     final range = await Navigator.of(context).push<DateTimeRange>(
@@ -55,13 +63,19 @@ class RiskLogScreen extends ConsumerWidget {
     return map;
   }
 
+  String get _title =>
+      category == RiskLogCategory.stock ? 'Stock Risk Log' : 'Credit Risk Log';
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final filter = ref.watch(riskLogFilterProvider);
     final entriesAsync = ref.watch(filteredRiskLogProvider);
+    final entries = (entriesAsync.value ?? const [])
+        .where((entry) => categoryForRiskType(entry.type) == category)
+        .toList();
 
     return Scaffold(
-      appBar: const CustomAppBar(showMenuIcon: false, title: 'Risk Log'),
+      appBar: CustomAppBar(showMenuIcon: false, title: _title),
       backgroundColor: AppTheme.background,
       body: RefreshIndicator(
         onRefresh: () => ref.refresh(filteredRiskLogProvider.future),
@@ -82,7 +96,7 @@ class RiskLogScreen extends ConsumerWidget {
                 ),
               )
             else
-              _buildList(entriesAsync.value ?? const []),
+              _buildList(entries),
             const SliverToBoxAdapter(child: SizedBox(height: 24)),
           ],
         ),
@@ -165,7 +179,9 @@ class RiskLogScreen extends ConsumerWidget {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Suspicious stock and credit changes will show up here',
+                  category == RiskLogCategory.stock
+                      ? 'Suspicious stock changes will show up here'
+                      : 'Suspicious credit changes will show up here',
                   style: AppTheme.bodySubtitle,
                   textAlign: TextAlign.center,
                 ),
@@ -254,6 +270,12 @@ _RiskTypeInfo _infoForType(String type) {
       return const _RiskTypeInfo(
         Icons.money_off,
         'Credit Written Off',
+        AppTheme.logoutRed,
+      );
+    case 'customer_deleted_with_balance':
+      return const _RiskTypeInfo(
+        Icons.person_remove_outlined,
+        'Customer Deleted While Owing',
         AppTheme.logoutRed,
       );
     default:

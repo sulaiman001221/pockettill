@@ -342,6 +342,12 @@ class CreditRepository {
   }
 
   /// Deletes a customer outright, along with their transaction history.
+  ///
+  /// Deleting a customer who still owes money erases that debt with no
+  /// other trace of it, so - unlike [saveCustomer]/[updateCreditLimit] -
+  /// this is the one customer-record edit that always gets checked against
+  /// the Risk Log, the same way [ProductRepository.delete] logs a deleted
+  /// product's stock.
   Future<void> deleteCustomer(String customerUuid) async {
     final customer = await getByUuid(customerUuid);
     if (customer == null) return;
@@ -364,6 +370,16 @@ class CreditRepository {
       operation: 'delete',
       payload: _customerToPayload(customer),
     );
+
+    if (customer.balance > 0) {
+      await _riskLog.record(
+        type: 'customer_deleted_with_balance',
+        description: '${customer.name} deleted while owing money',
+        beforeValue: 'R${customer.balance.toStringAsFixed(2)}',
+        afterValue: null,
+        entityName: customer.name,
+      );
+    }
   }
 
   /// Transactions for [customerUuid], newest first.

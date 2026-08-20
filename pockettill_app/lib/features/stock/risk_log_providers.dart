@@ -4,6 +4,30 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../shared/models/risk_log.dart';
 import '../../shared/repositories/repositories.dart';
 
+/// Which page's Risk Log entry point a [RiskLog] entry belongs under -
+/// stock-related types surface on the Stock screen, credit-related types on
+/// the Customers screen. Both categories share the same underlying table
+/// and date-filter state; this only decides which subset a given screen
+/// instance shows.
+enum RiskLogCategory { stock, credit }
+
+/// Maps a [RiskLog.type] to the page it belongs under. Every type must be
+/// covered here - see [RiskLog]'s own doc comment for the full list.
+RiskLogCategory categoryForRiskType(String type) {
+  switch (type) {
+    case 'manual_stock_reduction':
+    case 'product_deleted':
+    case 'price_changed':
+      return RiskLogCategory.stock;
+    case 'manual_credit':
+    case 'credit_writeoff':
+    case 'customer_deleted_with_balance':
+      return RiskLogCategory.credit;
+    default:
+      return RiskLogCategory.stock;
+  }
+}
+
 /// The period a Risk Log view is currently filtered to - mirrors
 /// HistoryFilter in features/history/history_providers.dart.
 enum RiskLogFilter { today, thisWeek, thisMonth, custom }

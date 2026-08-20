@@ -42,7 +42,10 @@ async function _getOverviewStats(): Promise<OverviewStats> {
     supabase.from("stores").select("*", { count: "exact", head: true }).gte("created_at", startOfCurrentMonthIso()),
     supabase.from("stores").select("*", { count: "exact", head: true }).eq("is_beta_adopter", true),
     supabase.from("store_sync_status").select("*", { count: "exact", head: true }).gte("last_synced_at", last24hIso),
-    supabase.from("products").select("*", { count: "exact", head: true }).eq("is_verified", true),
+    // Verified products now live in their own table (catalogue_products) -
+    // products.is_verified no longer exists after the catalogue split, so
+    // counting verified products means counting rows here instead.
+    supabase.from("catalogue_products").select("*", { count: "exact", head: true }),
   ]);
 
   const total = totalStores ?? 0;
