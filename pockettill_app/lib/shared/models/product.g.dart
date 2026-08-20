@@ -37,53 +37,48 @@ const ProductSchema = CollectionSchema(
       name: r'createdAt',
       type: IsarType.dateTime,
     ),
-    r'isVerified': PropertySchema(
-      id: 4,
-      name: r'isVerified',
-      type: IsarType.bool,
-    ),
     r'lowStockThreshold': PropertySchema(
-      id: 5,
+      id: 4,
       name: r'lowStockThreshold',
       type: IsarType.long,
     ),
     r'mass': PropertySchema(
-      id: 6,
+      id: 5,
       name: r'mass',
       type: IsarType.string,
     ),
     r'name': PropertySchema(
-      id: 7,
+      id: 6,
       name: r'name',
       type: IsarType.string,
     ),
     r'price': PropertySchema(
-      id: 8,
+      id: 7,
       name: r'price',
       type: IsarType.double,
     ),
     r'stock': PropertySchema(
-      id: 9,
+      id: 8,
       name: r'stock',
       type: IsarType.long,
     ),
     r'synced': PropertySchema(
-      id: 10,
+      id: 9,
       name: r'synced',
       type: IsarType.bool,
     ),
     r'unit': PropertySchema(
-      id: 11,
+      id: 10,
       name: r'unit',
       type: IsarType.string,
     ),
     r'updatedAt': PropertySchema(
-      id: 12,
+      id: 11,
       name: r'updatedAt',
       type: IsarType.dateTime,
     ),
     r'uuid': PropertySchema(
-      id: 13,
+      id: 12,
       name: r'uuid',
       type: IsarType.string,
     )
@@ -142,16 +137,15 @@ void _productSerialize(
   writer.writeString(offsets[1], object.category);
   writer.writeDouble(offsets[2], object.costPrice);
   writer.writeDateTime(offsets[3], object.createdAt);
-  writer.writeBool(offsets[4], object.isVerified);
-  writer.writeLong(offsets[5], object.lowStockThreshold);
-  writer.writeString(offsets[6], object.mass);
-  writer.writeString(offsets[7], object.name);
-  writer.writeDouble(offsets[8], object.price);
-  writer.writeLong(offsets[9], object.stock);
-  writer.writeBool(offsets[10], object.synced);
-  writer.writeString(offsets[11], object.unit);
-  writer.writeDateTime(offsets[12], object.updatedAt);
-  writer.writeString(offsets[13], object.uuid);
+  writer.writeLong(offsets[4], object.lowStockThreshold);
+  writer.writeString(offsets[5], object.mass);
+  writer.writeString(offsets[6], object.name);
+  writer.writeDouble(offsets[7], object.price);
+  writer.writeLong(offsets[8], object.stock);
+  writer.writeBool(offsets[9], object.synced);
+  writer.writeString(offsets[10], object.unit);
+  writer.writeDateTime(offsets[11], object.updatedAt);
+  writer.writeString(offsets[12], object.uuid);
 }
 
 Product _productDeserialize(
@@ -166,16 +160,15 @@ Product _productDeserialize(
   object.costPrice = reader.readDoubleOrNull(offsets[2]);
   object.createdAt = reader.readDateTime(offsets[3]);
   object.id = id;
-  object.isVerified = reader.readBool(offsets[4]);
-  object.lowStockThreshold = reader.readLong(offsets[5]);
-  object.mass = reader.readStringOrNull(offsets[6]);
-  object.name = reader.readString(offsets[7]);
-  object.price = reader.readDouble(offsets[8]);
-  object.stock = reader.readLong(offsets[9]);
-  object.synced = reader.readBool(offsets[10]);
-  object.unit = reader.readStringOrNull(offsets[11]);
-  object.updatedAt = reader.readDateTimeOrNull(offsets[12]);
-  object.uuid = reader.readString(offsets[13]);
+  object.lowStockThreshold = reader.readLong(offsets[4]);
+  object.mass = reader.readStringOrNull(offsets[5]);
+  object.name = reader.readString(offsets[6]);
+  object.price = reader.readDouble(offsets[7]);
+  object.stock = reader.readLong(offsets[8]);
+  object.synced = reader.readBool(offsets[9]);
+  object.unit = reader.readStringOrNull(offsets[10]);
+  object.updatedAt = reader.readDateTimeOrNull(offsets[11]);
+  object.uuid = reader.readString(offsets[12]);
   return object;
 }
 
@@ -195,24 +188,22 @@ P _productDeserializeProp<P>(
     case 3:
       return (reader.readDateTime(offset)) as P;
     case 4:
-      return (reader.readBool(offset)) as P;
+      return (reader.readLong(offset)) as P;
     case 5:
-      return (reader.readLong(offset)) as P;
+      return (reader.readStringOrNull(offset)) as P;
     case 6:
-      return (reader.readStringOrNull(offset)) as P;
-    case 7:
       return (reader.readString(offset)) as P;
-    case 8:
+    case 7:
       return (reader.readDouble(offset)) as P;
-    case 9:
+    case 8:
       return (reader.readLong(offset)) as P;
-    case 10:
+    case 9:
       return (reader.readBool(offset)) as P;
-    case 11:
+    case 10:
       return (reader.readStringOrNull(offset)) as P;
-    case 12:
+    case 11:
       return (reader.readDateTimeOrNull(offset)) as P;
-    case 13:
+    case 12:
       return (reader.readString(offset)) as P;
     default:
       throw IsarError('Unknown property with id $propertyId');
@@ -763,16 +754,6 @@ extension ProductQueryFilter
         includeLower: includeLower,
         upper: upper,
         includeUpper: includeUpper,
-      ));
-    });
-  }
-
-  QueryBuilder<Product, Product, QAfterFilterCondition> isVerifiedEqualTo(
-      bool value) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.equalTo(
-        property: r'isVerified',
-        value: value,
       ));
     });
   }
@@ -1635,18 +1616,6 @@ extension ProductQuerySortBy on QueryBuilder<Product, Product, QSortBy> {
     });
   }
 
-  QueryBuilder<Product, Product, QAfterSortBy> sortByIsVerified() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'isVerified', Sort.asc);
-    });
-  }
-
-  QueryBuilder<Product, Product, QAfterSortBy> sortByIsVerifiedDesc() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'isVerified', Sort.desc);
-    });
-  }
-
   QueryBuilder<Product, Product, QAfterSortBy> sortByLowStockThreshold() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'lowStockThreshold', Sort.asc);
@@ -1818,18 +1787,6 @@ extension ProductQuerySortThenBy
     });
   }
 
-  QueryBuilder<Product, Product, QAfterSortBy> thenByIsVerified() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'isVerified', Sort.asc);
-    });
-  }
-
-  QueryBuilder<Product, Product, QAfterSortBy> thenByIsVerifiedDesc() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'isVerified', Sort.desc);
-    });
-  }
-
   QueryBuilder<Product, Product, QAfterSortBy> thenByLowStockThreshold() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'lowStockThreshold', Sort.asc);
@@ -1967,12 +1924,6 @@ extension ProductQueryWhereDistinct
     });
   }
 
-  QueryBuilder<Product, Product, QDistinct> distinctByIsVerified() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addDistinctBy(r'isVerified');
-    });
-  }
-
   QueryBuilder<Product, Product, QDistinct> distinctByLowStockThreshold() {
     return QueryBuilder.apply(this, (query) {
       return query.addDistinctBy(r'lowStockThreshold');
@@ -2061,12 +2012,6 @@ extension ProductQueryProperty
   QueryBuilder<Product, DateTime, QQueryOperations> createdAtProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'createdAt');
-    });
-  }
-
-  QueryBuilder<Product, bool, QQueryOperations> isVerifiedProperty() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addPropertyName(r'isVerified');
     });
   }
 

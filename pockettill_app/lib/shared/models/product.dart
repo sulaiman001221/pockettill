@@ -16,7 +16,6 @@ class Product {
   double? costPrice; // optional, for margin tracking
   late int stock;
   int lowStockThreshold = 5;
-  bool isVerified = false;
   bool synced = false;
   late DateTime createdAt;
   DateTime? updatedAt;

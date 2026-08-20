@@ -228,6 +228,145 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
     await _load();
   }
 
+  /// Shows an amount (+ optional note) bottom sheet, following the same
+  /// shape as [_editCreditLimit]'s. [validate] returns an error string to
+  /// show inline, or null if the amount is acceptable. Returns null if the
+  /// sheet was dismissed without confirming.
+  Future<(double, String?)?> _showAmountSheet({
+    required String title,
+    String? helperText,
+    required String? Function(double amount) validate,
+  }) async {
+    final amountController = TextEditingController();
+    final noteController = TextEditingController();
+
+    final result = await showModalBottomSheet<(double, String?)>(
+      context: context,
+      isScrollControlled: true,
+      builder: (sheetContext) {
+        String? error;
+        return StatefulBuilder(
+          builder: (sheetContext, setSheetState) {
+            void save() {
+              final parsed = double.tryParse(amountController.text.trim());
+              if (parsed == null || parsed <= 0) {
+                setSheetState(() => error = 'Enter a valid amount');
+                return;
+              }
+              final validationError = validate(parsed);
+              if (validationError != null) {
+                setSheetState(() => error = validationError);
+                return;
+              }
+              final note = noteController.text.trim();
+              Navigator.of(
+                sheetContext,
+              ).pop((parsed, note.isEmpty ? null : note));
+            }
+
+            return Padding(
+              padding: EdgeInsets.only(
+                left: 20,
+                right: 20,
+                top: 24,
+                bottom: MediaQuery.of(sheetContext).viewInsets.bottom + 24,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, style: AppTheme.mainTitle),
+                  if (helperText != null) ...[
+                    const SizedBox(height: 4),
+                    Text(helperText, style: AppTheme.bodySubtitle),
+                  ],
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: amountController,
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    autofocus: true,
+                    decoration: InputDecoration(
+                      prefixText: 'R ',
+                      hintText: 'Amount',
+                      errorText: error,
+                    ),
+                    onChanged: (_) {
+                      if (error != null) setSheetState(() => error = null);
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: noteController,
+                    decoration: const InputDecoration(
+                      hintText: 'Note (optional)',
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 52,
+                    child: ElevatedButton(onPressed: save, child: const Text('Save')),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+
+    return result;
+  }
+
+  Future<void> _addManualCreditFlow() async {
+    final customer = _customer;
+    if (customer == null) return;
+
+    final result = await _showAmountSheet(
+      title: 'Add Credit Manually',
+      helperText:
+          'For credit given outside a sale (e.g. a phone order). Logged to '
+          'the Risk Log.',
+      validate: (_) => null,
+    );
+    if (result == null || !mounted) return;
+    final (amount, note) = result;
+
+    await ref
+        .read(creditRepositoryProvider)
+        .addManualCredit(
+          customerUuid: customer.uuid,
+          amount: amount,
+          note: note,
+        );
+    await _load();
+  }
+
+  Future<void> _writeOffBalanceFlow() async {
+    final customer = _customer;
+    if (customer == null) return;
+
+    final result = await _showAmountSheet(
+      title: 'Write Off Balance',
+      helperText:
+          'Reduces the balance with no cash collected. Logged to the Risk '
+          'Log.',
+      validate: (amount) => amount > customer.balance
+          ? "Can't exceed the current balance of "
+                '${formatCreditBalance(customer.balance)}'
+          : null,
+    );
+    if (result == null || !mounted) return;
+    final (amount, note) = result;
+
+    await ref
+        .read(creditRepositoryProvider)
+        .writeOffBalance(customerUuid: customer.uuid, amount: amount, note: note);
+    await _load();
+  }
+
   Future<void> _openAddPayment() async {
     final customer = _customer;
     if (customer == null) return;
@@ -297,6 +436,8 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
         title: customer?.name ?? 'Customer',
         onEdit: customer == null ? null : _editCustomer,
         onDelete: customer == null ? null : _deleteCustomer,
+        onAddManualCredit: customer == null ? null : _addManualCreditFlow,
+        onWriteOffBalance: customer == null ? null : _writeOffBalanceFlow,
       ),
       backgroundColor: AppTheme.background,
       body: _loading
@@ -657,15 +798,27 @@ class _TransactionTile extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final isCredit = transaction.type == 'purchase';
     final isReturn = transaction.type == 'return';
-    // A purchase always increases what's owed and a repayment always
-    // decreases it, but a return can go either way - an exchange for a
-    // pricier item adds to the balance, while a refund/cheaper exchange
-    // takes away from it - so for a return, the transaction's own signed
-    // amount decides the direction instead of the type alone.
-    final increasesBalance = isCredit || (isReturn && transaction.amount > 0);
+    final isManualCredit = transaction.type == 'manual_credit';
+    final isWriteoff = transaction.type == 'writeoff';
+    // A purchase and a manual credit always increase what's owed, and a
+    // repayment/write-off always decreases it, but a return can go either
+    // way - an exchange for a pricier item adds to the balance, while a
+    // refund/cheaper exchange takes away from it - so for a return, the
+    // transaction's own signed amount decides the direction instead of the
+    // type alone.
+    final increasesBalance =
+        isCredit ||
+        isManualCredit ||
+        (isReturn && transaction.amount > 0);
     final color = increasesBalance ? AppTheme.logoutRed : AppTheme.syncGreen;
     final icon = increasesBalance ? Icons.arrow_upward : Icons.arrow_downward;
-    final label = isCredit ? 'Credit' : (isReturn ? 'Return' : 'Repayment');
+    final label = isCredit
+        ? 'Credit'
+        : (isReturn
+              ? 'Return'
+              : (isManualCredit
+                    ? 'Manual Credit'
+                    : (isWriteoff ? 'Write-Off' : 'Repayment')));
     final displayAmount = transaction.amount.abs();
     final dateText = DateFormat('d MMM yyyy').format(transaction.createdAt);
 
@@ -789,11 +942,15 @@ class _CustomerDetailAppBar extends StatelessWidget implements PreferredSizeWidg
     required this.title,
     required this.onEdit,
     required this.onDelete,
+    required this.onAddManualCredit,
+    required this.onWriteOffBalance,
   });
 
   final String title;
   final VoidCallback? onEdit;
   final VoidCallback? onDelete;
+  final VoidCallback? onAddManualCredit;
+  final VoidCallback? onWriteOffBalance;
 
   @override
   Widget build(BuildContext context) {
@@ -828,10 +985,15 @@ class _CustomerDetailAppBar extends StatelessWidget implements PreferredSizeWidg
               PopupMenuButton<String>(
                 icon: const Icon(Icons.more_vert, color: AppTheme.textPrimary),
                 onSelected: (value) {
-                  if (value == 'edit') {
-                    onEdit?.call();
-                  } else if (value == 'delete') {
-                    onDelete?.call();
+                  switch (value) {
+                    case 'edit':
+                      onEdit?.call();
+                    case 'delete':
+                      onDelete?.call();
+                    case 'add_manual_credit':
+                      onAddManualCredit?.call();
+                    case 'write_off':
+                      onWriteOffBalance?.call();
                   }
                 },
                 itemBuilder: (context) => [
@@ -840,6 +1002,22 @@ class _CustomerDetailAppBar extends StatelessWidget implements PreferredSizeWidg
                     child: ListTile(
                       leading: Icon(Icons.edit_outlined),
                       title: Text('Edit Customer'),
+                      contentPadding: EdgeInsets.zero,
+                    ),
+                  ),
+                  const PopupMenuItem(
+                    value: 'add_manual_credit',
+                    child: ListTile(
+                      leading: Icon(Icons.person_add_alt_outlined),
+                      title: Text('Add Credit Manually'),
+                      contentPadding: EdgeInsets.zero,
+                    ),
+                  ),
+                  const PopupMenuItem(
+                    value: 'write_off',
+                    child: ListTile(
+                      leading: Icon(Icons.money_off),
+                      title: Text('Write Off Balance'),
                       contentPadding: EdgeInsets.zero,
                     ),
                   ),

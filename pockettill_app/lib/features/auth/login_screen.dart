@@ -1,18 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/auth/auth_service.dart';
 import '../../core/sync/reachability_service.dart';
 import '../../shared/repositories/store_config_provider.dart';
 import '../../shared/theme/app_theme.dart';
+import '../../shared/utils/contact_support.dart';
 import '../../shared/widgets/pockettill_app_bar.dart';
 import '../shell/shell_screen.dart';
 import 'otp_verification_screen.dart';
 import 'reset_password_screen.dart';
-
-const String _supportWhatsAppNumber = '27625631968';
 
 /// Sign-in for an existing store, on this device or a fresh install.
 class LoginScreen extends ConsumerStatefulWidget {
@@ -178,11 +176,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     }
   }
 
-  Future<void> _contactSupport() async {
-    final uri = Uri.parse('https://wa.me/$_supportWhatsAppNumber');
-    await launchUrl(uri, mode: LaunchMode.externalApplication);
-  }
-
   Widget _buildKickedByOtherDeviceBanner() {
     return Container(
       width: double.infinity,
@@ -220,9 +213,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           SizedBox(
             width: double.infinity,
             child: OutlinedButton.icon(
-              onPressed: _contactSupport,
+              onPressed: () => showContactSupportOptions(context),
               icon: const Icon(Icons.chat_outlined, size: 18),
-              label: const Text('Contact Support on WhatsApp'),
+              label: const Text('Contact Support'),
               style: OutlinedButton.styleFrom(
                 foregroundColor: AppTheme.logoutRed,
                 side: const BorderSide(color: AppTheme.logoutRed),

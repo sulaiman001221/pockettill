@@ -3,15 +3,13 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/auth/auth_service.dart';
 import '../../shared/theme/app_theme.dart';
+import '../../shared/utils/contact_support.dart';
 import '../../shared/utils/friendly_error.dart';
 import '../../shared/widgets/pockettill_app_bar.dart';
 import 'welcome_screen.dart';
-
-const String _supportWhatsAppNumber = '27625631968';
 
 /// What happens after the code is verified - all three modes send/verify
 /// the code identically; only [OtpVerificationScreen.onVerified] differs by
@@ -198,11 +196,6 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
     }
   }
 
-  Future<void> _contactSupport() async {
-    final uri = Uri.parse('https://wa.me/$_supportWhatsAppNumber');
-    await launchUrl(uri, mode: LaunchMode.externalApplication);
-  }
-
   /// [AuthService.login]'s password check already created a live session on
   /// this device before this screen even opened - simply backing out here
   /// (system back gesture, the app bar's back arrow, or killing the app)
@@ -378,7 +371,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                   style: TextStyle(color: AppTheme.textSecondary, fontSize: 13),
                 ),
                 GestureDetector(
-                  onTap: _contactSupport,
+                  onTap: () => showContactSupportOptions(context),
                   child: const Text(
                     'Contact Support',
                     style: TextStyle(color: AppTheme.primary, fontSize: 13),

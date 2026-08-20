@@ -22,6 +22,7 @@ const List<String> _entityTypePriority = [
   'product',
   'credit_customer',
   'store_profile',
+  'risk_log',
 ];
 
 const int _batchSize = 50;
