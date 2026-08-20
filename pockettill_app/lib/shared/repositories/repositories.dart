@@ -7,6 +7,7 @@ import 'credit_repository.dart';
 import 'extra_income_repository.dart';
 import 'product_repository.dart';
 import 'return_repository.dart';
+import 'risk_log_repository.dart';
 import 'sale_repository.dart';
 import 'store_config_repository.dart';
 
@@ -26,6 +27,7 @@ final productRepositoryProvider = Provider<ProductRepository>((ref) {
   return ProductRepository(
     isar: ref.watch(isarServiceProvider),
     eventQueue: ref.watch(eventQueueProvider),
+    riskLog: ref.watch(riskLogRepositoryProvider),
   );
 });
 
@@ -34,6 +36,7 @@ final creditRepositoryProvider = Provider<CreditRepository>((ref) {
   return CreditRepository(
     isar: ref.watch(isarServiceProvider),
     eventQueue: ref.watch(eventQueueProvider),
+    riskLog: ref.watch(riskLogRepositoryProvider),
   );
 });
 
@@ -55,6 +58,14 @@ final storeConfigRepositoryProvider = Provider<StoreConfigRepository>((ref) {
 /// [ExtraIncomeRepository] singleton.
 final extraIncomeRepositoryProvider = Provider<ExtraIncomeRepository>((ref) {
   return ExtraIncomeRepository(
+    isar: ref.watch(isarServiceProvider),
+    eventQueue: ref.watch(eventQueueProvider),
+  );
+});
+
+/// [RiskLogRepository] singleton.
+final riskLogRepositoryProvider = Provider<RiskLogRepository>((ref) {
+  return RiskLogRepository(
     isar: ref.watch(isarServiceProvider),
     eventQueue: ref.watch(eventQueueProvider),
   );

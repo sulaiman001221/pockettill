@@ -9,13 +9,20 @@ import '../theme/app_theme.dart';
 /// false, used by every pushed screen). The centre shows the PocketTill
 /// icon by default, or [title] when provided.
 ///
-/// Nothing sits on the trailing edge - a notification bell used to, but it
-/// was never wired to anything and no screen ever gave it a real action, so
-/// tapping it did nothing and shop owners reasonably asked what it was for.
-/// The space is kept (see [_trailingWidth]) purely so the centre stays
-/// optically centred against the leading icon.
+/// The trailing edge is empty by default - a notification bell used to sit
+/// there, but it was never wired to anything and no screen ever gave it a
+/// real action, so tapping it did nothing and shop owners reasonably asked
+/// what it was for. [trailing] is an explicit opt-in for a screen with an
+/// actual action to put there (e.g. Stock's Risk Log menu) - leaving it
+/// null keeps the same inert spacer as every other screen, so the centre
+/// stays optically centred against the leading icon either way.
 class CustomAppBar extends StatelessWidget implements PreferredSizeWidget {
-  const CustomAppBar({super.key, this.showMenuIcon = true, this.title});
+  const CustomAppBar({
+    super.key,
+    this.showMenuIcon = true,
+    this.title,
+    this.trailing,
+  });
 
   /// Matches the leading [IconButton]'s footprint so the centred logo/title
   /// isn't pushed off-centre by having a control on one side only.
@@ -23,6 +30,7 @@ class CustomAppBar extends StatelessWidget implements PreferredSizeWidget {
 
   final bool showMenuIcon;
   final String? title;
+  final Widget? trailing;
 
   @override
   Widget build(BuildContext context) {
@@ -39,7 +47,11 @@ class CustomAppBar extends StatelessWidget implements PreferredSizeWidget {
             children: [
               _Leading(showMenuIcon: showMenuIcon),
               Expanded(child: Center(child: _Centre(title: title))),
-              const SizedBox(width: _trailingWidth, height: _trailingWidth),
+              trailing ??
+                  const SizedBox(
+                    width: _trailingWidth,
+                    height: _trailingWidth,
+                  ),
             ],
           ),
         ),

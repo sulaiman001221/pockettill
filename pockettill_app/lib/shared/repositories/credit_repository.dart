@@ -8,16 +8,22 @@ import '../models/credit_customer.dart';
 import '../models/credit_transaction.dart';
 import '../models/store_config.dart';
 import '../models/sync_event.dart';
+import 'risk_log_repository.dart';
 
 /// Business logic for credit/tab customers and their transactions. Sits
 /// between the UI and Isar - screens never touch Isar directly.
 class CreditRepository {
-  CreditRepository({required Isar isar, required EventQueue eventQueue})
-    : _isar = isar,
-      _eventQueue = eventQueue;
+  CreditRepository({
+    required Isar isar,
+    required EventQueue eventQueue,
+    required RiskLogRepository riskLog,
+  }) : _isar = isar,
+       _eventQueue = eventQueue,
+       _riskLog = riskLog;
 
   final Isar _isar;
   final EventQueue _eventQueue;
+  final RiskLogRepository _riskLog;
   final _uuid = const Uuid();
 
   /// All credit customers, ordered by name ascending.
@@ -187,6 +193,132 @@ class CreditRepository {
       entityUuid: transaction.uuid,
       operation: 'create',
       payload: _transactionToPayload(transaction),
+    );
+  }
+
+  /// Adds credit to a customer's balance with no corresponding sale -
+  /// distinct from [addPurchase], which always ties the increase to a
+  /// specific `saleUuid`. A legitimate action (e.g. a phone order taken
+  /// outside the app, correcting an earlier mistake), but the one way a
+  /// balance can grow with nothing else to show for it, so every use is
+  /// recorded to the Risk Log for the owner to review.
+  Future<void> addManualCredit({
+    required String customerUuid,
+    required double amount,
+    String? note,
+  }) async {
+    final now = DateTime.now();
+    late final CreditTransaction transaction;
+    late final CreditCustomer customer;
+
+    await _isar.writeTxn(() async {
+      final found = await _isar.creditCustomers
+          .filter()
+          .uuidEqualTo(customerUuid)
+          .findFirst();
+      if (found == null) {
+        throw StateError('Credit customer $customerUuid not found.');
+      }
+      customer = found;
+
+      final balanceBefore = customer.balance;
+      customer.balance += amount;
+      customer.lastActivityAt = now;
+      await _isar.creditCustomers.put(customer);
+
+      transaction = CreditTransaction()
+        ..uuid = _uuid.v4()
+        ..customerId = customerUuid
+        ..amount = amount
+        ..type = 'manual_credit'
+        ..note = note
+        ..balanceBefore = balanceBefore
+        ..balanceAfter = customer.balance
+        ..createdAt = now;
+      await _isar.creditTransactions.put(transaction);
+    });
+
+    await _enqueueEvent(
+      entityType: 'credit_tx',
+      entityUuid: transaction.uuid,
+      operation: 'create',
+      payload: _transactionToPayload(transaction),
+    );
+
+    await _riskLog.record(
+      type: 'manual_credit',
+      description: note == null || note.isEmpty
+          ? 'Credit manually added for ${customer.name}'
+          : 'Credit manually added for ${customer.name} ($note)',
+      beforeValue: 'R${transaction.balanceBefore!.toStringAsFixed(2)}',
+      afterValue: 'R${transaction.balanceAfter!.toStringAsFixed(2)}',
+      entityName: customer.name,
+    );
+  }
+
+  /// Reduces a customer's balance with no matching cash repayment -
+  /// distinct from [recordRepayment], which always represents cash actually
+  /// collected. A legitimate action (forgiving a small balance, correcting
+  /// an error), but the one way a balance can shrink with no cash to show
+  /// for it, so every use is recorded to the Risk Log for the owner to
+  /// review. Throws if [amount] exceeds the current balance, same as
+  /// [recordRepayment].
+  Future<void> writeOffBalance({
+    required String customerUuid,
+    required double amount,
+    String? note,
+  }) async {
+    final now = DateTime.now();
+    late final CreditTransaction transaction;
+    late final CreditCustomer customer;
+
+    await _isar.writeTxn(() async {
+      final found = await _isar.creditCustomers
+          .filter()
+          .uuidEqualTo(customerUuid)
+          .findFirst();
+      if (found == null) {
+        throw StateError('Credit customer $customerUuid not found.');
+      }
+      customer = found;
+      if (amount > customer.balance) {
+        throw ArgumentError(
+          'Write-off of $amount exceeds outstanding balance of ${customer.balance}.',
+        );
+      }
+
+      final balanceBefore = customer.balance;
+      customer.balance -= amount;
+      customer.lastActivityAt = now;
+      await _isar.creditCustomers.put(customer);
+
+      transaction = CreditTransaction()
+        ..uuid = _uuid.v4()
+        ..customerId = customerUuid
+        ..amount = amount
+        ..type = 'writeoff'
+        ..note = note
+        ..balanceBefore = balanceBefore
+        ..balanceAfter = customer.balance
+        ..createdAt = now;
+      await _isar.creditTransactions.put(transaction);
+    });
+
+    await _enqueueEvent(
+      entityType: 'credit_tx',
+      entityUuid: transaction.uuid,
+      operation: 'create',
+      payload: _transactionToPayload(transaction),
+    );
+
+    await _riskLog.record(
+      type: 'credit_writeoff',
+      description: note == null || note.isEmpty
+          ? 'Balance written off for ${customer.name}'
+          : 'Balance written off for ${customer.name} ($note)',
+      beforeValue: 'R${transaction.balanceBefore!.toStringAsFixed(2)}',
+      afterValue: 'R${transaction.balanceAfter!.toStringAsFixed(2)}',
+      entityName: customer.name,
     );
   }
 

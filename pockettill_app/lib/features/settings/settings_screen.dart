@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
-import 'package:url_launcher/url_launcher.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../core/auth/auth_service.dart';
@@ -18,14 +17,13 @@ import '../../shared/models/sync_event.dart';
 import '../../shared/repositories/repositories.dart';
 import '../../shared/repositories/store_config_provider.dart';
 import '../../shared/theme/app_theme.dart';
+import '../../shared/utils/contact_support.dart';
 import '../../shared/utils/sync_status.dart';
 import '../../shared/widgets/confirmation_dialog.dart';
 import '../../shared/widgets/pockettill_app_bar.dart';
 import 'privacy_policy_screen.dart';
 import 'terms_of_service_screen.dart';
 import '../auth/welcome_screen.dart';
-
-const String _supportWhatsAppNumber = '27625631968';
 
 /// "Today, 09:41 AM" / "Yesterday, 09:41 AM" / "12 Oct, 09:41 AM" / "Never".
 String _formatLastSynced(DateTime? lastSyncedAt) {
@@ -304,16 +302,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(const SnackBar(content: Text('Copied!')));
-  }
-
-  Future<void> _contactSupport() async {
-    final uri = Uri.parse('https://wa.me/$_supportWhatsAppNumber');
-    final launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
-    if (!launched && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Could not open WhatsApp')),
-      );
-    }
   }
 
   void _showAbout() {
@@ -933,7 +921,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           _ActionRow(
             icon: Icons.chat_bubble_outline,
             label: 'Contact Support',
-            onTap: _contactSupport,
+            onTap: () => showContactSupportOptions(context),
           ),
           const Divider(
             color: AppTheme.divider,

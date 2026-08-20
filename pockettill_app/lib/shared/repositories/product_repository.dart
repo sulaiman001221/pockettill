@@ -9,16 +9,22 @@ import '../models/sale.dart';
 import '../models/sale_item.dart';
 import '../models/store_config.dart';
 import '../models/sync_event.dart';
+import 'risk_log_repository.dart';
 
 /// Business logic for [Product] records. Sits between the UI and Isar -
 /// screens never touch Isar directly.
 class ProductRepository {
-  ProductRepository({required Isar isar, required EventQueue eventQueue})
-    : _isar = isar,
-      _eventQueue = eventQueue;
+  ProductRepository({
+    required Isar isar,
+    required EventQueue eventQueue,
+    required RiskLogRepository riskLog,
+  }) : _isar = isar,
+       _eventQueue = eventQueue,
+       _riskLog = riskLog;
 
   final Isar _isar;
   final EventQueue _eventQueue;
+  final RiskLogRepository _riskLog;
   final _uuid = const Uuid();
 
   /// All products, ordered by name ascending.
@@ -88,6 +94,13 @@ class ProductRepository {
   /// instead of inserting a duplicate, and [Product.createdAt] is
   /// preserved); otherwise a uuid is generated if needed and this is a
   /// create.
+  ///
+  /// This is the only place the app ever calls to edit an existing product
+  /// (add_product_screen.dart, for both create and edit), so an update here
+  /// is always a direct, manual edit - never a sale/return/quick-restock,
+  /// which all go through [adjustStock] instead. That's what makes it safe
+  /// to log a stock drop or price change here as a Risk Log entry without
+  /// needing to distinguish the caller.
   Future<void> save(Product product) async {
     // An empty uuid always means "not yet created" - never match it against
     // another row (a stray empty-uuid row in the data would otherwise get
@@ -118,6 +131,34 @@ class ProductRepository {
       operation: isNew ? 'create' : 'update',
       payload: _toPayload(product),
     );
+
+    if (existing != null) {
+      await _recordEditRiskEvents(before: existing, after: product);
+    }
+  }
+
+  Future<void> _recordEditRiskEvents({
+    required Product before,
+    required Product after,
+  }) async {
+    if (after.stock < before.stock) {
+      await _riskLog.record(
+        type: 'manual_stock_reduction',
+        description: 'Stock manually reduced for ${after.name}',
+        beforeValue: '${before.stock}',
+        afterValue: '${after.stock}',
+        entityName: after.name,
+      );
+    }
+    if (after.price != before.price) {
+      await _riskLog.record(
+        type: 'price_changed',
+        description: 'Selling price changed for ${after.name}',
+        beforeValue: 'R${before.price.toStringAsFixed(2)}',
+        afterValue: 'R${after.price.toStringAsFixed(2)}',
+        entityName: after.name,
+      );
+    }
   }
 
   /// Applies [delta] to the product's stock (negative for sales) and saves.
@@ -142,6 +183,13 @@ class ProductRepository {
   }
 
   /// Deletes a product row outright.
+  ///
+  /// Safe to always be a plain delete: a store's own `products` row is
+  /// purely private inventory data now (the shared, admin-moderated
+  /// catalogue lives entirely in `catalogue_products`, a structurally
+  /// separate table stores can't write to at all - see
+  /// SupabaseService.fetchCatalogueProduct), so nothing else can ever
+  /// depend on this exact row.
   Future<void> delete(String productUuid) async {
     final product = await getByUuid(productUuid);
     if (product == null) return;
@@ -155,6 +203,27 @@ class ProductRepository {
       operation: 'delete',
       payload: _toPayload(product),
     );
+
+    // Only worth a Risk Log entry if this product actually had sale
+    // history - deleting a product that was just added (e.g. a
+    // still-unverified catalogue submission, or a duplicate/mis-scan
+    // corrected right away) isn't suspicious, so it shouldn't clutter the
+    // Risk Log the way removing established, previously-sold stock would.
+    final everSold =
+        await _isar.saleItems
+            .filter()
+            .productUuidEqualTo(product.uuid)
+            .count() >
+        0;
+    if (everSold) {
+      await _riskLog.record(
+        type: 'product_deleted',
+        description: 'Product deleted: ${product.name}',
+        beforeValue: '${product.stock} in stock',
+        afterValue: null,
+        entityName: product.name,
+      );
+    }
   }
 
   Future<void> _enqueueEvent({
@@ -185,7 +254,6 @@ class ProductRepository {
     'cost_price': product.costPrice,
     'stock': product.stock,
     'low_stock_threshold': product.lowStockThreshold,
-    'is_verified': product.isVerified,
     'created_at': product.createdAt.toUtc().toIso8601String(),
     'updated_at': product.updatedAt?.toUtc().toIso8601String(),
   };

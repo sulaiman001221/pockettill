@@ -27,6 +27,7 @@ class SupabaseService {
     'return_item': 'return_items',
     'store_profile': 'stores',
     'extra_income': 'extra_income',
+    'risk_log': 'risk_log',
   };
 
   /// Initializes the Supabase client.
@@ -75,19 +76,19 @@ class SupabaseService {
   /// Looks up a shared-catalogue product by [barcode]. Returns an empty list
   /// if no match exists.
   ///
-  /// Filters by `is_verified` - this is the cross-store shared catalogue,
-  /// so only verified/approved entries should ever auto-fill a form. This is
+  /// Reads from `catalogue_products` - the admin-moderated, cross-store
+  /// shared catalogue, structurally separate from a store's own `products`
+  /// table, so every row here is already verified by construction. This is
   /// distinct from the local Isar lookup a store does for its own products
-  /// (ProductRepository.getByBarcode), which has no such filter - a store
-  /// can always find its own products regardless of verification.
+  /// (ProductRepository.getByBarcode), which reads private inventory data
+  /// instead.
   static Future<List<Map<String, dynamic>>> fetchCatalogueProduct(
     String barcode,
   ) {
     return supabaseClient
-        .from('products')
+        .from('catalogue_products')
         .select()
-        .eq('barcode', barcode)
-        .eq('is_verified', true);
+        .eq('barcode', barcode);
   }
 
   /// Upserts (or deletes) a batch of sync events to their Supabase tables.
@@ -195,9 +196,8 @@ class SupabaseService {
     DateTime since,
   ) {
     return supabaseClient
-        .from('products')
+        .from('catalogue_products')
         .select()
-        .gt('created_at', since.toUtc().toIso8601String())
-        .eq('is_verified', true);
+        .gt('created_at', since.toUtc().toIso8601String());
   }
 }

@@ -348,7 +348,6 @@ class ReturnRepository {
     'cost_price': product.costPrice,
     'stock': product.stock,
     'low_stock_threshold': product.lowStockThreshold,
-    'is_verified': product.isVerified,
     'created_at': product.createdAt.toUtc().toIso8601String(),
     'updated_at': product.updatedAt?.toUtc().toIso8601String(),
   };

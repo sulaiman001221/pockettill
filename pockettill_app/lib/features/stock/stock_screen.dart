@@ -9,6 +9,7 @@ import '../../shared/theme/app_theme.dart';
 import '../../shared/widgets/pockettill_app_bar.dart';
 import 'add_product_screen.dart';
 import 'barcode_scanner_screen.dart';
+import 'risk_log_screen.dart';
 import 'stock_ui.dart';
 
 enum _StockFilter { all, normal, lowStock, outOfStock }
@@ -169,6 +170,19 @@ class _StockScreenState extends ConsumerState<StockScreen> {
         product.uuid,
         quantity,
       );
+      // Named "Add Stock" and only offers a number keypad, but nothing
+      // stops someone typing a negative quantity - that's a manual
+      // reduction just as much as editing the stock field directly on the
+      // product form (see ProductRepository.save's own risk-log hook).
+      if (quantity < 0) {
+        await ref.read(riskLogRepositoryProvider).record(
+          type: 'manual_stock_reduction',
+          description: 'Stock manually reduced for ${product.name}',
+          beforeValue: '${product.stock}',
+          afterValue: '${product.stock + quantity}',
+          entityName: product.name,
+        );
+      }
       await _loadProducts();
     }
   }
@@ -184,7 +198,30 @@ class _StockScreenState extends ConsumerState<StockScreen> {
           _searchFocusNode.unfocus(disposition: UnfocusDisposition.scope),
       behavior: HitTestBehavior.opaque,
       child: Scaffold(
-        appBar: const CustomAppBar(showMenuIcon: false, title: 'Stock'),
+        appBar: CustomAppBar(
+          showMenuIcon: false,
+          title: 'Stock',
+          trailing: PopupMenuButton<String>(
+            icon: const Icon(Icons.more_vert, color: AppTheme.textPrimary),
+            onSelected: (value) {
+              if (value == 'risk_log') {
+                Navigator.of(
+                  context,
+                ).push(MaterialPageRoute(builder: (_) => const RiskLogScreen()));
+              }
+            },
+            itemBuilder: (context) => [
+              const PopupMenuItem(
+                value: 'risk_log',
+                child: ListTile(
+                  leading: Icon(Icons.shield_outlined),
+                  title: Text('Risk Log'),
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ),
+            ],
+          ),
+        ),
         backgroundColor: AppTheme.background,
         floatingActionButton: FloatingActionButton.extended(
           onPressed: () => _openAddProduct(),
