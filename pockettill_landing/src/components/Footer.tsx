@@ -65,6 +65,11 @@ export default function Footer() {
                 Terms of Use
               </Link>
             </li>
+            <li>
+              <Link href="/data-deletion" className="hover:text-white">
+                Delete My Data
+              </Link>
+            </li>
           </ul>
         </div>
 
