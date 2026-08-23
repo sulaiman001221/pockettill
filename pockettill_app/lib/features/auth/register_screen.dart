@@ -7,6 +7,7 @@ import '../../core/sync/reachability_service.dart';
 import '../../shared/repositories/store_config_provider.dart';
 import '../../shared/theme/app_theme.dart';
 import '../../shared/utils/friendly_error.dart';
+import '../../shared/utils/refresh_store_scoped_data.dart';
 import '../../shared/widgets/pockettill_app_bar.dart';
 import '../settings/privacy_policy_screen.dart';
 import '../settings/terms_of_service_screen.dart';
@@ -193,6 +194,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                 otpChannel: channel,
               );
               await ref.read(storeConfigProvider.notifier).refresh();
+              invalidateStoreScopedProviders(ref);
               if (!mounted) return;
 
               // Founding store status is earned later through usage, not

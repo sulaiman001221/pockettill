@@ -107,15 +107,17 @@ class CreditRepository {
   }) async {
     final now = DateTime.now();
     late final CreditTransaction transaction;
+    late final CreditCustomer customer;
 
     await _isar.writeTxn(() async {
-      final customer = await _isar.creditCustomers
+      final found = await _isar.creditCustomers
           .filter()
           .uuidEqualTo(customerUuid)
           .findFirst();
-      if (customer == null) {
+      if (found == null) {
         throw StateError('Credit customer $customerUuid not found.');
       }
+      customer = found;
 
       final balanceBefore = customer.balance;
       customer.balance += amount;
@@ -135,12 +137,26 @@ class CreditRepository {
     });
 
     // Isar doesn't support nested transactions - EventQueue.enqueue opens
-    // its own writeTxn, so this must run after the one above has closed.
+    // its own writeTxn, so both of these must run after the one above has
+    // closed.
     await _enqueueEvent(
       entityType: 'credit_tx',
       entityUuid: transaction.uuid,
       operation: 'create',
       payload: _transactionToPayload(transaction),
+    );
+    // The balance change itself must reach Supabase too, not just the
+    // transaction record - without this, credit_customers.balance never
+    // updates server-side, so restoring from a local wipe (e.g. switching
+    // stores and back) resurrects a stale balance while the transaction
+    // history (which did sync) still shows the real one. Missing here and
+    // in every other balance-changing method below, plus ReturnRepository's
+    // own credit-touching path - found and fixed 2026-08-21.
+    await _enqueueEvent(
+      entityType: 'credit_customer',
+      entityUuid: customer.uuid,
+      operation: 'update',
+      payload: _customerToPayload(customer),
     );
   }
 
@@ -154,15 +170,17 @@ class CreditRepository {
   }) async {
     final now = DateTime.now();
     late final CreditTransaction transaction;
+    late final CreditCustomer customer;
 
     await _isar.writeTxn(() async {
-      final customer = await _isar.creditCustomers
+      final found = await _isar.creditCustomers
           .filter()
           .uuidEqualTo(customerUuid)
           .findFirst();
-      if (customer == null) {
+      if (found == null) {
         throw StateError('Credit customer $customerUuid not found.');
       }
+      customer = found;
       if (amount > customer.balance) {
         throw ArgumentError(
           'Repayment of $amount exceeds outstanding balance of ${customer.balance}.',
@@ -187,12 +205,21 @@ class CreditRepository {
     });
 
     // Isar doesn't support nested transactions - EventQueue.enqueue opens
-    // its own writeTxn, so this must run after the one above has closed.
+    // its own writeTxn, so both of these must run after the one above has
+    // closed.
     await _enqueueEvent(
       entityType: 'credit_tx',
       entityUuid: transaction.uuid,
       operation: 'create',
       payload: _transactionToPayload(transaction),
+    );
+    // See the matching comment in addPurchase - the balance change itself
+    // must reach Supabase too, not just the transaction record.
+    await _enqueueEvent(
+      entityType: 'credit_customer',
+      entityUuid: customer.uuid,
+      operation: 'update',
+      payload: _customerToPayload(customer),
     );
   }
 
@@ -243,6 +270,14 @@ class CreditRepository {
       entityUuid: transaction.uuid,
       operation: 'create',
       payload: _transactionToPayload(transaction),
+    );
+    // See the matching comment in addPurchase - the balance change itself
+    // must reach Supabase too, not just the transaction record.
+    await _enqueueEvent(
+      entityType: 'credit_customer',
+      entityUuid: customer.uuid,
+      operation: 'update',
+      payload: _customerToPayload(customer),
     );
 
     await _riskLog.record(
@@ -309,6 +344,14 @@ class CreditRepository {
       entityUuid: transaction.uuid,
       operation: 'create',
       payload: _transactionToPayload(transaction),
+    );
+    // See the matching comment in addPurchase - the balance change itself
+    // must reach Supabase too, not just the transaction record.
+    await _enqueueEvent(
+      entityType: 'credit_customer',
+      entityUuid: customer.uuid,
+      operation: 'update',
+      payload: _customerToPayload(customer),
     );
 
     await _riskLog.record(

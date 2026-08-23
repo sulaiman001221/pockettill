@@ -88,7 +88,25 @@ class ReachabilityService {
     );
   }
 
+  /// A single failed ping is often just a transient blip - a dropped
+  /// packet, a momentary DNS hiccup, switching between wifi and mobile
+  /// data - rather than a real outage, and this is the app's *only*
+  /// signal for "no internet" shown directly to a cashier mid-sale. One
+  /// retry after a short pause avoids flashing that warning (and the sync
+  /// indicator alongside it) for something that clears itself a second
+  /// later; a second consecutive failure is treated as a real drop. Found
+  /// 2026-08-23 from exactly that flicker being reported - reachability
+  /// and sync recovered fine on their own moments later every time.
   Future<void> _pingHealthEndpoint() async {
+    if (await _attemptPing()) {
+      _setReachable(true);
+      return;
+    }
+    await Future.delayed(const Duration(seconds: 2));
+    _setReachable(await _attemptPing());
+  }
+
+  Future<bool> _attemptPing() async {
     final client = HttpClient()..connectionTimeout = const Duration(seconds: 5);
     try {
       final request = await client.getUrl(_healthCheckUri);
@@ -97,9 +115,9 @@ class ReachabilityService {
         const Duration(seconds: 5),
       );
       await response.drain<void>();
-      _setReachable(response.statusCode == 200);
+      return response.statusCode == 200;
     } catch (_) {
-      _setReachable(false);
+      return false;
     } finally {
       client.close(force: true);
     }

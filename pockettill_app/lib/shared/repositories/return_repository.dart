@@ -274,6 +274,22 @@ class ReturnRepository {
             payload: _transactionToPayload(transaction),
           ),
         );
+        // The balance change itself must reach Supabase too, not just the
+        // transaction record - without this, credit_customers.balance never
+        // updates server-side, so restoring from a local wipe (e.g.
+        // switching stores and back) resurrects a stale balance while the
+        // transaction history (which did sync) still shows the real one.
+        // Same bug, same fix, as CreditRepository's balance-changing
+        // methods - found and fixed 2026-08-21.
+        events.add(
+          _buildEvent(
+            entityType: 'credit_customer',
+            entityUuid: customer.uuid,
+            operation: 'update',
+            deviceId: deviceId,
+            payload: _customerToPayload(customer),
+          ),
+        );
       }
 
       await _isar.syncEvents.putAll(events);
@@ -350,6 +366,16 @@ class ReturnRepository {
     'low_stock_threshold': product.lowStockThreshold,
     'created_at': product.createdAt.toUtc().toIso8601String(),
     'updated_at': product.updatedAt?.toUtc().toIso8601String(),
+  };
+
+  Map<String, dynamic> _customerToPayload(CreditCustomer customer) => {
+    'uuid': customer.uuid,
+    'name': customer.name,
+    'phone': customer.phone,
+    'balance': customer.balance,
+    'credit_limit': customer.creditLimit,
+    'created_at': customer.createdAt.toUtc().toIso8601String(),
+    'last_activity_at': customer.lastActivityAt?.toUtc().toIso8601String(),
   };
 
   Map<String, dynamic> _transactionToPayload(CreditTransaction transaction) => {

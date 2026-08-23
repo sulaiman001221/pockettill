@@ -61,12 +61,15 @@ class _TransactionDetailScreenState
 
   bool get _isCredit => widget.transaction.type == 'purchase';
   bool get _isReturn => widget.transaction.type == 'return';
+  bool get _isManualCredit => widget.transaction.type == 'manual_credit';
+  bool get _isWriteoff => widget.transaction.type == 'writeoff';
 
-  /// A purchase always increases what's owed, a repayment always decreases
-  /// it, but a return can go either way - so for a return, its own signed
-  /// amount decides the direction instead of the type alone.
+  /// A purchase and a manual credit always increase what's owed, a
+  /// repayment/write-off always decreases it, but a return can go either
+  /// way - so for a return, its own signed amount decides the direction
+  /// instead of the type alone.
   bool get _increasesBalance =>
-      _isCredit || (_isReturn && widget.transaction.amount > 0);
+      _isCredit || _isManualCredit || (_isReturn && widget.transaction.amount > 0);
 
   /// Whether the linked sale still has anything left to return - mirrors
   /// SaleDetailScreen's own gating so "Process Return" behaves identically
@@ -140,7 +143,9 @@ class _TransactionDetailScreenState
           )
           .toList(),
       'total': t.amount,
-      'paymentMethod': _isCredit ? 'Credit' : (t.note ?? 'Cash'),
+      'paymentMethod': _isCredit
+          ? 'Credit'
+          : ((_isManualCredit || _isWriteoff) ? (t.note ?? '') : (t.note ?? 'Cash')),
       'transactionNumber': _sale?.id ?? t.id,
       'date': t.createdAt,
       'customerName': widget.customerName,
@@ -154,7 +159,11 @@ class _TransactionDetailScreenState
     final icon = _increasesBalance ? Icons.arrow_upward : Icons.arrow_downward;
     final heading = _isCredit
         ? 'Credit Purchase'
-        : (_isReturn ? 'Return' : 'Repayment');
+        : (_isReturn
+              ? 'Return'
+              : (_isManualCredit
+                    ? 'Manual Credit'
+                    : (_isWriteoff ? 'Write-Off' : 'Repayment')));
     final dateText = DateFormat('dd/MM/yy, hh:mm a').format(t.createdAt);
 
     return Scaffold(
@@ -304,8 +313,22 @@ class _DetailsCard extends StatelessWidget {
   final bool isCredit;
   final String typeLabel;
 
+  /// Manual credit/write-off transactions have no real payment method - the
+  /// row becomes a freeform "Note" instead, and only shows up at all when
+  /// there's actually a note to show (no "Cash"-style fallback makes sense
+  /// for either).
+  bool get _isManualCreditOrWriteoff =>
+      transaction.type == 'manual_credit' || transaction.type == 'writeoff';
+
   @override
   Widget build(BuildContext context) {
+    final note = transaction.note;
+    final showNoteRow = _isManualCreditOrWriteoff
+        ? (note != null && note.isNotEmpty)
+        : !isCredit;
+    final noteLabel = _isManualCreditOrWriteoff ? 'Note' : 'Payment Method';
+    final noteValue = _isManualCreditOrWriteoff ? (note ?? '') : (note ?? 'Cash');
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(16),
@@ -321,9 +344,9 @@ class _DetailsCard extends StatelessWidget {
           _detailRow('Type', typeLabel),
           const SizedBox(height: 12),
           _detailRow('Customer', customerName),
-          if (!isCredit) ...[
+          if (showNoteRow) ...[
             const SizedBox(height: 12),
-            _detailRow('Payment Method', transaction.note ?? 'Cash'),
+            _detailRow(noteLabel, noteValue),
           ],
           const SizedBox(height: 12),
           Row(
@@ -436,10 +459,19 @@ class _RepaymentDetailsCard extends StatelessWidget {
 
   final CreditTransaction transaction;
 
+  bool get _isManualCreditOrWriteoff =>
+      transaction.type == 'manual_credit' || transaction.type == 'writeoff';
+
   @override
   Widget build(BuildContext context) {
     final before = transaction.balanceBefore;
     final after = transaction.balanceAfter;
+    final note = transaction.note;
+    final showNoteRow = _isManualCreditOrWriteoff
+        ? (note != null && note.isNotEmpty)
+        : true;
+    final noteLabel = _isManualCreditOrWriteoff ? 'Note' : 'Payment Method';
+    final noteValue = _isManualCreditOrWriteoff ? (note ?? '') : (note ?? 'Cash');
 
     return Container(
       width: double.infinity,
@@ -451,7 +483,10 @@ class _RepaymentDetailsCard extends StatelessWidget {
       ),
       child: Column(
         children: [
-          _detailRow('Amount Paid', 'R${transaction.amount.toStringAsFixed(2)}'),
+          _detailRow(
+            _isManualCreditOrWriteoff ? 'Amount' : 'Amount Paid',
+            'R${transaction.amount.toStringAsFixed(2)}',
+          ),
           if (before != null) ...[
             const SizedBox(height: 12),
             _detailRow('Previous Balance', formatCreditBalance(before)),
@@ -460,8 +495,10 @@ class _RepaymentDetailsCard extends StatelessWidget {
             const SizedBox(height: 12),
             _detailRow('New Balance', formatCreditBalance(after)),
           ],
-          const SizedBox(height: 12),
-          _detailRow('Payment Method', transaction.note ?? 'Cash'),
+          if (showNoteRow) ...[
+            const SizedBox(height: 12),
+            _detailRow(noteLabel, noteValue),
+          ],
         ],
       ),
     );

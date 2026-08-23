@@ -7,6 +7,8 @@ import '../../core/sync/reachability_service.dart';
 import '../../shared/repositories/store_config_provider.dart';
 import '../../shared/theme/app_theme.dart';
 import '../../shared/utils/contact_support.dart';
+import '../../shared/utils/friendly_error.dart';
+import '../../shared/utils/refresh_store_scoped_data.dart';
 import '../../shared/widgets/pockettill_app_bar.dart';
 import '../shell/shell_screen.dart';
 import 'otp_verification_screen.dart';
@@ -111,6 +113,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               onVerified: (_) async {
                 await AuthService.completeNewDeviceLogin(result);
                 await ref.read(storeConfigProvider.notifier).refresh();
+                invalidateStoreScopedProviders(ref);
                 if (!mounted) return;
                 Navigator.of(context).pushAndRemoveUntil(
                   MaterialPageRoute(builder: (_) => const ShellScreen()),
@@ -124,6 +127,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       }
 
       await ref.read(storeConfigProvider.notifier).refresh();
+      invalidateStoreScopedProviders(ref);
       if (!mounted) return;
       // pushAndRemoveUntil, not pushReplacement - Login was pushed on top
       // of WelcomeScreen, and pushReplacement only swaps out the topmost
@@ -135,6 +139,18 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       Navigator.of(context).pushAndRemoveUntil(
         MaterialPageRoute(builder: (_) => const ShellScreen()),
         (route) => false,
+      );
+    } on OtpDeliveryFailedException catch (e) {
+      // The password was correct - this is the SMS/WhatsApp provider
+      // failing to deliver the required new-device code, not a credentials
+      // problem, so it must never show the "incorrect password" wording
+      // below. See AuthService.login's own comment for why this exists.
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(e.message),
+          backgroundColor: AppTheme.logoutRed,
+        ),
       );
     } on AuthRetryableFetchException catch (_) {
       // A network-level failure (offline, timeout, DNS, etc.) - this is a
@@ -159,14 +175,21 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           backgroundColor: AppTheme.logoutRed,
         ),
       );
-    } catch (_) {
-      // Anything else unexpected - same connection-failure wording, since
-      // it's far more likely than a credentials issue at this point.
+    } catch (error) {
+      // Anything else unexpected - genuinely network-shaped errors still
+      // read as a connection failure, but anything else says so honestly
+      // instead of misleadingly blaming the user's internet (this used to
+      // always show the connection message here, which made a real bug
+      // elsewhere look like a network problem - see friendlyErrorMessage's
+      // own detection logic).
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
+        SnackBar(
           content: Text(
-            'Connection failed. Please check your internet and try again.',
+            friendlyErrorMessage(
+              error,
+              fallback: 'Something went wrong. Please try again or contact support.',
+            ),
           ),
           backgroundColor: AppTheme.logoutRed,
         ),
