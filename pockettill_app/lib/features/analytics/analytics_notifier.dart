@@ -1,4 +1,3 @@
-import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -8,17 +7,12 @@ import '../../shared/repositories/sale_repository.dart';
 
 enum AnalyticsPeriod { daily, monthly, yearly }
 
-/// A chart's current-period and previous-period series, ready to hand to
-/// fl_chart, plus the x-axis labels for the selected [AnalyticsPeriod].
+/// A bar chart's per-category revenue totals, ready to hand to fl_chart,
+/// plus the matching x-axis labels for the selected [AnalyticsPeriod].
 class ChartSeries {
-  const ChartSeries({
-    required this.currentSpots,
-    required this.previousSpots,
-    required this.labels,
-  });
+  const ChartSeries({required this.values, required this.labels});
 
-  final List<FlSpot> currentSpots;
-  final List<FlSpot> previousSpots;
+  final List<double> values;
   final List<String> labels;
 }
 
@@ -28,7 +22,7 @@ class AnalyticsState {
     this.chartLoading = true,
     this.chartError,
     this.series,
-    this.busiestHourLabel,
+    this.busiestLabel,
     this.currentTotal = 0,
     this.previousTotal = 0,
     this.currentCount = 0,
@@ -50,7 +44,7 @@ class AnalyticsState {
   final bool chartLoading;
   final String? chartError;
   final ChartSeries? series;
-  final String? busiestHourLabel;
+  final String? busiestLabel;
 
   // Selected-period headline stats (and their previous-period counterparts
   // for the "vs. prev" deltas), all loaded together with the chart.
@@ -85,7 +79,7 @@ class AnalyticsState {
     bool? chartLoading,
     Object? chartError = _unset,
     Object? series = _unset,
-    Object? busiestHourLabel = _unset,
+    Object? busiestLabel = _unset,
     double? currentTotal,
     double? previousTotal,
     int? currentCount,
@@ -106,9 +100,9 @@ class AnalyticsState {
       chartLoading: chartLoading ?? this.chartLoading,
       chartError: chartError == _unset ? this.chartError : chartError as String?,
       series: series == _unset ? this.series : series as ChartSeries?,
-      busiestHourLabel: busiestHourLabel == _unset
-          ? this.busiestHourLabel
-          : busiestHourLabel as String?,
+      busiestLabel: busiestLabel == _unset
+          ? this.busiestLabel
+          : busiestLabel as String?,
       currentTotal: currentTotal ?? this.currentTotal,
       previousTotal: previousTotal ?? this.previousTotal,
       currentCount: currentCount ?? this.currentCount,
@@ -172,29 +166,37 @@ class AnalyticsNotifier extends StateNotifier<AnalyticsState> {
 
       switch (period) {
         case AnalyticsPeriod.daily:
-          current = await _saleRepository.getByDate(now);
-          previous = await _saleRepository.getByDate(
-            now.subtract(const Duration(days: 1)),
-          );
+          // "Daily" is a Sun-Sat calendar-week bar chart, not today's hours -
+          // a single day of hourly bars read as noise to shop owners.
+          final sunday = DateTime(
+            now.year,
+            now.month,
+            now.day,
+          ).subtract(Duration(days: now.weekday % 7));
+          final saturday = sunday.add(const Duration(days: 6));
+          current = await _saleRepository.getDateRange(sunday, saturday);
+          final prevSunday = sunday.subtract(const Duration(days: 7));
+          final prevSaturday = prevSunday.add(const Duration(days: 6));
+          previous = await _saleRepository.getDateRange(prevSunday, prevSaturday);
         case AnalyticsPeriod.monthly:
-          final firstOfMonth = DateTime(now.year, now.month, 1);
-          current = await _saleRepository.getDateRange(firstOfMonth, now);
-          final lastOfPrevMonth = firstOfMonth.subtract(const Duration(days: 1));
-          final firstOfPrevMonth = DateTime(
-            lastOfPrevMonth.year,
-            lastOfPrevMonth.month,
-            1,
-          );
-          previous = await _saleRepository.getDateRange(
-            firstOfPrevMonth,
-            lastOfPrevMonth,
-          );
-        case AnalyticsPeriod.yearly:
+          // "Monthly" is the current year broken down Jan-Dec, compared
+          // against last year's full total.
           final firstOfYear = DateTime(now.year, 1, 1);
           current = await _saleRepository.getDateRange(firstOfYear, now);
           previous = await _saleRepository.getDateRange(
             DateTime(now.year - 1, 1, 1),
             DateTime(now.year - 1, 12, 31),
+          );
+        case AnalyticsPeriod.yearly:
+          // "Yearly" is the past 5 calendar years, one bar per year.
+          final startYear = now.year - 4;
+          current = await _saleRepository.getDateRange(
+            DateTime(startYear, 1, 1),
+            now,
+          );
+          previous = await _saleRepository.getDateRange(
+            DateTime(startYear - 5, 1, 1),
+            DateTime(startYear - 1, 12, 31),
           );
       }
 
@@ -220,28 +222,15 @@ class AnalyticsNotifier extends StateNotifier<AnalyticsState> {
         current: [
           for (final s in current) _SalePoint(s.createdAt.millisecondsSinceEpoch, s.total),
         ],
-        previous: [
-          for (final s in previous) _SalePoint(s.createdAt.millisecondsSinceEpoch, s.total),
-        ],
         referenceMillis: now.millisecondsSinceEpoch,
       );
       final result = await compute(_computeChartData, input);
 
-      final series = ChartSeries(
-        currentSpots: [
-          for (var i = 0; i < result.currentValues.length; i++)
-            FlSpot(i.toDouble(), result.currentValues[i]),
-        ],
-        previousSpots: [
-          for (var i = 0; i < result.previousValues.length; i++)
-            FlSpot(i.toDouble(), result.previousValues[i]),
-        ],
-        labels: result.labels,
-      );
+      final series = ChartSeries(values: result.values, labels: result.labels);
 
       state = state.copyWith(
         series: series,
-        busiestHourLabel: result.busiestHourLabel,
+        busiestLabel: result.busiestLabel,
         currentTotal: currentTotal,
         previousTotal: previousTotal,
         currentCount: current.length,
@@ -335,99 +324,68 @@ class _ChartComputeInput {
   const _ChartComputeInput({
     required this.period,
     required this.current,
-    required this.previous,
     required this.referenceMillis,
   });
 
   final AnalyticsPeriod period;
   final List<_SalePoint> current;
-  final List<_SalePoint> previous;
   final int referenceMillis;
 }
 
 class _ChartComputeResult {
   const _ChartComputeResult({
-    required this.currentValues,
-    required this.previousValues,
+    required this.values,
     required this.labels,
-    this.busiestHourLabel,
+    this.busiestLabel,
   });
 
-  final List<double> currentValues;
-  final List<double> previousValues;
+  final List<double> values;
   final List<String> labels;
-  final String? busiestHourLabel;
+  final String? busiestLabel;
 }
 
 /// Runs on a background isolate via [compute] - buckets raw sale points into
-/// the current/previous series for the selected period.
+/// the bar-chart series for the selected period.
 _ChartComputeResult _computeChartData(_ChartComputeInput input) {
   switch (input.period) {
     case AnalyticsPeriod.daily:
-      return _computeDaily(input);
+      return _computeWeekly(input);
     case AnalyticsPeriod.monthly:
-      return _computeMonthly(input);
+      return _computeMonthlyOfYear(input);
     case AnalyticsPeriod.yearly:
       return _computeYearly(input);
   }
 }
 
-_ChartComputeResult _computeDaily(_ChartComputeInput input) {
-  final currentByHour = List<double>.filled(24, 0);
-  final previousByHour = List<double>.filled(24, 0);
-  final countByHour = List<int>.filled(24, 0);
+const _weekdayLabels = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const _weekdayNames = [
+  'Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday',
+];
+
+/// Sun-Sat calendar week, one bar per day (index 0 = Sunday).
+_ChartComputeResult _computeWeekly(_ChartComputeInput input) {
+  final byWeekday = List<double>.filled(7, 0);
+  final countByWeekday = List<int>.filled(7, 0);
 
   for (final p in input.current) {
-    final hour = DateTime.fromMillisecondsSinceEpoch(p.millis).hour;
-    currentByHour[hour] += p.total;
-    countByHour[hour] += 1;
-  }
-  for (final p in input.previous) {
-    final hour = DateTime.fromMillisecondsSinceEpoch(p.millis).hour;
-    previousByHour[hour] += p.total;
+    final index = DateTime.fromMillisecondsSinceEpoch(p.millis).weekday % 7;
+    byWeekday[index] += p.total;
+    countByWeekday[index] += 1;
   }
 
-  var busiestHour = -1;
+  var busiestIndex = -1;
   var busiestCount = 0;
-  for (var h = 0; h < 24; h++) {
-    if (countByHour[h] > busiestCount) {
-      busiestCount = countByHour[h];
-      busiestHour = h;
+  for (var i = 0; i < 7; i++) {
+    if (countByWeekday[i] > busiestCount) {
+      busiestCount = countByWeekday[i];
+      busiestIndex = i;
     }
   }
 
   return _ChartComputeResult(
-    currentValues: currentByHour,
-    previousValues: previousByHour,
-    labels: [for (var h = 0; h < 24; h++) '$h'],
-    busiestHourLabel: busiestHour == -1
-        ? null
-        : '${_formatHour(busiestHour)} - ${_formatHour((busiestHour + 1) % 24)}',
-  );
-}
-
-_ChartComputeResult _computeMonthly(_ChartComputeInput input) {
-  final now = DateTime.fromMillisecondsSinceEpoch(input.referenceMillis);
-  final daysInCurrentMonth = DateTime(now.year, now.month + 1, 0).day;
-  final lastMonthRef = DateTime(now.year, now.month, 0);
-  final daysInLastMonth = lastMonthRef.day;
-
-  final currentByDay = List<double>.filled(daysInCurrentMonth, 0);
-  final previousByDay = List<double>.filled(daysInLastMonth, 0);
-
-  for (final p in input.current) {
-    final day = DateTime.fromMillisecondsSinceEpoch(p.millis).day;
-    currentByDay[day - 1] += p.total;
-  }
-  for (final p in input.previous) {
-    final day = DateTime.fromMillisecondsSinceEpoch(p.millis).day;
-    if (day - 1 < previousByDay.length) previousByDay[day - 1] += p.total;
-  }
-
-  return _ChartComputeResult(
-    currentValues: currentByDay,
-    previousValues: previousByDay,
-    labels: [for (var d = 1; d <= daysInCurrentMonth; d++) '$d'],
+    values: byWeekday,
+    labels: _weekdayLabels,
+    busiestLabel: busiestIndex == -1 ? null : _weekdayNames[busiestIndex],
   );
 }
 
@@ -436,29 +394,32 @@ const _monthLabels = [
   'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
 ];
 
-_ChartComputeResult _computeYearly(_ChartComputeInput input) {
-  final currentByMonth = List<double>.filled(12, 0);
-  final previousByMonth = List<double>.filled(12, 0);
+/// Current calendar year, one bar per month (Jan-Dec).
+_ChartComputeResult _computeMonthlyOfYear(_ChartComputeInput input) {
+  final byMonth = List<double>.filled(12, 0);
 
   for (final p in input.current) {
     final month = DateTime.fromMillisecondsSinceEpoch(p.millis).month;
-    currentByMonth[month - 1] += p.total;
+    byMonth[month - 1] += p.total;
   }
-  for (final p in input.previous) {
-    final month = DateTime.fromMillisecondsSinceEpoch(p.millis).month;
-    previousByMonth[month - 1] += p.total;
+
+  return _ChartComputeResult(values: byMonth, labels: _monthLabels);
+}
+
+/// Past 5 calendar years (inclusive of this year), one bar per year.
+_ChartComputeResult _computeYearly(_ChartComputeInput input) {
+  final now = DateTime.fromMillisecondsSinceEpoch(input.referenceMillis);
+  final startYear = now.year - 4;
+  final byYear = List<double>.filled(5, 0);
+
+  for (final p in input.current) {
+    final year = DateTime.fromMillisecondsSinceEpoch(p.millis).year;
+    final index = year - startYear;
+    if (index >= 0 && index < 5) byYear[index] += p.total;
   }
 
   return _ChartComputeResult(
-    currentValues: currentByMonth,
-    previousValues: previousByMonth,
-    labels: _monthLabels,
+    values: byYear,
+    labels: [for (var y = startYear; y <= now.year; y++) '$y'],
   );
-}
-
-String _formatHour(int hour) {
-  final period = hour < 12 ? 'AM' : 'PM';
-  var displayHour = hour % 12;
-  if (displayHour == 0) displayHour = 12;
-  return '$displayHour $period';
 }

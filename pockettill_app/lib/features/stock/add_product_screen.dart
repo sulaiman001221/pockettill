@@ -202,6 +202,16 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
     final product = await OpenFoodFactsService.instance.lookup(barcode);
     if (!mounted || product == null) return;
 
+    // Open Food Facts can return status 1 ("found") for a barcode whose
+    // entry has no actual product data - a stub with just an ecoscore tag
+    // or similar, nothing usable. That must not be shown as "sourced from
+    // a public source" when nothing was actually sourced - found
+    // 2026-08-23 from exactly that badge appearing on an unfillable
+    // product.
+    final hasUsefulData =
+        product.name != null || product.mass != null || product.category != null;
+    if (!hasUsefulData) return;
+
     setState(() {
       if (product.name != null) _nameController.text = product.name!;
       if (product.mass != null) _massController.text = product.mass!;

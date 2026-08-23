@@ -330,6 +330,22 @@ void refreshEndOfDaySummary(WidgetRef ref, DateTime date) {
   ref.invalidate(endOfDaySummaryProvider(day));
 }
 
+/// Wholesale version of [refreshEndOfDaySummary] - invalidating a family
+/// provider with no argument drops every cached day at once, not just one.
+/// Needed after a login/store switch: these families are keyed only by
+/// date, not by store, so viewing End of Day for "today" under one store
+/// and then the same calendar day under a different store on the same
+/// device would otherwise show the first store's cached numbers. Called
+/// from [invalidateStoreScopedProviders] - see that function's own doc
+/// comment. Found 2026-08-23.
+void invalidateAllEndOfDayCaches(WidgetRef ref) {
+  ref.invalidate(_dailySalesProvider);
+  ref.invalidate(_dailyReturnsProvider);
+  ref.invalidate(_dailyCreditPaymentsProvider);
+  ref.invalidate(_dailyExtraIncomeProvider);
+  ref.invalidate(endOfDaySummaryProvider);
+}
+
 /// The End of Day reconciliation for [date] - async since classifying a
 /// refund's cash/card bucket requires looking up its original sale. Callers
 /// should pass a date normalised to midnight (year/month/day only) so the

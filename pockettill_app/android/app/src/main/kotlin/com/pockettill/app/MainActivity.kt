@@ -1,4 +1,4 @@
-package com.pockettill.pockettill_app
+package com.pockettill.app
 
 import io.flutter.embedding.android.FlutterActivity
 

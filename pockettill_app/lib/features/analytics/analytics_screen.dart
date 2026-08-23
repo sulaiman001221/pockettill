@@ -72,11 +72,11 @@ class AnalyticsScreen extends ConsumerWidget {
 String _periodLabel(AnalyticsPeriod period) {
   switch (period) {
     case AnalyticsPeriod.daily:
-      return 'Today';
+      return 'This Week';
     case AnalyticsPeriod.monthly:
-      return 'This Month';
-    case AnalyticsPeriod.yearly:
       return 'This Year';
+    case AnalyticsPeriod.yearly:
+      return 'Past 5 Years';
   }
 }
 
@@ -224,17 +224,6 @@ class _SalesTrendCard extends StatelessWidget {
   final AnalyticsState state;
   final VoidCallback onRetry;
 
-  double get _labelInterval {
-    switch (state.period) {
-      case AnalyticsPeriod.daily:
-        return 4;
-      case AnalyticsPeriod.monthly:
-        return 5;
-      case AnalyticsPeriod.yearly:
-        return 1;
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     return _Card(
@@ -257,10 +246,34 @@ class _SalesTrendCard extends StatelessWidget {
               child: Center(child: CircularProgressIndicator()),
             )
           else ...[
-            SizedBox(height: 200, child: _buildChart(state.series!)),
+            SizedBox(
+              height: 200,
+              child: LayoutBuilder(
+                builder: (context, constraints) =>
+                    _buildChart(state.series!, constraints.maxWidth),
+              ),
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Container(
+                  width: 10,
+                  height: 10,
+                  decoration: BoxDecoration(
+                    color: AppTheme.primary,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                const SizedBox(width: 6),
+                const Text(
+                  'Revenue (R) — vertical axis',
+                  style: TextStyle(fontSize: 11, color: AppTheme.textSecondary),
+                ),
+              ],
+            ),
             if (state.period == AnalyticsPeriod.daily &&
-                state.busiestHourLabel != null) ...[
-              const SizedBox(height: 16),
+                state.busiestLabel != null) ...[
+              const SizedBox(height: 12),
               Row(
                 children: [
                   const Icon(Icons.trending_up, color: AppTheme.primary, size: 18),
@@ -272,9 +285,9 @@ class _SalesTrendCard extends StatelessWidget {
                         fontSize: 13,
                       ),
                       children: [
-                        const TextSpan(text: 'Busiest hour: '),
+                        const TextSpan(text: 'Busiest day: '),
                         TextSpan(
-                          text: state.busiestHourLabel,
+                          text: state.busiestLabel,
                           style: const TextStyle(fontWeight: FontWeight.bold),
                         ),
                       ],
@@ -289,19 +302,27 @@ class _SalesTrendCard extends StatelessWidget {
     );
   }
 
-  Widget _buildChart(ChartSeries series) {
-    final allValues = [
-      ...series.currentSpots.map((s) => s.y),
-      ...series.previousSpots.map((s) => s.y),
-    ];
-    final maxValue = allValues.isEmpty
+  /// [maxWidth] is the chart's available plot width - used only to fall
+  /// back from 12 monthly bars to the last 6 when there isn't roughly 30
+  /// logical px per bar to keep month labels from overlapping.
+  Widget _buildChart(ChartSeries series, double maxWidth) {
+    var values = series.values;
+    var labels = series.labels;
+    if (values.length == 12 && maxWidth < 12 * 30.0) {
+      values = values.sublist(6);
+      labels = labels.sublist(6);
+    }
+
+    final maxValue = values.isEmpty
         ? 0.0
-        : allValues.reduce((a, b) => a > b ? a : b);
+        : values.reduce((a, b) => a > b ? a : b);
     final maxY = maxValue <= 0 ? 10.0 : maxValue * 1.15;
     final interval = maxY / 4;
+    final barWidth = values.length > 8 ? 12.0 : 22.0;
 
-    return LineChart(
-      LineChartData(
+    return BarChart(
+      BarChartData(
+        alignment: BarChartAlignment.spaceAround,
         minY: 0,
         maxY: maxY,
         gridData: FlGridData(
@@ -335,16 +356,16 @@ class _SalesTrendCard extends StatelessWidget {
             sideTitles: SideTitles(
               showTitles: true,
               reservedSize: 24,
-              interval: _labelInterval,
+              interval: 1,
               getTitlesWidget: (value, meta) {
                 final index = value.round();
-                if (index < 0 || index >= series.labels.length) {
+                if (index < 0 || index >= labels.length) {
                   return const SizedBox.shrink();
                 }
                 return Padding(
                   padding: const EdgeInsets.only(top: 6),
                   child: Text(
-                    series.labels[index],
+                    labels[index],
                     style: const TextStyle(fontSize: 10, color: AppTheme.textSecondary),
                   ),
                 );
@@ -352,42 +373,29 @@ class _SalesTrendCard extends StatelessWidget {
             ),
           ),
         ),
-        lineTouchData: LineTouchData(
-          touchTooltipData: LineTouchTooltipData(
-            getTooltipItems: (spots) => spots
-                .map(
-                  (s) => LineTooltipItem(
-                    'R${s.y.toStringAsFixed(2)}',
-                    const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                )
-                .toList(),
-          ),
-        ),
-        lineBarsData: [
-          LineChartBarData(
-            spots: series.currentSpots,
-            isCurved: true,
-            color: AppTheme.primary,
-            barWidth: 2.5,
-            dotData: const FlDotData(show: false),
-            belowBarData: BarAreaData(
-              show: true,
-              color: AppTheme.primary.withValues(alpha: 0.15),
+        barTouchData: BarTouchData(
+          touchTooltipData: BarTouchTooltipData(
+            getTooltipItem: (group, groupIndex, rod, rodIndex) => BarTooltipItem(
+              'R${rod.toY.toStringAsFixed(2)}',
+              const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
             ),
           ),
-          LineChartBarData(
-            spots: series.previousSpots,
-            isCurved: true,
-            color: AppTheme.syncGrey,
-            barWidth: 1.5,
-            dashArray: const [6, 4],
-            dotData: const FlDotData(show: false),
-            belowBarData: BarAreaData(show: false),
-          ),
+        ),
+        barGroups: [
+          for (var i = 0; i < values.length; i++)
+            BarChartGroupData(
+              x: i,
+              barRods: [
+                BarChartRodData(
+                  toY: values[i],
+                  color: AppTheme.primary,
+                  width: barWidth,
+                  borderRadius: const BorderRadius.vertical(
+                    top: Radius.circular(4),
+                  ),
+                ),
+              ],
+            ),
         ],
       ),
     );

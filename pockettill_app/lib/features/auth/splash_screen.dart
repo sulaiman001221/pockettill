@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/auth/auth_service.dart';
 import '../../core/supabase/supabase_service.dart';
@@ -103,6 +104,28 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
         }
       }
 
+      Navigator.of(
+        context,
+      ).pushReplacement(MaterialPageRoute(builder: (_) => const WelcomeScreen()));
+      return;
+    }
+
+    // A valid session with no real local store to go with it - e.g. a
+    // login's password check succeeded but the device-verification OTP
+    // failed to send before the app was closed/relaunched, leaving a
+    // dangling session AuthService.login's own cleanup didn't get to run
+    // for. Never fall through to ShellScreen with an empty/missing store id
+    // - discovered 2026-08-22 chasing exactly that. Best-effort: a failed
+    // sign-out must not block getting back to a clean WelcomeScreen.
+    final config = await ref.read(storeConfigRepositoryProvider).get();
+    if (!mounted) return;
+    if (config == null || config.storeId.isEmpty) {
+      try {
+        await SupabaseService.supabaseClient.auth.signOut(
+          scope: SignOutScope.global,
+        );
+      } catch (_) {}
+      if (!mounted) return;
       Navigator.of(
         context,
       ).pushReplacement(MaterialPageRoute(builder: (_) => const WelcomeScreen()));

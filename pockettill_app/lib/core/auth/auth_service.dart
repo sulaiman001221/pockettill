@@ -1,9 +1,13 @@
+import 'dart:async';
+
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../shared/models/credit_customer.dart';
 import '../../shared/models/credit_transaction.dart';
+import '../../shared/models/extra_income.dart';
 import '../../shared/models/product.dart';
+import '../../shared/models/risk_log.dart';
 import '../../shared/models/return_item.dart';
 import '../../shared/models/return_record.dart';
 import '../../shared/models/sale.dart';
@@ -38,6 +42,31 @@ class AuthService {
   AuthService._();
 
   static const _uuid = Uuid();
+
+  // REVIEWER_TEST_ACCOUNT - Google Play reviewers can't receive a real
+  // WhatsApp/SMS OTP, so this one specific phone number skips the real
+  // Twilio Verify round trip and accepts a fixed code instead. Every other
+  // number is completely unaffected - see [requestOtp], [verifyOtp], and
+  // [login] below for the three points this is checked, each gated on an
+  // exact match against this constant. The backing account (phone-only, no
+  // stores row) already exists in Supabase Auth with a fixed password that
+  // never leaves this file; [verifyOtp] signs into it directly instead of
+  // calling the real (and here, non-existent) OTP challenge.
+  //
+  // This is a real, dialable-looking SA number chosen to satisfy Play
+  // Console's app-access form (an all-zeros placeholder was rejected there)
+  // rather than an unassignable one - if a real customer ever registered
+  // with this exact number, they'd collide with the reviewer account. Worth
+  // rechecking occasionally that nobody has.
+  //
+  // Safe to delete this whole block, the matching branches below, and the
+  // seeded Supabase Auth user once Play Store review no longer needs it.
+  static const _reviewerTestPhone = '+27600000000';
+  // Same number, formatted the way Supabase Auth actually stores/returns it
+  // (no leading +) - needed to recognize the account from `currentUser`.
+  static const _reviewerTestPhoneDigitsOnly = '27600000000';
+  static const _reviewerTestOtp = '123456';
+  static const _reviewerTestPassword = 'Reviewer#PocketTill2026';
 
   /// Normalizes any South African phone format to E.164 (`+27...`).
   ///
@@ -75,6 +104,12 @@ class AuthService {
     String phone, {
     OtpChannel channel = OtpChannel.whatsapp,
   }) {
+    // REVIEWER_TEST_ACCOUNT - see the block comment at the top of this
+    // class. No real OTP to send for this number; verifyOtp handles it
+    // entirely on its own.
+    if (formatPhone(phone) == _reviewerTestPhone) {
+      return Future.value();
+    }
     return SupabaseService.supabaseClient.auth.signInWithOtp(
       phone: formatPhone(phone),
       channel: channel,
@@ -87,6 +122,26 @@ class AuthService {
     required String phone,
     required String token,
   }) async {
+    // REVIEWER_TEST_ACCOUNT - see the block comment at the top of this
+    // class. [requestOtp] never sent a real challenge for this number, so
+    // there's nothing for the real verifyOTP call to check the code
+    // against - instead, a correct fixed code signs straight into the
+    // pre-provisioned reviewer account by password.
+    if (formatPhone(phone) == _reviewerTestPhone) {
+      if (token != _reviewerTestOtp) {
+        throw Exception('Verification failed — no user returned');
+      }
+      final response = await SupabaseService.supabaseClient.auth
+          .signInWithPassword(
+            phone: _reviewerTestPhone,
+            password: _reviewerTestPassword,
+          );
+      if (response.user == null) {
+        throw Exception('Verification failed — no user returned');
+      }
+      return;
+    }
+
     final response = await SupabaseService.supabaseClient.auth.verifyOTP(
       phone: formatPhone(phone),
       token: token,
@@ -100,6 +155,14 @@ class AuthService {
   /// Sets the password on the just-verified session. Call after [verifyOtp]
   /// succeeds, for both a new registration and a password reset.
   static Future<void> setPassword(String password) {
+    // REVIEWER_TEST_ACCOUNT - see the block comment at the top of this
+    // class. Deliberately a no-op: this account's password stays pinned to
+    // the fixed value [login] always signs in with, so review keeps working
+    // on every future run regardless of what gets typed here.
+    if (SupabaseService.supabaseClient.auth.currentUser?.phone ==
+        _reviewerTestPhoneDigitsOnly) {
+      return Future.value();
+    }
     return SupabaseService.supabaseClient.auth.updateUser(
       UserAttributes(password: password),
     );
@@ -172,6 +235,8 @@ class AuthService {
         await IsarService.db.creditTransactions.clear();
         await IsarService.db.returnRecords.clear();
         await IsarService.db.returnItems.clear();
+        await IsarService.db.extraIncomes.clear();
+        await IsarService.db.riskLogs.clear();
         await IsarService.db.syncEvents.clear();
       });
     }
@@ -213,9 +278,16 @@ class AuthService {
     required String password,
   }) async {
     final formatted = formatPhone(phone);
+    // REVIEWER_TEST_ACCOUNT - see the block comment at the top of this
+    // class. Whatever a reviewer types into the password field is ignored
+    // for this one number, since [setPassword] never actually changes it.
+    final isReviewerAccount = formatted == _reviewerTestPhone;
 
     final authResponse = await SupabaseService.supabaseClient.auth
-        .signInWithPassword(phone: formatted, password: password);
+        .signInWithPassword(
+          phone: formatted,
+          password: isReviewerAccount ? _reviewerTestPassword : password,
+        );
 
     if (authResponse.user == null) {
       throw Exception('Login failed');
@@ -231,14 +303,62 @@ class AuthService {
     final existingConfig = await repo.get();
     final deviceId = existingConfig?.deviceId ?? _uuid.v4();
 
-    final verified = await _isDeviceVerified(
-      deviceId: deviceId,
-      storeId: store['uuid'] as String,
-    );
+    // On this install's very first login attempt, persist the freshly
+    // generated deviceId immediately - before the OTP round trip below,
+    // which can fail (offline, the SMS/WhatsApp provider temporarily
+    // refusing delivery) and leave the user retrying. Without this, a
+    // retry generates a brand-new random deviceId every single time
+    // (nothing was ever saved to reuse), so the device could never
+    // actually finish verification even once the OTP problem clears -
+    // found 2026-08-22 chasing exactly that. _completeLogin overwrites
+    // this placeholder with real values once verification succeeds.
+    if (existingConfig == null) {
+      await repo.save(
+        StoreConfig()
+          ..id = 1
+          ..deviceId = deviceId
+          ..storeId = ''
+          ..storeName = ''
+          ..isLoggedIn = false,
+      );
+    }
+
+    // REVIEWER_TEST_ACCOUNT - never challenge this account for a new
+    // device: a fresh reviewer install/emulator would otherwise trip the
+    // same new-device OTP flow every single time, right back to needing a
+    // real SMS/WhatsApp delivery this account can never receive.
+    final verified =
+        isReviewerAccount ||
+        await _isDeviceVerified(deviceId: deviceId, storeId: store['uuid'] as String);
 
     if (!verified) {
       final channel = _channelFromName(store['otp_channel'] as String?);
-      await requestOtp(formatted, channel: channel);
+      // The password check above already succeeded - a failure here is the
+      // SMS/WhatsApp provider, not a credentials problem, and must never be
+      // allowed to fall through to the generic AuthException handling a
+      // caller uses for a wrong password. This is a real failure mode, not
+      // theoretical: an SMS/Verify provider can temporarily refuse to
+      // deliver to a specific number (rate limiting, an anti-fraud block,
+      // etc.), and until this was added, that surfaced as a wildly
+      // misleading "incorrect phone number or password" - found 2026-08-22
+      // when exactly this happened to a real number mid-session.
+      try {
+        await requestOtp(formatted, channel: channel);
+      } catch (error) {
+        // signInWithPassword above already created a real, valid session -
+        // left alone, that's a session with nothing safe to resume into
+        // (no verified device, and on a brand-new install, only the bare
+        // placeholder StoreConfig saved above). A relaunch would find
+        // isLoggedIn true and fall through toward ShellScreen with no real
+        // store to show - discovered 2026-08-22 chasing exactly that.
+        // Best-effort: a failed sign-out here must not mask the real error.
+        try {
+          await SupabaseService.supabaseClient.auth.signOut(
+            scope: SignOutScope.global,
+          );
+        } catch (_) {}
+        throw OtpDeliveryFailedException(_describeOtpFailure(error));
+      }
       return LoginResult._(
         needsDeviceVerification: true,
         store: store,
@@ -323,12 +443,23 @@ class AuthService {
     final config = await repo.get();
     if (config == null || config.storeId.isEmpty) return null;
 
+    // REVIEWER_TEST_ACCOUNT - see the block comment at the top of this
+    // class. [login] already skips this account's device check entirely,
+    // but this is a *second*, independent path that reaches the same
+    // check (a cold app open with an existing session, not a fresh login)
+    // - missing here meant the reviewer account could still land on a
+    // real OTP screen (for a number that can never receive one) on
+    // relaunch, even though a fresh login always bypassed it cleanly.
+    // Found 2026-08-22.
+    if (config.authPhone == _reviewerTestPhone) return null;
+
     try {
       final store = await SupabaseService.supabaseClient
           .from('stores')
           .select()
           .eq('uuid', config.storeId)
-          .single();
+          .single()
+          .timeout(const Duration(seconds: 4));
 
       final verified = await _isDeviceVerified(
         deviceId: config.deviceId,
@@ -355,9 +486,33 @@ class AuthService {
     return name == 'sms' ? OtpChannel.sms : OtpChannel.whatsapp;
   }
 
+  /// Turns a raw OTP-send failure into a short, honest message - detects
+  /// the specific case of the SMS/WhatsApp provider temporarily refusing to
+  /// deliver to this number (an anti-fraud block, seen in production as
+  /// Twilio error 60410) so that case reads as "try again shortly" rather
+  /// than a generic, less actionable connection message.
+  static String _describeOtpFailure(Object error) {
+    final message = error.toString().toLowerCase();
+    if (message.contains('blocked') || message.contains('60410')) {
+      return 'Your phone number is temporarily blocked by our SMS/WhatsApp '
+          'provider. This usually clears on its own - please try again '
+          'shortly, or contact support if it persists.';
+    }
+    return 'Could not send the verification code. Please check your '
+        'connection and try again.';
+  }
+
   /// Whether `devices` already has a verified row for this exact
   /// (deviceId, storeId) pairing - the single source of truth for whether a
   /// login needs the new-device OTP challenge.
+  ///
+  /// Timeout-bounded: [checkDeviceTrust] (called on every app open for an
+  /// already-logged-in device) relies on this failing fast rather than
+  /// hanging on a degraded/offline connection - without a bound here, a
+  /// weak signal could leave SplashScreen sitting well past the default
+  /// HTTP client timeout before its own catch-all finally let an
+  /// already-trusted device back into the app it's supposed to keep
+  /// working in fully offline. Found 2026-08-22.
   static Future<bool> _isDeviceVerified({
     required String deviceId,
     required String storeId,
@@ -367,7 +522,8 @@ class AuthService {
         .select('verified_at')
         .eq('id', deviceId)
         .eq('store_id', storeId)
-        .maybeSingle();
+        .maybeSingle()
+        .timeout(const Duration(seconds: 4));
     return row != null && row['verified_at'] != null;
   }
 
@@ -433,6 +589,8 @@ class AuthService {
         await IsarService.db.creditTransactions.clear();
         await IsarService.db.returnRecords.clear();
         await IsarService.db.returnItems.clear();
+        await IsarService.db.extraIncomes.clear();
+        await IsarService.db.riskLogs.clear();
         await IsarService.db.syncEvents.clear();
       });
     }
@@ -547,8 +705,21 @@ class AuthService {
     if (!session.isExpired) return true;
 
     try {
-      final response = await auth.refreshSession();
+      final response = await auth
+          .refreshSession()
+          .timeout(const Duration(seconds: 4));
       return response.session != null;
+    } on TimeoutException {
+      // Same reasoning as AuthRetryableFetchException just below - a
+      // degraded connection can hang well past a reasonable wait instead
+      // of failing outright, and SplashScreen is sitting on this call the
+      // whole time (see its own doc comment on the cost of a false
+      // "offline" reading here). Bounding it directly is what actually
+      // fixes the "stuck on the splash screen when offline" symptom this
+      // was found from - AuthRetryableFetchException alone never fired
+      // because the request hadn't failed, it just hadn't finished.
+      // Found 2026-08-22.
+      return true;
     } on AuthRetryableFetchException {
       // Offline/unreachable - can't confirm either way. PocketTill works
       // fully offline once set up, so a connectivity blip must never eject
@@ -608,4 +779,15 @@ class LoginResult {
 /// syncing and there's no connectivity to flush them before signing out.
 class UnsyncedChangesException implements Exception {
   const UnsyncedChangesException();
+}
+
+/// Thrown by [AuthService.login] when the password check succeeds but the
+/// required new-device verification code could not be sent - kept distinct
+/// from [AuthException] so the UI can tell "wrong password" apart from
+/// "correct password, but the OTP provider couldn't deliver right now"
+/// instead of showing a misleading "incorrect password" message for a
+/// completely different failure.
+class OtpDeliveryFailedException implements Exception {
+  const OtpDeliveryFailedException(this.message);
+  final String message;
 }

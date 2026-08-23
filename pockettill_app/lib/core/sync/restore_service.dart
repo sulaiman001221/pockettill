@@ -6,6 +6,7 @@ import '../../shared/models/extra_income.dart';
 import '../../shared/models/product.dart';
 import '../../shared/models/return_item.dart';
 import '../../shared/models/return_record.dart';
+import '../../shared/models/risk_log.dart';
 import '../../shared/models/sale.dart';
 import '../../shared/models/sale_item.dart';
 import '../supabase/supabase_service.dart';
@@ -43,6 +44,7 @@ class RestoreService {
     final returns = await _fetchAll('returns', storeId);
     final returnItems = await _fetchAll('return_items', storeId);
     final extraIncome = await _fetchAll('extra_income', storeId);
+    final riskLog = await _fetchAll('risk_log', storeId);
 
     // A genuinely brand-new store with no history yet - nothing to write,
     // and an empty writeTxn would be pointless.
@@ -50,7 +52,8 @@ class RestoreService {
         sales.isEmpty &&
         creditCustomers.isEmpty &&
         returns.isEmpty &&
-        extraIncome.isEmpty) {
+        extraIncome.isEmpty &&
+        riskLog.isEmpty) {
       return;
     }
 
@@ -73,6 +76,7 @@ class RestoreService {
       await _isar.extraIncomes.putAll(
         extraIncome.map(_extraIncomeFromRow).toList(),
       );
+      await _isar.riskLogs.putAll(riskLog.map(_riskLogFromRow).toList());
     });
   }
 
@@ -202,4 +206,14 @@ class RestoreService {
     ..description = row['description'] as String
     ..synced = true
     ..createdAt = _parseLocal(row['created_at'] as String);
+
+  RiskLog _riskLogFromRow(Map<String, dynamic> row) => RiskLog()
+    ..uuid = row['uuid'] as String
+    ..type = row['type'] as String
+    ..description = row['description'] as String
+    ..beforeValue = row['before_value'] as String?
+    ..afterValue = row['after_value'] as String?
+    ..entityName = row['entity_name'] as String
+    ..synced = true
+    ..timestamp = _parseLocal(row['created_at'] as String);
 }

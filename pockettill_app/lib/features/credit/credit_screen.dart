@@ -10,7 +10,6 @@ import '../../shared/utils/credit_balance_display.dart';
 import '../../shared/widgets/pockettill_app_bar.dart';
 import '../stock/risk_log_providers.dart';
 import '../stock/risk_log_screen.dart';
-import '../stock/stock_ui.dart';
 import 'add_customer_screen.dart';
 import 'customer_detail_screen.dart';
 
@@ -493,16 +492,73 @@ class _CustomerListItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final owing = customer.balance > 0;
+    final phone = customer.phone;
+
+    final String label;
+    final Color color;
+    final bool showDot;
+    if (owing) {
+      label = 'Owes ${formatCreditBalance(customer.balance)}';
+      color = AppTheme.logoutRed;
+      showDot = false;
+    } else if (customer.balance < 0) {
+      label = 'Credit ${formatCreditBalance(customer.balance)}';
+      color = AppTheme.syncGreen;
+      showDot = true;
+    } else {
+      label = 'Settled';
+      color = AppTheme.syncGreen;
+      showDot = true;
+    }
+
+    // Settled/Credit get their shaded pill back; Owes stays plain colored
+    // text - matches the user's "circled shaded as it was before" request
+    // for the positive states while leaving the negative one unshaded.
+    final Widget statusWidget = showDot
+        ? Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(9999),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 6,
+                  height: 6,
+                  decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  label,
+                  style: TextStyle(
+                    color: color,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 13,
+                  ),
+                ),
+              ],
+            ),
+          )
+        : Text(
+            label,
+            style: TextStyle(
+              color: color,
+              fontWeight: FontWeight.w600,
+              fontSize: 13,
+            ),
+          );
 
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: BorderRadius.circular(16),
       child: Container(
         margin: const EdgeInsets.fromLTRB(20, 0, 20, 12),
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 16),
         decoration: BoxDecoration(
           color: AppTheme.surface,
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(16),
           boxShadow: [
             BoxShadow(
               color: Colors.black.withValues(alpha: 0.04),
@@ -513,7 +569,7 @@ class _CustomerListItem extends StatelessWidget {
         ),
         child: Row(
           children: [
-            ProductAvatar(name: customer.name),
+            _CustomerAvatar(name: customer.name),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
@@ -528,24 +584,35 @@ class _CustomerListItem extends StatelessWidget {
                     ),
                     overflow: TextOverflow.ellipsis,
                   ),
-                  const SizedBox(height: 4),
-                  if (owing)
-                    _BalanceBadge(
-                      color: AppTheme.logoutRed,
-                      label: 'Owes ${formatCreditBalance(customer.balance)}',
-                    )
-                  else if (customer.balance < 0)
-                    _BalanceBadge(
-                      color: AppTheme.syncGreen,
-                      label: 'Credit ${formatCreditBalance(customer.balance)}',
-                    )
-                  else
-                    const _BalanceBadge(color: AppTheme.syncGreen, label: 'Settled'),
+                  if ((phone ?? '').isNotEmpty) ...[
+                    const SizedBox(height: 6),
+                    Text(phone!, style: AppTheme.bodySubtitle),
+                  ],
                 ],
               ),
             ),
             const SizedBox(width: 8),
-            const Icon(Icons.chevron_right, color: AppTheme.iconBorder),
+            Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Container(
+                  width: 28,
+                  height: 28,
+                  decoration: BoxDecoration(
+                    color: AppTheme.background,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(
+                    Icons.chevron_right,
+                    color: AppTheme.iconBorder,
+                    size: 18,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                statusWidget,
+              ],
+            ),
           ],
         ),
       ),
@@ -553,42 +620,38 @@ class _CustomerListItem extends StatelessWidget {
   }
 }
 
-/// Pill badge for a customer's balance state (owes/credit/settled) - same
-/// visual language as [StockStatusBadge] on the Stock screen.
-class _BalanceBadge extends StatelessWidget {
-  const _BalanceBadge({required this.color, required this.label});
+/// Rounded-square initials avatar for a customer - solid brand-blue
+/// background matching the "New Customer Profile" icon tile on
+/// [AddCustomerScreen], rather than a per-name colour.
+class _CustomerAvatar extends StatelessWidget {
+  const _CustomerAvatar({required this.name});
 
-  final Color color;
-  final String label;
+  final String name;
 
   @override
   Widget build(BuildContext context) {
+    final words = name.trim().split(RegExp(r'\s+')).where((w) => w.isNotEmpty);
+    final initials = words.isEmpty
+        ? '?'
+        : words.length == 1
+        ? words.first[0].toUpperCase()
+        : (words.first[0] + words.last[0]).toUpperCase();
+
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      width: 44,
+      height: 44,
+      alignment: Alignment.center,
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(16),
+        color: AppTheme.primary,
+        borderRadius: BorderRadius.circular(12),
       ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 6,
-            height: 6,
-            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-          ),
-          const SizedBox(width: 4),
-          Text(
-            label,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              color: color,
-              fontWeight: FontWeight.w700,
-              fontSize: 12,
-            ),
-          ),
-        ],
+      child: Text(
+        initials,
+        style: const TextStyle(
+          color: Colors.white,
+          fontWeight: FontWeight.bold,
+          fontSize: 15,
+        ),
       ),
     );
   }

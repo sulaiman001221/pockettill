@@ -38,6 +38,7 @@ Owning-account row per store. One row per Supabase Auth user (via
 | qualification_checked_at | timestamptz | nullable |
 | qualification_sales_count | integer | nullable |
 | active_device_id | text | nullable — added 2026-08-16, single-active-device enforcement. See the naming-collision note under `devices` below before assuming this is the same feature as `devices.verified_at`. |
+| excluded_from_founding | boolean | default false — added 2026-08-23. Opts a store out of ever auto-qualifying for founding-store status via `check_founding_store_qualification`, regardless of age/sales - set true for the team's own test/dev stores (and the Play Store reviewer account) so internal testing sales don't consume founding slots or grant the badge to non-real users. |
 
 ### `products`
 A store's own private inventory — **only** that, as of 2026-08-17. Until
@@ -462,7 +463,7 @@ they don't need elevated privilege, so they run under the caller's own RLS.
 
 - **`current_store_id() returns uuid`** — `select uuid from stores where auth_user_id = auth.uid() limit 1`. The RLS resolver every `*_store_all` policy calls.
 - **`is_founding_store() returns boolean`** — `true` while fewer than 100 stores have `is_beta_adopter = true`.
-- **`check_founding_store_qualification(store_uuid uuid) returns table(...)`** — idempotent check/promote: a store qualifies once it's ≥7 days old, has ≥5 recorded sales, and founding slots remain; promotes it in the same call if so.
+- **`check_founding_store_qualification(store_uuid uuid) returns table(...)`** — idempotent check/promote: a store qualifies once it's ≥7 days old, has ≥50 recorded sales (raised from ≥5 on 2026-08-23 - the old threshold let internal test stores auto-qualify from testing volume alone), `excluded_from_founding` is false, and founding slots remain; promotes it in the same call if so.
 - **`phone_has_account(check_phone text) returns boolean`** — true only when the phone has **both** an `auth.users` row and a matching `stores` row (as of 2026-08-02; previously just checked `auth.users`, which permanently blocked re-registration for a phone whose registration was interrupted before its `stores` row was created). Checks `auth.users.phone` (stored **without** a leading `+`) against `ltrim(check_phone, '+')`, so the app can pass a `+27...`-formatted number directly.
 - **`median_sync_gap_hours() returns numeric`** — `security invoker`, `set search_path = ''`. Added 2026-08-07 for pockettill_datamaster's Sync Health summary stat. Platform-wide median of the gaps (in hours) between consecutive `sync_log` rows for the same store (`lag()` partitioned by `store_id`). Runs under the caller's RLS, so calling it as `anon`/`authenticated` only aggregates over rows that role can see — the dashboard calls it via the service-role client to get the true platform-wide figure.
 - **`category_sales_stats(days integer) returns table(category text, total_quantity bigint)`** — `security invoker`, `set search_path = ''`. Added 2026-08-09 for pockettill_datamaster's Analytics page. Joins `sale_items` → `sales` (for the date bound) → `products` (for category) in raw SQL, sidestepping the missing FK on `sale_items` noted above. `days` is how far back from `now()` to include.

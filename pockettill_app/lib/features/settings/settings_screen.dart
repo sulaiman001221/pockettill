@@ -55,6 +55,14 @@ class SettingsScreen extends ConsumerStatefulWidget {
 }
 
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
+  // Must match the sales threshold in the `check_founding_store_qualification`
+  // Postgres RPC (see supabase/SCHEMA_TRUTH.md) - this is display-only and
+  // doesn't enforce anything itself, so a mismatch here just shows the
+  // wrong progress number rather than breaking qualification, but it still
+  // needs updating by hand whenever that RPC's threshold changes. Raised
+  // from 5 to 50 on 2026-08-23.
+  static const int _qualifyingSalesTarget = 50;
+
   StoreConfig? _config;
   bool _loading = true;
 
@@ -170,7 +178,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               ? 'Congratulations — your store has qualified for founding '
                     'store status and its 50% lifetime discount.'
               : "You're at ${progress.daysSinceRegistration}/7 days and "
-                    "${progress.salesCount}/5 sales. Keep going — "
+                    "${progress.salesCount}/$_qualifyingSalesTarget sales. Keep going — "
                     '${progress.foundingStoresRemaining} founding spots are '
                     'still available.',
         ),
@@ -706,7 +714,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   Widget _buildFoundingProgressCard() {
     final progress = _foundingProgress;
     final days = (progress?.daysSinceRegistration ?? 0).clamp(0, 7);
-    final sales = (progress?.salesCount ?? 0).clamp(0, 5);
+    final sales = (progress?.salesCount ?? 0).clamp(0, _qualifyingSalesTarget);
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -766,7 +774,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           else ...[
             _ProgressRow(label: 'Days since registration', value: '$days/7'),
             const SizedBox(height: 8),
-            _ProgressRow(label: 'Sales recorded', value: '$sales/5'),
+            _ProgressRow(
+              label: 'Sales recorded',
+              value: '$sales/$_qualifyingSalesTarget',
+            ),
             const SizedBox(height: 8),
             _ProgressRow(
               label: 'Founding spots',

@@ -81,6 +81,19 @@ class SyncService {
         _statusController.add(SyncStatus.idle);
         return;
       }
+      if (!storeConfig.isLoggedIn) {
+        // Logged out, but still fully configured locally - logout()
+        // deliberately keeps storeId/products/sales/etc. around so the app
+        // keeps working offline, so storeId.isEmpty above doesn't catch
+        // this case. Without this check, a background sync (triggered by
+        // ReachabilityService on every reconnect, independent of any
+        // screen being open) kept retrying with no valid session and
+        // failing every single push with 401 - looking exactly like sync
+        // "stuck pending" forever, since the same events never got marked
+        // pushed. Found 2026-08-22.
+        _statusController.add(SyncStatus.idle);
+        return;
+      }
       final storeId = storeConfig.storeId;
 
       final pending = await _eventQueue.getPending();
