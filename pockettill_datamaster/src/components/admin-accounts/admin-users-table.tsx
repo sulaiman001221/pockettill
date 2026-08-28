@@ -5,6 +5,7 @@ import { toast } from "sonner";
 
 import { DeactivateAdminDialog } from "@/components/admin-accounts/deactivate-admin-dialog";
 import { RemoveAdminDialog } from "@/components/admin-accounts/remove-admin-dialog";
+import { Pagination } from "@/components/shared/pagination";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -17,6 +18,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { usePagination } from "@/hooks/use-pagination";
 import { changeAdminRole, toggleAdminActive, toggleCanManageAccess } from "@/lib/actions/admin-accounts";
 import type { AdminRole } from "@/lib/auth";
 import type { AdminUserRow } from "@/lib/data/admin-accounts";
@@ -38,6 +40,7 @@ export function AdminUsersTable({
   const [pending, startTransition] = useTransition();
   const [deactivateTarget, setDeactivateTarget] = useState<AdminUserRow | null>(null);
   const [removeTarget, setRemoveTarget] = useState<AdminUserRow | null>(null);
+  const { page, setPage, pageItems, pageSize, total } = usePagination(admins, 10);
 
   function handleRoleChange(admin: AdminUserRow, role: string) {
     startTransition(async () => {
@@ -92,7 +95,7 @@ export function AdminUsersTable({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {admins.map((admin) => {
+            {pageItems.map((admin) => {
               const isSelf = admin.id === currentAdminId;
               return (
                 <TableRow key={admin.id}>
@@ -179,6 +182,8 @@ export function AdminUsersTable({
           </TableBody>
         </Table>
       </div>
+
+      <Pagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} />
 
       <DeactivateAdminDialog
         admin={deactivateTarget}

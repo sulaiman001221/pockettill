@@ -6,6 +6,14 @@ import { toast } from "sonner";
 import { approveProduct, updateVerifiedProduct } from "@/lib/actions/catalogue";
 import { formatProductMass, formatProductName } from "@/lib/catalogue-format";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -44,9 +52,11 @@ export function ProductPanel({
   const [categorySelect, setCategorySelect] = useState("");
   const [customCategory, setCustomCategory] = useState("");
   const [mass, setMass] = useState("");
+  const [conflict, setConflict] = useState<{ existingName: string } | null>(null);
   const [pending, startTransition] = useTransition();
 
   useEffect(() => {
+    setConflict(null);
     if (item) {
       // Approving is the point where a product enters the shared catalogue,
       // so the admin sees (and can still hand-correct) the canonical form
@@ -70,16 +80,28 @@ export function ProductPanel({
 
   const category = categorySelect === OTHER_VALUE ? customCategory.trim() : categorySelect;
 
-  function handleConfirm() {
+  function handleConfirm(force = false) {
     if (!item) return;
-    const action = mode === "approve" ? approveProduct : updateVerifiedProduct;
 
     startTransition(async () => {
-      const result = await action(item.barcode, { name, category, mass });
+      if (mode === "approve") {
+        const result = await approveProduct(item.barcode, { name, category, mass }, { force });
+        if (result?.conflict) {
+          setConflict(result.conflict);
+        } else if (result?.error) {
+          toast.error(result.error);
+        } else {
+          toast.success("Product approved.");
+          onOpenChange(false);
+        }
+        return;
+      }
+
+      const result = await updateVerifiedProduct(item.barcode, { name, category, mass });
       if (result?.error) {
         toast.error(result.error);
       } else {
-        toast.success(mode === "approve" ? "Product approved." : "Product updated.");
+        toast.success("Product updated.");
         onOpenChange(false);
       }
     });
@@ -137,11 +159,37 @@ export function ProductPanel({
         </div>
 
         <SheetFooter>
-          <Button onClick={handleConfirm} disabled={pending || !name || !category}>
+          <Button onClick={() => handleConfirm()} disabled={pending || !name || !category}>
             {mode === "approve" ? "Approve" : "Save changes"}
           </Button>
         </SheetFooter>
       </SheetContent>
+
+      <Dialog open={conflict !== null} onOpenChange={(next) => !next && setConflict(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Barcode already verified</DialogTitle>
+            <DialogDescription>
+              This barcode already exists as &quot;{conflict?.existingName}&quot;. Do you want to update
+              the existing product with these details, or cancel?
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConflict(null)}>
+              Cancel
+            </Button>
+            <Button
+              disabled={pending}
+              onClick={() => {
+                setConflict(null);
+                handleConfirm(true);
+              }}
+            >
+              Update existing product
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Sheet>
   );
 }

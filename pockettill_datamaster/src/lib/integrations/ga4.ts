@@ -75,6 +75,12 @@ async function _getWebsiteTrafficData(days: number): Promise<GA4Result> {
 
   try {
     const client = new BetaAnalyticsDataClient({
+      // The client library defaults to gRPC, which has well-documented
+      // connectivity problems on serverless platforms like Vercel (requests
+      // hang in gRPC's internal load-balancer subchannel-picking step and
+      // eventually time out with DEADLINE_EXCEEDED, seen live in production).
+      // Forcing REST transport avoids that class of failure entirely.
+      fallback: true,
       credentials: {
         client_email: clientEmail,
         private_key: privateKey.replace(/\\n/g, "\n"),
@@ -122,7 +128,7 @@ async function _getWebsiteTrafficData(days: number): Promise<GA4Result> {
         dimensions: [{ name: "country" }],
         metrics: [{ name: "totalUsers" }],
         orderBys: [{ metric: { metricName: "totalUsers" }, desc: true }],
-        limit: 5,
+        limit: 50,
       }),
     ]);
 
@@ -169,6 +175,7 @@ async function _getWebsiteTrafficData(days: number): Promise<GA4Result> {
       data: { kpis, dailyVisitors, channelSplit, topPages, topCountries },
     };
   } catch (err) {
+    console.error("[ga4-traffic]", err);
     return { status: "error", message: describeError(err) };
   }
 }

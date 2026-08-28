@@ -79,6 +79,7 @@ async function _getSupabaseCostData(): Promise<SupabaseCostResult> {
       },
     };
   } catch (err) {
+    console.error("[supabase-costs]", err);
     return { status: "error", message: describeError(err) };
   }
 }

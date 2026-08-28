@@ -1,7 +1,9 @@
-import { Activity, AlertTriangle, Database, HardDrive, Layers, Settings } from "lucide-react";
+import { Activity, Database, HardDrive, Layers, Settings } from "lucide-react";
 
+import { InfraErrorBanner } from "@/components/shared/infra-error-banner";
 import { KpiCard } from "@/components/shared/kpi-card";
 import { PlaceholderPanel } from "@/components/shared/placeholder-panel";
+import { retrySupabaseCosts } from "@/lib/actions/infrastructure";
 import { getSupabaseCostData } from "@/lib/costs/supabase-usage";
 
 function formatBytes(bytes: number | null) {
@@ -25,12 +27,7 @@ export async function SupabaseCostSection() {
   }
 
   if (result.status === "error") {
-    return (
-      <div className="flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-600 dark:text-amber-400">
-        <AlertTriangle className="size-4 shrink-0" />
-        Supabase usage data is stale — the last request failed ({result.message}).
-      </div>
-    );
+    return <InfraErrorBanner message={result.message} onRetry={retrySupabaseCosts} />;
   }
 
   const { data } = result;

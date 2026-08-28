@@ -3,8 +3,10 @@
 import { useRouter } from "next/navigation";
 import { AlertOctagon, AlertTriangle, Bell } from "lucide-react";
 
+import { Pagination } from "@/components/shared/pagination";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { usePagination } from "@/hooks/use-pagination";
 import { cn } from "@/lib/utils";
 import { formatDateTime, formatMaskedPhone } from "@/lib/format";
 import type { SyncAlertStore, SyncSeverity } from "@/lib/data/sync-health";
@@ -37,6 +39,7 @@ export function AlertList({ severity, stores }: { severity: SyncSeverity; stores
   const router = useRouter();
   const config = SEVERITY_CONFIG[severity];
   const Icon = config.icon;
+  const { page, setPage, pageItems, pageSize, total } = usePagination(stores, 10);
 
   return (
     <Card>
@@ -47,11 +50,11 @@ export function AlertList({ severity, stores }: { severity: SyncSeverity; stores
         </CardTitle>
         <Badge className={cn("border-transparent", config.badgeClass)}>{stores.length}</Badge>
       </CardHeader>
-      <CardContent className="flex max-h-80 flex-col gap-1 overflow-y-auto px-2">
-        {stores.length === 0 ? (
+      <CardContent className="flex min-h-[16rem] flex-col gap-1 px-2">
+        {pageItems.length === 0 ? (
           <p className="px-2 py-6 text-center text-sm text-muted-foreground">All clear.</p>
         ) : (
-          stores.map((store) => (
+          pageItems.map((store) => (
             <button
               key={store.id}
               type="button"
@@ -67,6 +70,9 @@ export function AlertList({ severity, stores }: { severity: SyncSeverity; stores
             </button>
           ))
         )}
+        <div className="mt-auto">
+          <Pagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} />
+        </div>
       </CardContent>
     </Card>
   );

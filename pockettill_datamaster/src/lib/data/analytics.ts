@@ -24,6 +24,11 @@ export interface PaymentSplit {
   count: number;
 }
 
+export interface TopActiveStore {
+  storeName: string;
+  syncCount: number;
+}
+
 function dayLabel(date: Date) {
   return date.toLocaleDateString("en-ZA", { month: "short", day: "numeric", timeZone: "UTC" });
 }
@@ -93,6 +98,46 @@ async function _getPaymentMethodSplit(days: number): Promise<PaymentSplit[]> {
 }
 
 export const getPaymentMethodSplit = unstable_cache(_getPaymentMethodSplit, ["payment-method-split"], {
+  tags: [ANALYTICS_CACHE_TAG],
+  revalidate: 60,
+});
+
+async function _getTopActiveStores(days: number): Promise<TopActiveStore[]> {
+  const supabase = createServiceRoleClient();
+  const cutoff = new Date(Date.now() - days * DAY_MS).toISOString();
+
+  const { data, error } = await supabase.from("sync_log").select("store_id").gte("created_at", cutoff);
+  if (error) throw new Error(error.message);
+
+  const counts = new Map<string, number>();
+  for (const row of data ?? []) {
+    counts.set(row.store_id, (counts.get(row.store_id) ?? 0) + 1);
+  }
+
+  const topIds = Array.from(counts.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 10);
+
+  if (topIds.length === 0) return [];
+
+  const { data: stores, error: storesError } = await supabase
+    .from("stores")
+    .select("uuid, name")
+    .in(
+      "uuid",
+      topIds.map(([id]) => id)
+    );
+  if (storesError) throw new Error(storesError.message);
+
+  const nameMap = new Map((stores ?? []).map((s) => [s.uuid, s.name]));
+
+  return topIds.map(([id, syncCount]) => ({
+    storeName: nameMap.get(id) ?? "Unknown store",
+    syncCount,
+  }));
+}
+
+export const getTopActiveStores = unstable_cache(_getTopActiveStores, ["top-active-stores"], {
   tags: [ANALYTICS_CACHE_TAG],
   revalidate: 60,
 });

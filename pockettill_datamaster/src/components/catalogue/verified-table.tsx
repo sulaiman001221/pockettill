@@ -4,6 +4,7 @@ import { useState } from "react";
 
 import { ProductPanel, type ProductPanelItem } from "@/components/catalogue/product-panel";
 import { UnverifyDialog } from "@/components/catalogue/unverify-dialog";
+import { Pagination } from "@/components/shared/pagination";
 import { Button } from "@/components/ui/button";
 import {
   Table,
@@ -13,10 +14,10 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { usePagination } from "@/hooks/use-pagination";
 import { formatDate } from "@/lib/format";
 import type { VerifiedCatalogueItem } from "@/lib/data/catalogue";
-
-const PAGE_SIZE = 10;
 
 export function VerifiedTable({
   items,
@@ -30,10 +31,7 @@ export function VerifiedTable({
   const [panelItem, setPanelItem] = useState<ProductPanelItem | null>(null);
   const [panelOpen, setPanelOpen] = useState(false);
   const [removeBarcode, setRemoveBarcode] = useState<string | null>(null);
-  const [expanded, setExpanded] = useState(false);
-
-  const visibleItems = expanded ? items : items.slice(0, PAGE_SIZE);
-  const remaining = items.length - visibleItems.length;
+  const { page, setPage, pageItems: visibleItems, pageSize, total } = usePagination(items, 10);
 
   function openEdit(item: VerifiedCatalogueItem) {
     setPanelItem({
@@ -77,7 +75,12 @@ export function VerifiedTable({
               visibleItems.map((item) => (
                 <TableRow key={item.barcode}>
                   <TableCell className="font-mono text-xs">{item.barcode}</TableCell>
-                  <TableCell className="font-medium">{item.name}</TableCell>
+                  <TableCell className="font-medium">
+                    <Tooltip>
+                      <TooltipTrigger render={<span className="block max-w-64 truncate">{item.name}</span>} />
+                      <TooltipContent>{item.name}</TooltipContent>
+                    </Tooltip>
+                  </TableCell>
                   <TableCell>{item.category ?? "—"}</TableCell>
                   <TableCell>{item.mass ?? "—"}</TableCell>
                   <TableCell>{formatDate(item.verifiedAt)}</TableCell>
@@ -100,13 +103,7 @@ export function VerifiedTable({
         </Table>
       </div>
 
-      {remaining > 0 ? (
-        <div className="flex justify-center">
-          <Button variant="outline" onClick={() => setExpanded(true)}>
-            View More ({remaining} more)
-          </Button>
-        </div>
-      ) : null}
+      <Pagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} />
 
       <ProductPanel
         mode="edit"

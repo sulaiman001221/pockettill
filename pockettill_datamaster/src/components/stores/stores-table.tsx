@@ -5,6 +5,7 @@ import { ChevronRight } from "lucide-react";
 
 import { FoundingToggleCell } from "@/components/stores/founding-toggle-cell";
 import { PhoneEditCell } from "@/components/stores/phone-edit-cell";
+import { Pagination } from "@/components/shared/pagination";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -15,6 +16,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { usePagination } from "@/hooks/use-pagination";
 import { formatDate, formatRelativeTime } from "@/lib/format";
 import type { StoreListRow } from "@/lib/data/stores";
 
@@ -36,8 +38,10 @@ export function StoresTable({
   canManage?: boolean;
 }) {
   const router = useRouter();
+  const { page, setPage, pageItems, pageSize, total } = usePagination(stores, 10);
 
   return (
+    <div className="flex flex-col gap-2">
     <div className="overflow-hidden rounded-xl bg-card ring-1 ring-border">
       <Table>
         <TableHeader>
@@ -52,14 +56,14 @@ export function StoresTable({
           </TableRow>
         </TableHeader>
         <TableBody>
-          {stores.length === 0 ? (
+          {pageItems.length === 0 ? (
             <TableRow>
               <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
                 No stores match your filters.
               </TableCell>
             </TableRow>
           ) : (
-            stores.map((store) => (
+            pageItems.map((store) => (
               <TableRow
                 key={store.id}
                 className="cursor-pointer"
@@ -106,6 +110,8 @@ export function StoresTable({
           )}
         </TableBody>
       </Table>
+    </div>
+    <Pagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} />
     </div>
   );
 }
