@@ -41,11 +41,15 @@ function deriveLevel(message: string): LogLevel {
 }
 
 function levelWhereClause(filter: LogLevelFilter): string {
+  // BigQuery's SQL dialect (what this endpoint runs) has no ILIKE operator —
+  // using it returned a generic "Backend error" with no indication why. The
+  // ERROR:/WARNING: prefix Postgres writes is always uppercase, so a plain
+  // case-sensitive LIKE works without needing a regex workaround.
   if (filter === "error") {
-    return "and (event_message ilike '%ERROR:%' or event_message ilike '%FATAL:%' or event_message ilike '%PANIC:%')";
+    return "and (event_message like '%ERROR:%' or event_message like '%FATAL:%' or event_message like '%PANIC:%')";
   }
   if (filter === "warning") {
-    return "and event_message ilike '%WARNING:%'";
+    return "and event_message like '%WARNING:%'";
   }
   return "";
 }

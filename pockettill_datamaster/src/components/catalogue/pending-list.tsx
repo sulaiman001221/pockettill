@@ -6,7 +6,7 @@ import { CheckCircle2 } from "lucide-react";
 import { ProductPanel, type ProductPanelItem } from "@/components/catalogue/product-panel";
 import { RejectDialog } from "@/components/catalogue/reject-dialog";
 import { Pagination } from "@/components/shared/pagination";
-import { Badge, badgeVariants } from "@/components/ui/badge";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Table,
@@ -79,7 +79,7 @@ export function PendingList({
                       <Tooltip key={n}>
                         <TooltipTrigger
                           render={
-                            <span className={`${badgeVariants({ variant: "secondary" })} max-w-56 truncate`}>
+                            <span className="inline-block max-w-56 truncate rounded-full border border-transparent bg-secondary px-2 py-0.5 align-middle text-xs font-medium text-secondary-foreground">
                               {n}
                             </span>
                           }

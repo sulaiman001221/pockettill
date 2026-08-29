@@ -39,7 +39,7 @@ export function AlertList({ severity, stores }: { severity: SyncSeverity; stores
   const router = useRouter();
   const config = SEVERITY_CONFIG[severity];
   const Icon = config.icon;
-  const { page, setPage, pageItems, pageSize, total } = usePagination(stores, 10);
+  const { page, setPage, pageItems, pageSize, total } = usePagination(stores, 5);
 
   return (
     <Card>
@@ -50,29 +50,29 @@ export function AlertList({ severity, stores }: { severity: SyncSeverity; stores
         </CardTitle>
         <Badge className={cn("border-transparent", config.badgeClass)}>{stores.length}</Badge>
       </CardHeader>
-      <CardContent className="flex min-h-[16rem] flex-col gap-1 px-2">
-        {pageItems.length === 0 ? (
-          <p className="px-2 py-6 text-center text-sm text-muted-foreground">All clear.</p>
-        ) : (
-          pageItems.map((store) => (
-            <button
-              key={store.id}
-              type="button"
-              onClick={() => router.push(`/stores/${store.id}`)}
-              className="flex flex-col gap-0.5 rounded-lg px-2 py-2 text-left text-sm transition-colors hover:bg-muted/50"
-            >
-              <span className="font-medium">{store.name}</span>
-              <span className="text-xs text-muted-foreground">{formatMaskedPhone(store.phone)}</span>
-              <span className="text-xs text-muted-foreground">
-                {store.lastSyncedAt ? formatDateTime(store.lastSyncedAt) : "Never synced"}
-                {store.daysSinceSync !== null ? ` · ${store.daysSinceSync}d ago` : ""}
-              </span>
-            </button>
-          ))
-        )}
-        <div className="mt-auto">
-          <Pagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} />
+      <CardContent className="flex flex-col gap-1 px-2">
+        <div className="flex min-h-[15rem] flex-col gap-1">
+          {pageItems.length === 0 ? (
+            <p className="px-2 py-6 text-center text-sm text-muted-foreground">All clear.</p>
+          ) : (
+            pageItems.map((store) => (
+              <button
+                key={store.id}
+                type="button"
+                onClick={() => router.push(`/stores/${store.id}`)}
+                className="flex flex-col gap-0.5 rounded-lg px-2 py-2 text-left text-sm transition-colors hover:bg-muted/50"
+              >
+                <span className="font-medium">{store.name}</span>
+                <span className="text-xs text-muted-foreground">{formatMaskedPhone(store.phone)}</span>
+                <span className="text-xs text-muted-foreground">
+                  {store.lastSyncedAt ? formatDateTime(store.lastSyncedAt) : "Never synced"}
+                  {store.daysSinceSync !== null ? ` · ${store.daysSinceSync}d ago` : ""}
+                </span>
+              </button>
+            ))
+          )}
         </div>
+        <Pagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} />
       </CardContent>
     </Card>
   );

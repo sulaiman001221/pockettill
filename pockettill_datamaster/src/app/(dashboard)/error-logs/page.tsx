@@ -45,13 +45,17 @@ export default async function ErrorLogsPage({
           title="Supabase Management API not connected"
           description="Add SUPABASE_MANAGEMENT_API_KEY and SUPABASE_PROJECT_REF to env vars."
         />
-      ) : result.status === "error" ? (
-        <InfraErrorBanner message={result.message} onRetry={retry} />
       ) : (
         <>
           <ErrorLogFilters level={level} />
-          <ErrorLogTable entries={result.data.entries} />
-          <ErrorLogPagination level={level} page={page} pageSize={PAGE_SIZE} total={result.data.total} />
+          {result.status === "error" ? (
+            <InfraErrorBanner message={result.message} onRetry={retry} />
+          ) : (
+            <>
+              <ErrorLogTable entries={result.data.entries} />
+              <ErrorLogPagination level={level} page={page} pageSize={PAGE_SIZE} total={result.data.total} />
+            </>
+          )}
         </>
       )}
     </div>

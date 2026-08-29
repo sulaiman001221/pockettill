@@ -1,9 +1,7 @@
 "use client";
 
-import { useState } from "react";
-
+import { Pagination } from "@/components/shared/pagination";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import {
   Table,
   TableBody,
@@ -12,15 +10,12 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { usePagination } from "@/hooks/use-pagination";
 import { formatDateTime, formatMaskedPhone } from "@/lib/format";
 import type { TwilioOtpLogEntry } from "@/lib/costs/twilio";
 
-const PAGE_SIZE = 5;
-
 export function OtpLogTable({ entries }: { entries: TwilioOtpLogEntry[] }) {
-  const [expanded, setExpanded] = useState(false);
-  const visible = expanded ? entries : entries.slice(0, PAGE_SIZE);
-  const remaining = entries.length - visible.length;
+  const { page, setPage, pageItems: visible, pageSize, total } = usePagination(entries, 10);
 
   return (
     <>
@@ -63,13 +58,7 @@ export function OtpLogTable({ entries }: { entries: TwilioOtpLogEntry[] }) {
         </TableBody>
       </Table>
 
-      {remaining > 0 ? (
-        <div className="flex justify-center pt-4">
-          <Button variant="outline" onClick={() => setExpanded(true)}>
-            View More ({remaining} more)
-          </Button>
-        </div>
-      ) : null}
+      <Pagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} />
     </>
   );
 }
