@@ -120,7 +120,12 @@ async function _getWebsiteTrafficData(days: number): Promise<GA4Result> {
         dimensions: [{ name: "pagePath" }],
         metrics: [{ name: "screenPageViews" }],
         orderBys: [{ metric: { metricName: "screenPageViews" }, desc: true }],
-        limit: 10,
+        // int64 fields must be given as strings under proto3-JSON, which is
+        // what the REST transport below (fallback: true) serializes with —
+        // a plain JS number here throws "toProto3JSON: don't know how to
+        // convert value N" at request time. Not an issue under gRPC, which
+        // is why this only surfaced after switching transports.
+        limit: "10",
       }),
       client.runReport({
         property: propertyId,
@@ -128,7 +133,7 @@ async function _getWebsiteTrafficData(days: number): Promise<GA4Result> {
         dimensions: [{ name: "country" }],
         metrics: [{ name: "totalUsers" }],
         orderBys: [{ metric: { metricName: "totalUsers" }, desc: true }],
-        limit: 50,
+        limit: "50",
       }),
     ]);
 
