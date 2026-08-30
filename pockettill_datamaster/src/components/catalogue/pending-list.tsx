@@ -73,20 +73,26 @@ export function PendingList({
             {pageItems.map((item) => (
               <TableRow key={item.barcode}>
                 <TableCell className="font-mono text-xs">{item.barcode}</TableCell>
-                <TableCell>
-                  <div className="flex max-w-56 flex-wrap gap-1">
-                    {item.nameVariations.map((n) => (
-                      <Tooltip key={n}>
+                <TableCell className="font-medium">
+                  <div className="flex max-w-56 items-center gap-1.5">
+                    <Tooltip>
+                      <TooltipTrigger render={<span className="block max-w-56 truncate">{item.mostCommonName}</span>} />
+                      <TooltipContent>{item.mostCommonName}</TooltipContent>
+                    </Tooltip>
+                    {item.nameVariations.length > 1 ? (
+                      <Tooltip>
                         <TooltipTrigger
                           render={
-                            <span className="inline-block max-w-56 truncate rounded-full border border-transparent bg-secondary px-2 py-0.5 align-middle text-xs font-medium text-secondary-foreground">
-                              {n}
+                            <span className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-[0.7rem] text-muted-foreground">
+                              +{item.nameVariations.length - 1}
                             </span>
                           }
                         />
-                        <TooltipContent>{n}</TooltipContent>
+                        <TooltipContent>
+                          Also submitted as: {item.nameVariations.filter((n) => n !== item.mostCommonName).join(", ")}
+                        </TooltipContent>
                       </Tooltip>
-                    ))}
+                    ) : null}
                   </div>
                 </TableCell>
                 <TableCell>
