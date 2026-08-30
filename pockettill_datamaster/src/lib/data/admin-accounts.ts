@@ -70,7 +70,7 @@ async function _getAuditLog(): Promise<AuditLogEntry[]> {
     .from("audit_log")
     .select("id, action, target, created_at, admin_users(full_name, email)")
     .order("created_at", { ascending: false })
-    .limit(50);
+    .limit(500);
 
   if (error) throw new Error(error.message);
 

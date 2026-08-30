@@ -1,8 +1,6 @@
 "use client";
 
-import { useState } from "react";
-
-import { Button } from "@/components/ui/button";
+import { Pagination } from "@/components/shared/pagination";
 import {
   Table,
   TableBody,
@@ -11,19 +9,16 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { usePagination } from "@/hooks/use-pagination";
 import type { AuditLogEntry } from "@/lib/data/admin-accounts";
 import { formatDateTime } from "@/lib/format";
-
-const PAGE_SIZE = 5;
 
 function actionLabel(action: string) {
   return action.replace(/[._]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
 export function AuditLogTable({ entries }: { entries: AuditLogEntry[] }) {
-  const [expanded, setExpanded] = useState(false);
-  const visible = expanded ? entries : entries.slice(0, PAGE_SIZE);
-  const remaining = entries.length - visible.length;
+  const { page, setPage, pageItems: visible, pageSize, total } = usePagination(entries, 10);
 
   return (
     <>
@@ -58,13 +53,7 @@ export function AuditLogTable({ entries }: { entries: AuditLogEntry[] }) {
         </Table>
       </div>
 
-      {remaining > 0 ? (
-        <div className="flex justify-center">
-          <Button variant="outline" onClick={() => setExpanded(true)}>
-            View More ({remaining} more)
-          </Button>
-        </div>
-      ) : null}
+      <Pagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} />
     </>
   );
 }

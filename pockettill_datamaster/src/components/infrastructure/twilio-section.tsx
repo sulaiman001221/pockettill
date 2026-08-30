@@ -1,11 +1,13 @@
-import { AlertTriangle, CheckCircle2, DollarSign, MessageSquare, PieChart, Settings } from "lucide-react";
+import { CheckCircle2, DollarSign, MessageSquare, PieChart, Settings } from "lucide-react";
 
 import { OtpLogTable } from "@/components/infrastructure/otp-log-table";
 import { TwilioSpendChart } from "@/components/infrastructure/twilio-spend-chart";
 import { DonutChart } from "@/components/shared/donut-chart";
+import { InfraErrorBanner } from "@/components/shared/infra-error-banner";
 import { KpiCard } from "@/components/shared/kpi-card";
 import { PlaceholderPanel } from "@/components/shared/placeholder-panel";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { retryTwilioCosts } from "@/lib/actions/infrastructure";
 import { getTwilioCostData } from "@/lib/costs/twilio";
 
 export async function TwilioSection() {
@@ -22,12 +24,7 @@ export async function TwilioSection() {
   }
 
   if (result.status === "error") {
-    return (
-      <div className="flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-600 dark:text-amber-400">
-        <AlertTriangle className="size-4 shrink-0" />
-        Twilio data is stale — the last request failed ({result.message}).
-      </div>
-    );
+    return <InfraErrorBanner message={result.message} onRetry={retryTwilioCosts} />;
   }
 
   const { data } = result;

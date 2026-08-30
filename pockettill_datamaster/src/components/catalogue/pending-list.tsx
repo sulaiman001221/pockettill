@@ -5,6 +5,7 @@ import { CheckCircle2 } from "lucide-react";
 
 import { ProductPanel, type ProductPanelItem } from "@/components/catalogue/product-panel";
 import { RejectDialog } from "@/components/catalogue/reject-dialog";
+import { Pagination } from "@/components/shared/pagination";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -15,6 +16,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { usePagination } from "@/hooks/use-pagination";
 import { formatDate } from "@/lib/format";
 import type { PendingCatalogueItem } from "@/lib/data/catalogue";
 
@@ -30,6 +33,7 @@ export function PendingList({
   const [panelItem, setPanelItem] = useState<ProductPanelItem | null>(null);
   const [panelOpen, setPanelOpen] = useState(false);
   const [rejectBarcode, setRejectBarcode] = useState<string | null>(null);
+  const { page, setPage, pageItems, pageSize, total } = usePagination(items, 10);
 
   function openApprove(item: PendingCatalogueItem) {
     setPanelItem({
@@ -66,15 +70,22 @@ export function PendingList({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {items.map((item) => (
+            {pageItems.map((item) => (
               <TableRow key={item.barcode}>
                 <TableCell className="font-mono text-xs">{item.barcode}</TableCell>
                 <TableCell>
                   <div className="flex max-w-56 flex-wrap gap-1">
                     {item.nameVariations.map((n) => (
-                      <Badge key={n} variant="secondary">
-                        {n}
-                      </Badge>
+                      <Tooltip key={n}>
+                        <TooltipTrigger
+                          render={
+                            <span className="inline-block max-w-56 truncate rounded-full border border-transparent bg-secondary px-2 py-0.5 align-middle text-xs font-medium text-secondary-foreground">
+                              {n}
+                            </span>
+                          }
+                        />
+                        <TooltipContent>{n}</TooltipContent>
+                      </Tooltip>
                     ))}
                   </div>
                 </TableCell>
@@ -109,6 +120,8 @@ export function PendingList({
           </TableBody>
         </Table>
       </div>
+
+      <Pagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} />
 
       <ProductPanel
         mode="approve"

@@ -1,6 +1,7 @@
-import { AlertTriangle, Clock, Eye, LogOut, Users } from "lucide-react";
+import { Clock, Eye, LogOut, Users } from "lucide-react";
 
 import { DateRangeSelector } from "@/components/shared/date-range-selector";
+import { InfraErrorBanner } from "@/components/shared/infra-error-banner";
 import { KpiCard } from "@/components/shared/kpi-card";
 import { DonutChart } from "@/components/shared/donut-chart";
 import { PageHeader } from "@/components/shared/page-header";
@@ -9,6 +10,7 @@ import { TopPagesTable } from "@/components/website-traffic/top-pages-table";
 import { TrafficSetupPanel } from "@/components/website-traffic/traffic-setup-panel";
 import { VisitorsChart } from "@/components/website-traffic/visitors-chart";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { retryWebsiteTraffic } from "@/lib/actions/infrastructure";
 import { getWebsiteTrafficData } from "@/lib/integrations/ga4";
 import { formatDurationSec } from "@/lib/format";
 
@@ -31,10 +33,7 @@ export default async function WebsiteTrafficPage({
       {result.status === "missing_config" ? (
         <TrafficSetupPanel />
       ) : result.status === "error" ? (
-        <div className="flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-600 dark:text-amber-400">
-          <AlertTriangle className="size-4 shrink-0" />
-          Website traffic data is stale — the last request failed ({result.message}).
-        </div>
+        <InfraErrorBanner message={result.message} onRetry={retryWebsiteTraffic} />
       ) : (
         <>
           <DateRangeSelector value={range} />

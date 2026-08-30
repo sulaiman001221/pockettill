@@ -1,5 +1,5 @@
 import { ActiveStoresChart } from "@/components/analytics/active-stores-chart";
-import { SalesVolumeChart } from "@/components/analytics/sales-volume-chart";
+import { TopActiveStoresChart } from "@/components/analytics/top-active-stores-chart";
 import { TopCategoriesChart } from "@/components/catalogue/top-categories-chart";
 import { RegistrationsChart } from "@/components/overview/registrations-chart";
 import { DateRangeSelector } from "@/components/shared/date-range-selector";
@@ -7,7 +7,12 @@ import { DonutChart } from "@/components/shared/donut-chart";
 import { PageHeader } from "@/components/shared/page-header";
 import { SyncTrendChart } from "@/components/sync-health/sync-trend-chart";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { getCategorySalesStats, getPaymentMethodSplit, getSalesDailyStats } from "@/lib/data/analytics";
+import {
+  getCategorySalesStats,
+  getPaymentMethodSplit,
+  getSalesDailyStats,
+  getTopActiveStores,
+} from "@/lib/data/analytics";
 import { getDailyRegistrations } from "@/lib/data/stores";
 import { getSyncTrend } from "@/lib/data/sync-health";
 
@@ -27,12 +32,13 @@ export default async function AnalyticsPage({
   const range = VALID_RANGES.includes(searchParams.range ?? "") ? (searchParams.range as string) : "30";
   const days = Number(range);
 
-  const [dailyStats, categories, paymentSplit, registrations, syncTrend] = await Promise.all([
+  const [dailyStats, categories, paymentSplit, registrations, syncTrend, topActiveStores] = await Promise.all([
     getSalesDailyStats(days),
     getCategorySalesStats(days),
     getPaymentMethodSplit(days),
     getDailyRegistrations(days),
     getSyncTrend(days),
+    getTopActiveStores(days),
   ]);
 
   return (
@@ -53,11 +59,15 @@ export default async function AnalyticsPage({
         </Card>
         <Card>
           <CardHeader>
-            <CardTitle>Sales Volume Trend</CardTitle>
-            <CardDescription>Number of sales per day.</CardDescription>
+            <CardTitle>Top 10 Most Active Stores</CardTitle>
+            <CardDescription>Ranked by number of syncs in the period.</CardDescription>
           </CardHeader>
           <CardContent>
-            <SalesVolumeChart data={dailyStats} />
+            {topActiveStores.length > 0 ? (
+              <TopActiveStoresChart data={topActiveStores} />
+            ) : (
+              <p className="text-sm text-muted-foreground">No sync activity in this period.</p>
+            )}
           </CardContent>
         </Card>
       </div>

@@ -27,7 +27,9 @@ export function TopPagesTable({ pages }: { pages: GA4TopPage[] }) {
         ) : (
           pages.map((page) => (
             <TableRow key={page.path}>
-              <TableCell className="max-w-48 truncate font-mono text-xs">{page.path}</TableCell>
+              <TableCell className="max-w-48 truncate font-mono text-xs">
+                {page.path === "/" ? "Home" : page.path}
+              </TableCell>
               <TableCell className="text-right">{page.views}</TableCell>
             </TableRow>
           ))

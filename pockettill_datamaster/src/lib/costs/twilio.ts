@@ -148,6 +148,7 @@ async function _getTwilioCostData(): Promise<TwilioCostResult> {
       },
     };
   } catch (err) {
+    console.error("[twilio-costs]", err);
     return { status: "error", message: describeError(err) };
   }
 }

@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 
+import { Pagination } from "@/components/shared/pagination";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -23,6 +24,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { usePagination } from "@/hooks/use-pagination";
 import { saveSupportNotes, updateSupportStatus } from "@/lib/actions/support";
 import type { SupportQuery, SupportStatus } from "@/lib/data/support";
 import { formatDateTime, formatRelativeTime } from "@/lib/format";
@@ -65,6 +67,7 @@ export function SupportQueriesTable({
   const [selected, setSelected] = useState<SupportQuery | null>(null);
   const [notes, setNotes] = useState("");
   const [searchValue, setSearchValue] = useState(search);
+  const { page, setPage, pageItems, pageSize, total } = usePagination(queries, 10);
 
   function applyParam(key: string, value: string) {
     const params = new URLSearchParams(searchParams.toString());
@@ -158,7 +161,7 @@ export function SupportQueriesTable({
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {queries.map((query) => (
+                  {pageItems.map((query) => (
                     <TableRow
                       key={query.id}
                       onClick={() => openQuery(query)}
@@ -186,6 +189,7 @@ export function SupportQueriesTable({
               </Table>
             </div>
           )}
+          <Pagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} />
         </CardContent>
       </Card>
 

@@ -9,6 +9,7 @@ import {
   Globe,
   LifeBuoy,
   ShieldCheck,
+  ScrollText,
 } from "lucide-react";
 
 export type AdminRole = "owner" | "editor" | "viewer";
@@ -83,6 +84,13 @@ export const NAV_ITEMS: NavItem[] = [
     href: "/website-traffic",
     icon: Globe,
     description: "GA4 reporting",
+    group: "Insights",
+  },
+  {
+    title: "Error Logs",
+    href: "/error-logs",
+    icon: ScrollText,
+    description: "Postgres logs across every client",
     group: "Insights",
   },
   {

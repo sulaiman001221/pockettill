@@ -1,6 +1,6 @@
-import { CheckCircle2, Clock, XCircle } from "lucide-react";
+import { AlertOctagon, AlertTriangle, Bell, CheckCircle2, Clock, XCircle } from "lucide-react";
 
-import { AlertList } from "@/components/sync-health/alert-list";
+import { SyncAlertsTable, type SyncAlertRow } from "@/components/sync-health/sync-alerts-table";
 import { SyncTrendChart } from "@/components/sync-health/sync-trend-chart";
 import { KpiCard } from "@/components/shared/kpi-card";
 import { PageHeader } from "@/components/shared/page-header";
@@ -13,6 +13,15 @@ export const metadata = { title: "Sync Health" };
 export default async function SyncHealthPage() {
   const data = await getSyncHealthData();
 
+  // Alert lists are already sorted stalest-first within each severity;
+  // concatenating in critical -> warning -> nudge order keeps the most
+  // urgent stores at the top of the combined list.
+  const alerts: SyncAlertRow[] = [
+    ...data.critical.map((s) => ({ ...s, severity: "critical" as const })),
+    ...data.warning.map((s) => ({ ...s, severity: "warning" as const })),
+    ...data.nudge.map((s) => ({ ...s, severity: "nudge" as const })),
+  ];
+
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
@@ -21,9 +30,24 @@ export default async function SyncHealthPage() {
       />
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-        <AlertList severity="critical" stores={data.critical} />
-        <AlertList severity="warning" stores={data.warning} />
-        <AlertList severity="nudge" stores={data.nudge} />
+        <KpiCard
+          label="Critical"
+          value={String(data.critical.length)}
+          icon={<AlertOctagon className="size-4.5" />}
+          tone="rose"
+        />
+        <KpiCard
+          label="Warning"
+          value={String(data.warning.length)}
+          icon={<AlertTriangle className="size-4.5" />}
+          tone="amber"
+        />
+        <KpiCard
+          label="Nudge"
+          value={String(data.nudge.length)}
+          icon={<Bell className="size-4.5" />}
+          tone="blue"
+        />
         <KpiCard
           label="Never Synced"
           value={String(data.neverSyncedCount)}
@@ -44,6 +68,8 @@ export default async function SyncHealthPage() {
           tone="emerald"
         />
       </div>
+
+      <SyncAlertsTable alerts={alerts} />
 
       <Card>
         <CardHeader>

@@ -2,27 +2,26 @@
 
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
-import type { DailySalesStat } from "@/lib/data/analytics";
-
-export function SalesVolumeChart({ data }: { data: DailySalesStat[] }) {
+export function TopActiveStoresChart({ data }: { data: { storeName: string; syncCount: number }[] }) {
   return (
     <div className="h-64 w-full">
       <ResponsiveContainer width="100%" height="100%">
-        <BarChart data={data} margin={{ top: 8, right: 8, bottom: 0, left: -20 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+        <BarChart data={data} layout="vertical" margin={{ top: 4, right: 16, bottom: 4, left: 0 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" horizontal={false} />
           <XAxis
-            dataKey="day"
-            tick={{ fontSize: 12, fill: "var(--muted-foreground)" }}
-            tickLine={false}
-            axisLine={false}
-            interval="preserveStartEnd"
-          />
-          <YAxis
+            type="number"
             allowDecimals={false}
             tick={{ fontSize: 12, fill: "var(--muted-foreground)" }}
             tickLine={false}
             axisLine={false}
-            width={30}
+          />
+          <YAxis
+            type="category"
+            dataKey="storeName"
+            width={120}
+            tick={{ fontSize: 12, fill: "var(--muted-foreground)" }}
+            tickLine={false}
+            axisLine={false}
           />
           <Tooltip
             contentStyle={{
@@ -33,7 +32,7 @@ export function SalesVolumeChart({ data }: { data: DailySalesStat[] }) {
             }}
             labelStyle={{ color: "var(--popover-foreground)" }}
           />
-          <Bar dataKey="salesCount" fill="var(--primary)" radius={[4, 4, 0, 0]} />
+          <Bar dataKey="syncCount" fill="var(--primary)" radius={[0, 4, 4, 0]} />
         </BarChart>
       </ResponsiveContainer>
     </div>

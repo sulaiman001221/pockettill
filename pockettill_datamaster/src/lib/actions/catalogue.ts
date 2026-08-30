@@ -10,6 +10,11 @@ import { createServiceRoleClient } from "@/lib/supabase/server";
 
 export type CatalogueActionResult = { error?: string } | undefined;
 
+export type ApproveProductResult =
+  | { error?: string; conflict?: undefined }
+  | { conflict: { existingName: string }; error?: undefined }
+  | undefined;
+
 export interface ProductEdits {
   name: string;
   category: string;
@@ -23,12 +28,35 @@ async function requireCatalogueManager() {
   return admin;
 }
 
-export async function approveProduct(barcode: string, edits: ProductEdits): Promise<CatalogueActionResult> {
+export async function approveProduct(
+  barcode: string,
+  edits: ProductEdits,
+  options: { force?: boolean } = {}
+): Promise<ApproveProductResult> {
   let admin;
   try {
     admin = await requireCatalogueManager();
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Not authorized." };
+  }
+
+  const supabase = createServiceRoleClient();
+
+  // The pending-review view already excludes any barcode that's already in
+  // catalogue_products, so this is normally unreachable — but two admins
+  // can race (one approves while the other still has a stale queue open),
+  // so check again right before writing and let the admin choose rather
+  // than silently overwriting whatever the other admin just approved.
+  if (!options.force) {
+    const { data: existing } = await supabase
+      .from("catalogue_products")
+      .select("name")
+      .eq("barcode", barcode)
+      .maybeSingle();
+
+    if (existing) {
+      return { conflict: { existingName: existing.name } };
+    }
   }
 
   // Authoritative formatting pass: the panel pre-formats on open so the
@@ -37,8 +65,6 @@ export async function approveProduct(barcode: string, edits: ProductEdits): Prom
   // submitted, catching manual edits that don't follow the convention.
   const name = formatProductName(edits.name);
   const mass = formatProductMass(edits.mass);
-
-  const supabase = createServiceRoleClient();
 
   // Attribution only, for admin reference - picks any one of the store(s)
   // that had this barcode pending, since the review panel aggregates
