@@ -41,6 +41,12 @@ export function PendingList({
       name: item.mostCommonName,
       category: item.mostCommonCategory ?? "",
       mass: item.mostCommonMass ?? "",
+      imageUrl: item.mostCommonImageUrl,
+      // Not yet in catalogue_products by definition (this is the pending
+      // queue), so there's no existing enhanced image to show - the panel
+      // starts empty and any upload here becomes the catalogue image on
+      // approval.
+      enhancedImageUrl: null,
     });
     setPanelOpen(true);
   }
@@ -60,6 +66,7 @@ export function PendingList({
         <Table>
           <TableHeader>
             <TableRow>
+              <TableHead>Image</TableHead>
               <TableHead>Barcode</TableHead>
               <TableHead>Name</TableHead>
               <TableHead>Category</TableHead>
@@ -72,6 +79,18 @@ export function PendingList({
           <TableBody>
             {pageItems.map((item) => (
               <TableRow key={item.barcode}>
+                <TableCell>
+                  {item.mostCommonImageUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element -- arbitrary external domain, see product-panel.tsx
+                    <img
+                      src={item.mostCommonImageUrl}
+                      alt=""
+                      className="size-10 rounded-md border border-border object-cover"
+                    />
+                  ) : (
+                    <div className="size-10 rounded-md bg-muted" />
+                  )}
+                </TableCell>
                 <TableCell className="font-mono text-xs">{item.barcode}</TableCell>
                 <TableCell className="font-medium">
                   <div className="flex max-w-56 items-center gap-1.5">

@@ -14,6 +14,7 @@ export interface PendingCatalogueItem {
   mostCommonName: string;
   mostCommonCategory: string | null;
   mostCommonMass: string | null;
+  mostCommonImageUrl: string | null;
 }
 
 export interface VerifiedCatalogueItem {
@@ -21,7 +22,10 @@ export interface VerifiedCatalogueItem {
   name: string;
   category: string | null;
   mass: string | null;
+  imageUrl: string | null;
   verifiedAt: string | null;
+  originalImageUrl: string | null;
+  isImageEnhanced: boolean;
 }
 
 export interface CatalogueStats {
@@ -35,7 +39,7 @@ async function _getPendingCatalogueItems(): Promise<PendingCatalogueItem[]> {
   const { data, error } = await supabase
     .from("pending_catalogue_items")
     .select(
-      "barcode, name_variations, category_variations, store_count, first_submitted, most_common_name, most_common_category, most_common_mass"
+      "barcode, name_variations, category_variations, store_count, first_submitted, most_common_name, most_common_category, most_common_mass, most_common_image_url"
     )
     .order("first_submitted", { ascending: true });
 
@@ -50,6 +54,7 @@ async function _getPendingCatalogueItems(): Promise<PendingCatalogueItem[]> {
     mostCommonName: r.most_common_name,
     mostCommonCategory: r.most_common_category,
     mostCommonMass: r.most_common_mass,
+    mostCommonImageUrl: r.most_common_image_url,
   }));
 }
 
@@ -66,7 +71,9 @@ async function _getVerifiedCatalogue(
 
   let query = supabase
     .from("verified_catalogue_items")
-    .select("barcode, name, category, mass, verified_at");
+    .select(
+      "barcode, name, category, mass, image_url, verified_at, original_image_url, is_image_enhanced"
+    );
 
   const search = params.search?.trim().replace(/[(),]/g, "");
   if (search) {
@@ -86,7 +93,10 @@ async function _getVerifiedCatalogue(
     name: r.name,
     category: r.category,
     mass: r.mass,
+    imageUrl: r.image_url,
     verifiedAt: r.verified_at,
+    originalImageUrl: r.original_image_url,
+    isImageEnhanced: r.is_image_enhanced ?? false,
   }));
 }
 
