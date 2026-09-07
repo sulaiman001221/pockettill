@@ -9,6 +9,7 @@ import '../../shared/models/sale_item.dart';
 import '../../shared/repositories/repositories.dart';
 import '../../shared/theme/app_theme.dart';
 import '../../shared/widgets/pockettill_app_bar.dart';
+import '../../shared/widgets/scroll_to_top_button.dart';
 import '../credit/date_range_sheet.dart';
 import 'add_extra_income_sheet.dart';
 import 'end_of_day_screen.dart';
@@ -20,8 +21,21 @@ import 'sale_detail_screen.dart';
 /// transaction list grouped by date. Sales and returns are merged into one
 /// chronological list via [combinedHistoryProvider] - a return always shows
 /// up as its own entry, never folded into the sale it came from.
-class HistoryScreen extends ConsumerWidget {
+class HistoryScreen extends ConsumerStatefulWidget {
   const HistoryScreen({super.key});
+
+  @override
+  ConsumerState<HistoryScreen> createState() => _HistoryScreenState();
+}
+
+class _HistoryScreenState extends ConsumerState<HistoryScreen> {
+  final _scrollController = ScrollController();
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
 
   Future<void> _pickCustomRange(BuildContext context, WidgetRef ref) async {
     final range = await Navigator.of(context).push<DateTimeRange>(
@@ -89,7 +103,7 @@ class HistoryScreen extends ConsumerWidget {
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final filter = ref.watch(historyFilterProvider);
     final customRange = ref.watch(historyCustomRangeProvider);
     final salesAsync = ref.watch(filteredSalesProvider);
@@ -127,14 +141,17 @@ class HistoryScreen extends ConsumerWidget {
               ),
             )
           : null,
-      body: RefreshIndicator(
-        onRefresh: () => Future.wait([
-          ref.refresh(filteredSalesProvider.future),
-          ref.refresh(filteredReturnsProvider.future),
-          ref.refresh(filteredExtraIncomeProvider.future),
-        ]),
-        child: CustomScrollView(
-          slivers: [
+      body: Stack(
+        children: [
+          RefreshIndicator(
+            onRefresh: () => Future.wait([
+              ref.refresh(filteredSalesProvider.future),
+              ref.refresh(filteredReturnsProvider.future),
+              ref.refresh(filteredExtraIncomeProvider.future),
+            ]),
+            child: CustomScrollView(
+              controller: _scrollController,
+              slivers: [
             SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
@@ -181,9 +198,14 @@ class HistoryScreen extends ConsumerWidget {
               )
             else
               _buildList(context, combined),
-            const SliverToBoxAdapter(child: SizedBox(height: 24)),
-          ],
-        ),
+            // Tall enough that the last item can scroll clear of the
+            // floating scroll-to-top button rather than sitting behind it.
+            const SliverToBoxAdapter(child: SizedBox(height: 96)),
+              ],
+            ),
+          ),
+          ScrollToTopButton(controller: _scrollController),
+        ],
       ),
     );
   }

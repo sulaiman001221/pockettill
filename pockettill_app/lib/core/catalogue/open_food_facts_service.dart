@@ -2,47 +2,43 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
-/// Fields pulled from an Open Food Facts product lookup. [brands] and
-/// [imageUrl] are captured but not shown anywhere yet - reserved for a
-/// post-beta feature.
+/// Fields pulled from an Open Food Facts product lookup. No category - Open
+/// Food Facts' category taxonomy doesn't map cleanly onto PocketTill's own
+/// categories, so it's deliberately never auto-filled from here (Layer 1,
+/// PocketTill's own verified catalogue, still supplies one - this only
+/// affects the Layer 2 OFF fallback).
 class OpenFoodFactsProduct {
-  const OpenFoodFactsProduct({
-    this.name,
-    this.mass,
-    this.category,
-    this.brands,
-    this.imageUrl,
-  });
+  const OpenFoodFactsProduct({this.name, this.mass, this.imageUrl});
 
   final String? name;
   final String? mass;
-  final String? category;
-  final String? brands;
   final String? imageUrl;
 
   factory OpenFoodFactsProduct.fromJson(Map<String, dynamic> json) {
-    final name = json['product_name'] as String?;
+    final rawName = json['product_name'] as String?;
     final quantity = json['quantity'] as String?;
+    final brand = (json['brands'] as String?)?.split(',').first.trim();
 
-    String? category;
-    final tags = json['categories_tags'];
-    if (tags is List && tags.isNotEmpty && tags.first is String) {
-      final tag = tags.first as String;
-      final stripped = tag.startsWith('en:') ? tag.substring(3) : tag;
-      if (stripped.isNotEmpty) {
-        category = _toPocketTillCase(stripped);
-      }
+    String? name;
+    if (rawName != null && rawName.isNotEmpty) {
+      final stripped = _stripMassFromName(rawName);
+      // Brand-first matches PocketTill's own naming convention (e.g. "Jungle
+      // Banana Flavoured Porridge") - skip prepending it if OFF's own name
+      // already leads with it, so it doesn't end up doubled.
+      final hasBrand = brand != null && brand.isNotEmpty;
+      final alreadyLeadsWithBrand =
+          hasBrand && stripped.toLowerCase().startsWith(brand.toLowerCase());
+      final combined = (hasBrand && !alreadyLeadsWithBrand)
+          ? '$brand $stripped'
+          : stripped;
+      name = _toPocketTillCase(combined);
     }
 
     return OpenFoodFactsProduct(
-      name: (name != null && name.isNotEmpty)
-          ? _toPocketTillCase(_stripMassFromName(name))
-          : null,
+      name: name,
       mass: (quantity != null && quantity.isNotEmpty)
           ? _normalizeMass(quantity)
           : null,
-      category: category,
-      brands: json['brands'] as String?,
       imageUrl: json['image_url'] as String?,
     );
   }
@@ -156,7 +152,7 @@ class OpenFoodFactsService {
   Future<OpenFoodFactsProduct?> _fetch(String barcode) async {
     final uri = Uri.parse(
       'https://world.openfoodfacts.org/api/v2/product/$barcode.json'
-      '?fields=product_name,quantity,categories_tags,brands,image_url',
+      '?fields=product_name,quantity,brands,image_url',
     );
 
     try {

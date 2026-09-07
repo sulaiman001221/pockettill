@@ -3,6 +3,7 @@ import 'package:isar/isar.dart';
 
 import '../../core/database/isar_service.dart';
 import '../../core/sync/event_queue.dart';
+import 'catalogue_browse_repository.dart';
 import 'credit_repository.dart';
 import 'extra_income_repository.dart';
 import 'product_repository.dart';
@@ -69,4 +70,11 @@ final riskLogRepositoryProvider = Provider<RiskLogRepository>((ref) {
     isar: ref.watch(isarServiceProvider),
     eventQueue: ref.watch(eventQueueProvider),
   );
+});
+
+/// [CatalogueBrowseRepository] singleton.
+final catalogueBrowseRepositoryProvider = Provider<CatalogueBrowseRepository>((
+  ref,
+) {
+  return CatalogueBrowseRepository(isar: ref.watch(isarServiceProvider));
 });

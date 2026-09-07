@@ -54,17 +54,41 @@ class _SalesScreenState extends ConsumerState<SalesScreen> {
   StreamSubscription<String>? _scanSubscription;
   bool _showingNotFoundSheet = false;
   bool _bannerDismissed = false;
+  bool _lowStorageBannerDismissed = false;
 
   // Static so it survives this State object being recreated (e.g. hot
   // reload) - the 30-day warning should still only ever appear once per
   // app process, not once per SalesScreen mount.
   static bool _hasShownSyncWarningThisSession = false;
 
+  // Measured once after first layout - see _measureHeader. Starts generous
+  // (never too small, so the header never has to clip itself before the
+  // real measurement lands) rather than an exact guess.
+  final GlobalKey _headerKey = GlobalKey();
+  double _headerExtent = 260;
+
   @override
   void initState() {
     super.initState();
     _listenForHardwareScans();
     _checkSyncWarning();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _measureHeader());
+  }
+
+  /// The scan card + search bar are a fixed, content-driven block pinned to
+  /// the top of the scrollable cart area (see build()'s SliverPersistentHeader)
+  /// - pinning needs a concrete pixel extent up front, which Flutter has no
+  /// declarative "size to content" option for, so this measures the actual
+  /// rendered block once after the first frame and corrects [_headerExtent]
+  /// to match. The block's own content never changes size after that (no
+  /// conditional text/wrapping in it), so a single measurement is enough -
+  /// no need to re-measure on every rebuild.
+  void _measureHeader() {
+    final box = _headerKey.currentContext?.findRenderObject() as RenderBox?;
+    final height = box?.size.height;
+    if (height != null && height > 0 && height != _headerExtent && mounted) {
+      setState(() => _headerExtent = height);
+    }
   }
 
   /// Shows the 30-days-without-sync modal at most once per app session.
@@ -266,7 +290,8 @@ class _SalesScreenState extends ConsumerState<SalesScreen> {
           iconColor: const Color(0xFF3182CE),
           title: 'Not synced in 3 days',
           subtitle: 'Connect to internet to back up your data',
-          onSyncNow: _syncNowFromBanner,
+          actionLabel: 'Sync Now',
+          onAction: _syncNowFromBanner,
           onDismiss: () => setState(() => _bannerDismissed = true),
         );
       case _SyncNudgeLevel.amber7Day:
@@ -277,7 +302,8 @@ class _SalesScreenState extends ConsumerState<SalesScreen> {
           iconColor: AppTheme.syncAmber,
           title: 'Not synced in 7 days',
           subtitle: "Your data hasn't backed up in a week",
-          onSyncNow: _syncNowFromBanner,
+          actionLabel: 'Sync Now',
+          onAction: _syncNowFromBanner,
           onDismiss: () => setState(() => _bannerDismissed = true),
         );
       case _SyncNudgeLevel.modal30Day:
@@ -292,12 +318,27 @@ class _SalesScreenState extends ConsumerState<SalesScreen> {
     ref.read(syncStatusProvider.notifier).refresh();
   }
 
+  Widget? _buildLowStorageBanner(bool isLow) {
+    if (!isLow || _lowStorageBannerDismissed) return null;
+    return _SyncBanner(
+      background: const Color(0xFFFFF5F5),
+      borderColor: AppTheme.logoutRed,
+      icon: Icons.sd_storage_outlined,
+      iconColor: AppTheme.logoutRed,
+      title: 'Storage is low',
+      subtitle: 'Product images paused. Free up space to continue.',
+      onDismiss: () => setState(() => _lowStorageBannerDismissed = true),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(salesNotifierProvider);
     final syncStatus = ref.watch(syncStatusProvider);
     final lastSyncedAt = ref.watch(syncStatusProvider.notifier).lastSyncedAt;
-    final banner = _buildSyncBanner(_computeNudgeLevel(syncStatus, lastSyncedAt));
+    final syncBanner = _buildSyncBanner(_computeNudgeLevel(syncStatus, lastSyncedAt));
+    final isStorageLow = ref.watch(lowStorageWarningProvider).valueOrNull ?? false;
+    final storageBanner = _buildLowStorageBanner(isStorageLow);
 
     return GestureDetector(
       // Tapping anywhere outside the search field dismisses its focus -
@@ -309,24 +350,57 @@ class _SalesScreenState extends ConsumerState<SalesScreen> {
         children: [
           Column(
             children: [
-              if (banner != null) banner,
-              _ScanProductCard(onTap: _onScanProductTap),
-              CompositedTransformTarget(
-                link: _searchBarLink,
-                child: _SearchBar(
-                  controller: _searchController,
-                  focusNode: _searchFocusNode,
-                  onChanged: _onSearchChanged,
-                ),
-              ),
-              // A fixed gap, not the cart list's own (scrollable) padding -
-              // otherwise it scrolls away and the first cart card ends up
-              // flush against the search bar, and both are white.
-              const SizedBox(height: 12),
+              if (syncBanner != null) syncBanner,
+              if (storageBanner != null) storageBanner,
               Expanded(
-                child: state.cartItems.isEmpty
-                    ? const _EmptyCart()
-                    : _CartList(items: state.cartItems),
+                child: CustomScrollView(
+                  slivers: [
+                    // Pinned, not a plain SliverToBoxAdapter - the scan
+                    // card + search bar must stay visible while a long cart
+                    // scrolls beneath them (the whole point of this screen
+                    // is scanning the next item while reviewing the cart).
+                    // A plain fixed-height Column here would hard-overflow
+                    // whenever available height is smaller than this block
+                    // + the checkout bar combined (seen in split-screen
+                    // multi-window mode, 2026-09-07) - pinning inside a
+                    // CustomScrollView degrades to scrolling instead of
+                    // erroring in that case, while looking identical to the
+                    // old fixed layout whenever there's enough room, which
+                    // is effectively always in normal single-window use.
+                    SliverPersistentHeader(
+                      pinned: true,
+                      delegate: _FixedHeaderDelegate(
+                        extent: _headerExtent,
+                        child: Column(
+                          key: _headerKey,
+                          children: [
+                            _ScanProductCard(onTap: _onScanProductTap),
+                            CompositedTransformTarget(
+                              link: _searchBarLink,
+                              child: _SearchBar(
+                                controller: _searchController,
+                                focusNode: _searchFocusNode,
+                                onChanged: _onSearchChanged,
+                              ),
+                            ),
+                            // A fixed gap, not the cart list's own
+                            // (scrollable) padding - otherwise it scrolls
+                            // away and the first cart card ends up flush
+                            // against the search bar, and both are white.
+                            const SizedBox(height: 12),
+                          ],
+                        ),
+                      ),
+                    ),
+                    if (state.cartItems.isEmpty)
+                      const SliverFillRemaining(
+                        hasScrollBody: false,
+                        child: _EmptyCart(),
+                      )
+                    else
+                      _CartSliverList(items: state.cartItems),
+                  ],
+                ),
               ),
               _CheckoutBar(cartItems: state.cartItems, total: state.cartTotal),
             ],
@@ -362,7 +436,8 @@ class _SyncBanner extends StatelessWidget {
     required this.iconColor,
     required this.title,
     required this.subtitle,
-    required this.onSyncNow,
+    this.actionLabel,
+    this.onAction,
     required this.onDismiss,
   });
 
@@ -372,7 +447,11 @@ class _SyncBanner extends StatelessWidget {
   final Color iconColor;
   final String title;
   final String subtitle;
-  final VoidCallback onSyncNow;
+
+  /// Both null renders no action link - just the title/subtitle/dismiss.
+  /// Used by the low-storage warning, which has no relevant action.
+  final String? actionLabel;
+  final VoidCallback? onAction;
   final VoidCallback onDismiss;
 
   @override
@@ -425,18 +504,20 @@ class _SyncBanner extends StatelessWidget {
                   color: AppTheme.iconBorder,
                 ),
               ),
-              const SizedBox(height: 10),
-              GestureDetector(
-                onTap: onSyncNow,
-                child: const Text(
-                  'Sync Now',
-                  style: TextStyle(
-                    color: AppTheme.primary,
-                    fontWeight: FontWeight.w600,
-                    fontSize: 12,
+              if (actionLabel != null && onAction != null) ...[
+                const SizedBox(height: 10),
+                GestureDetector(
+                  onTap: onAction,
+                  child: Text(
+                    actionLabel!,
+                    style: const TextStyle(
+                      color: AppTheme.primary,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 12,
+                    ),
                   ),
                 ),
-              ),
+              ],
             ],
           ),
         ],
@@ -587,6 +668,9 @@ class _SearchResultsList extends StatelessWidget {
                   return ListTile(
                     leading: ProductAvatar(
                       name: productDisplayName(product),
+                      imageUrl: product.imageUrl,
+                      cacheKey: product.barcode,
+                      cachedImagePath: product.cachedImagePath,
                       size: 36,
                     ),
                     title: Text(productDisplayName(product)),
@@ -641,64 +725,77 @@ class _EmptyCart extends StatelessWidget {
   }
 }
 
-class _CartList extends ConsumerWidget {
-  const _CartList({required this.items});
+/// Sliver form of the cart list, so it can sit inside build()'s
+/// CustomScrollView alongside the pinned scan/search header - same
+/// item/separator/dismiss behaviour a plain ListView.separated would give,
+/// just expressed as a sliver instead (slivers have no `.separated`
+/// constructor of their own).
+class _CartSliverList extends ConsumerWidget {
+  const _CartSliverList({required this.items});
 
   final List<CartItem> items;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final notifier = ref.read(salesNotifierProvider.notifier);
-    return ListView.separated(
+    return SliverPadding(
       padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
-      itemCount: items.length,
-      separatorBuilder: (_, _) => const SizedBox(height: 12),
-      itemBuilder: (context, index) {
-        final item = items[index];
-        return Dismissible(
-          key: ValueKey(item.product.uuid),
-          direction: DismissDirection.endToStart,
-          background: Container(
-            decoration: BoxDecoration(
-              color: AppTheme.logoutRed,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            alignment: Alignment.centerRight,
-            padding: const EdgeInsets.only(right: 20),
-            child: const Icon(Icons.delete_outline, color: Colors.white),
-          ),
-          onDismissed: (_) {
-            notifier.removeFromCart(item.product.uuid);
-            // Clear any snackbar already showing first - otherwise removing
-            // several items in quick succession queues one snackbar after
-            // another, and it can look like a single one is stuck on screen
-            // for a very long time.
-            final messenger = ScaffoldMessenger.of(context)
-              ..clearSnackBars();
-            final snackBar = messenger.showSnackBar(
-              SnackBar(
-                content: Text('${productDisplayName(item.product)} removed'),
-                duration: const Duration(seconds: 4),
-                action: SnackBarAction(
-                  label: 'Undo',
-                  onPressed: () => notifier.restoreCartItem(item, index),
+      sliver: SliverList(
+        delegate: SliverChildBuilderDelegate(
+          (context, gridIndex) {
+            if (gridIndex.isOdd) return const SizedBox(height: 12);
+            final index = gridIndex ~/ 2;
+            final item = items[index];
+            return Dismissible(
+              key: ValueKey(item.product.uuid),
+              direction: DismissDirection.endToStart,
+              background: Container(
+                decoration: BoxDecoration(
+                  color: AppTheme.logoutRed,
+                  borderRadius: BorderRadius.circular(12),
                 ),
+                alignment: Alignment.centerRight,
+                padding: const EdgeInsets.only(right: 20),
+                child: const Icon(Icons.delete_outline, color: Colors.white),
               ),
+              onDismissed: (_) {
+                notifier.removeFromCart(item.product.uuid);
+                // Clear any snackbar already showing first - otherwise
+                // removing several items in quick succession queues one
+                // snackbar after another, and it can look like a single one
+                // is stuck on screen for a very long time.
+                final messenger = ScaffoldMessenger.of(context)
+                  ..clearSnackBars();
+                final snackBar = messenger.showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      '${productDisplayName(item.product)} removed',
+                    ),
+                    duration: const Duration(seconds: 4),
+                    action: SnackBarAction(
+                      label: 'Undo',
+                      onPressed: () => notifier.restoreCartItem(item, index),
+                    ),
+                  ),
+                );
+                // A snackbar with an action never auto-dismisses while an
+                // accessibility service is running (Flutter ignores
+                // `duration` then, to keep the action reachable) - so close
+                // it manually. The closed-check makes the timer a no-op if
+                // the user already tapped Undo or a newer removal cleared
+                // this snackbar.
+                var closed = false;
+                snackBar.closed.whenComplete(() => closed = true);
+                Timer(const Duration(seconds: 4), () {
+                  if (!closed) snackBar.close();
+                });
+              },
+              child: _CartItemTile(item: item),
             );
-            // A snackbar with an action never auto-dismisses while an
-            // accessibility service is running (Flutter ignores `duration`
-            // then, to keep the action reachable) - so close it manually.
-            // The closed-check makes the timer a no-op if the user already
-            // tapped Undo or a newer removal cleared this snackbar.
-            var closed = false;
-            snackBar.closed.whenComplete(() => closed = true);
-            Timer(const Duration(seconds: 4), () {
-              if (!closed) snackBar.close();
-            });
           },
-          child: _CartItemTile(item: item),
-        );
-      },
+          childCount: items.isEmpty ? 0 : items.length * 2 - 1,
+        ),
+      ),
     );
   }
 }
@@ -720,7 +817,13 @@ class _CartItemTile extends ConsumerWidget {
       ),
       child: Row(
         children: [
-          ProductAvatar(name: productDisplayName(item.product)),
+          ProductAvatar(
+            name: productDisplayName(item.product),
+            imageUrl: item.product.imageUrl,
+            cacheKey: item.product.barcode,
+            cachedImagePath: item.product.cachedImagePath,
+            size: 56,
+          ),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
@@ -931,5 +1034,31 @@ class _ProductNotFoundSheet extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+/// Pins [child] at a fixed [extent] inside a CustomScrollView - see build()'s
+/// use of it for the scan card + search bar block. `minExtent == maxExtent`
+/// makes this a plain fixed-size pinned header, not a collapsing one.
+class _FixedHeaderDelegate extends SliverPersistentHeaderDelegate {
+  _FixedHeaderDelegate({required this.extent, required this.child});
+
+  final double extent;
+  final Widget child;
+
+  @override
+  double get minExtent => extent;
+
+  @override
+  double get maxExtent => extent;
+
+  @override
+  Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
+    return SizedBox(height: extent, child: child);
+  }
+
+  @override
+  bool shouldRebuild(covariant _FixedHeaderDelegate oldDelegate) {
+    return oldDelegate.extent != extent || oldDelegate.child != child;
   }
 }

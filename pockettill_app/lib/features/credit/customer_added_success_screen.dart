@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../shared/models/credit_customer.dart';
 import '../../shared/theme/app_theme.dart';
-import '../stock/stock_ui.dart';
+import '../../shared/widgets/customer_display.dart';
 import 'add_customer_screen.dart';
 
 /// Shown after successfully adding a new credit customer.
@@ -172,7 +172,7 @@ class _CustomerSummaryCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              ProductAvatar(name: customer.name),
+              CustomerAvatar(name: customer.name),
               const SizedBox(width: 12),
               Expanded(
                 child: Text(

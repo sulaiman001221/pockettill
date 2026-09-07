@@ -1,15 +1,18 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:isar/isar.dart';
 
 import '../../shared/models/store_config.dart';
 import '../../shared/models/sync_event.dart';
+import '../../shared/repositories/repositories.dart';
 import '../../shared/utils/sync_status.dart';
 import '../database/isar_service.dart';
 import '../supabase/supabase_service.dart';
 import 'event_queue.dart';
+import 'image_sync_service.dart';
 
 /// Priority order [SyncEvent]s are pushed in - highest priority first.
 const List<String> _entityTypePriority = [
@@ -31,12 +34,24 @@ const int _batchSize = 50;
 /// shared-catalogue updates. Call [sync] whenever [ReachabilityService]
 /// confirms connectivity - never on network signal alone.
 class SyncService {
-  SyncService({required Isar isar, required EventQueue eventQueue})
-    : _isar = isar,
-      _eventQueue = eventQueue;
+  SyncService({
+    required Isar isar,
+    required EventQueue eventQueue,
+    ImageSyncService? imageSync,
+  }) : _isar = isar,
+       _eventQueue = eventQueue,
+       _imageSync = imageSync;
 
   final Isar _isar;
   final EventQueue _eventQueue;
+
+  // Nullable - the app-wide singleton (via syncServiceProvider) always
+  // supplies one, but a couple of call sites (AuthService.logout's
+  // just-flush-pending-events push) build a bare SyncService by hand
+  // outside the normal provider graph and have no need to also wire up a
+  // ProductRepository just to satisfy this - image syncing is skipped
+  // entirely for those, which is fine since it's fire-and-forget anyway.
+  final ImageSyncService? _imageSync;
 
   final StreamController<SyncStatus> _statusController =
       StreamController<SyncStatus>.broadcast();
@@ -139,6 +154,12 @@ class SyncService {
 
       _statusController.add(SyncStatus.success);
 
+      // Fire-and-forget, deliberately not awaited: image syncing is lower
+      // priority than the data sync above and must never delay it or make
+      // it wait on a slow/failed image download - see ImageSyncService.
+      final imageSync = _imageSync;
+      if (imageSync != null) unawaited(imageSync.syncStoreImages());
+
       // Deliberately last, after everything above has pushed: this device's
       // access token is still valid until it expires, so a displaced device
       // can still upload the sales it recorded before being displaced -
@@ -151,7 +172,13 @@ class SyncService {
         );
         if (displaced) _displacedController.add(null);
       }
-    } catch (_) {
+    } catch (e, st) {
+      // Was a silent `catch (_)` - a sync failure had genuinely no trace
+      // anywhere (not in the app, not in Supabase), so "sync gets stuck on
+      // pending" reports had nothing to diagnose from. debugPrint is
+      // stripped in release builds but shows up in a debug build's logcat,
+      // which is what actually matters here.
+      debugPrint('SyncService.sync() failed: $e\n$st');
       _statusController.add(SyncStatus.error);
     } finally {
       _isSyncing = false;
@@ -192,10 +219,30 @@ class SyncService {
   }
 }
 
+/// The app-wide [ImageSyncService] singleton - its own provider (rather than
+/// built inline inside [syncServiceProvider]) so [lowStorageWarningProvider]
+/// below can watch the exact same instance [SyncService] drives.
+final imageSyncServiceProvider = Provider<ImageSyncService>((ref) {
+  return ImageSyncService(
+    isar: ref.watch(isarProvider),
+    productRepository: ref.watch(productRepositoryProvider),
+  );
+});
+
 /// The app-wide [SyncService] singleton.
 final syncServiceProvider = Provider<SyncService>((ref) {
-  final isar = ref.watch(isarProvider);
-  return SyncService(isar: isar, eventQueue: EventQueue(isar));
+  return SyncService(
+    isar: ref.watch(isarProvider),
+    eventQueue: EventQueue(ref.watch(isarProvider)),
+    imageSync: ref.watch(imageSyncServiceProvider),
+  );
+});
+
+/// True while product-image downloads are paused for low device storage -
+/// see [ImageSyncService.lowStorageWarning]. Watched by SalesScreen for a
+/// one-time warning banner that clears itself once storage recovers.
+final lowStorageWarningProvider = StreamProvider<bool>((ref) {
+  return ref.watch(imageSyncServiceProvider).lowStorageWarning;
 });
 
 /// The current phase of [SyncService]'s sync cycle, for UI that needs to

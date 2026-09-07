@@ -8,5 +8,6 @@ final analyticsNotifierProvider =
     StateNotifierProvider<AnalyticsNotifier, AnalyticsState>((ref) {
       return AnalyticsNotifier(
         saleRepository: ref.watch(saleRepositoryProvider),
+        productRepository: ref.watch(productRepositoryProvider),
       );
     });

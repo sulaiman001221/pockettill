@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import '../../shared/models/sale.dart';
+import '../../shared/repositories/product_repository.dart';
 import '../../shared/repositories/sale_repository.dart';
 
 enum AnalyticsPeriod { daily, monthly, yearly }
@@ -37,6 +38,7 @@ class AnalyticsState {
     this.avgSaleValue = 0,
     this.totalTransactions = 0,
     this.basketChangePercent,
+    this.stockValue = 0,
   });
 
   final AnalyticsPeriod period;
@@ -69,6 +71,12 @@ class AnalyticsState {
   /// week had no sales to compare against.
   final double? basketChangePercent;
 
+  /// Current inventory value: sum of `stock * price` across every product
+  /// right now - a live snapshot, not scoped to [period] like the chart
+  /// stats above (loaded alongside the other performance-summary numbers,
+  /// which are also period-independent).
+  final double stockValue;
+
   double get currentAvgSale =>
       currentCount == 0 ? 0 : currentTotal / currentCount;
   double get previousAvgSale =>
@@ -94,6 +102,7 @@ class AnalyticsState {
     double? avgSaleValue,
     int? totalTransactions,
     Object? basketChangePercent = _unset,
+    double? stockValue,
   }) {
     return AnalyticsState(
       period: period ?? this.period,
@@ -121,6 +130,7 @@ class AnalyticsState {
       basketChangePercent: basketChangePercent == _unset
           ? this.basketChangePercent
           : basketChangePercent as double?,
+      stockValue: stockValue ?? this.stockValue,
     );
   }
 }
@@ -134,13 +144,17 @@ const Object _unset = Object();
 /// section load and fail independently, so one slow or broken repository
 /// call never blanks out the whole screen.
 class AnalyticsNotifier extends StateNotifier<AnalyticsState> {
-  AnalyticsNotifier({required SaleRepository saleRepository})
-    : _saleRepository = saleRepository,
-      super(const AnalyticsState()) {
+  AnalyticsNotifier({
+    required SaleRepository saleRepository,
+    required ProductRepository productRepository,
+  }) : _saleRepository = saleRepository,
+       _productRepository = productRepository,
+       super(const AnalyticsState()) {
     loadAll();
   }
 
   final SaleRepository _saleRepository;
+  final ProductRepository _productRepository;
 
   /// Loads every section in parallel. Called once on startup and by
   /// pull-to-refresh.
@@ -294,12 +308,19 @@ class AnalyticsNotifier extends StateNotifier<AnalyticsState> {
             ((avgSaleValue - prevAvgSaleValue) / prevAvgSaleValue) * 100;
       }
 
+      final products = await _productRepository.getAll();
+      final stockValue = products.fold<double>(
+        0,
+        (sum, p) => sum + (p.stock * p.price),
+      );
+
       state = state.copyWith(
         bestDayLabel: bestDayLabel,
         bestDayAmount: bestDayAmount,
         avgSaleValue: avgSaleValue,
         totalTransactions: totalTrans,
         basketChangePercent: basketChangePercent,
+        stockValue: stockValue,
         performanceLoading: false,
       );
     } catch (_) {
