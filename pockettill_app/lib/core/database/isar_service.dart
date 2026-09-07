@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:isar/isar.dart';
 import 'package:path_provider/path_provider.dart';
 
+import '../../shared/models/cached_catalogue_product.dart';
 import '../../shared/models/credit_customer.dart';
 import '../../shared/models/credit_transaction.dart';
 import '../../shared/models/extra_income.dart';
@@ -49,6 +50,7 @@ class IsarService {
         StoreConfigSchema,
         ExtraIncomeSchema,
         RiskLogSchema,
+        CachedCatalogueProductSchema,
       ],
       directory: directory.path,
     );

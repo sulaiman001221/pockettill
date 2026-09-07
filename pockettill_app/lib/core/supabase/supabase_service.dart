@@ -200,4 +200,29 @@ class SupabaseService {
         .select()
         .gt('created_at', since.toUtc().toIso8601String());
   }
+
+  /// Maps each of [barcodes] that has an admin-enhanced catalogue image
+  /// (`catalogue_products.is_image_enhanced = true`) to that image's URL -
+  /// backs [ImageSyncService]'s background auto-sync. A barcode with no
+  /// catalogue entry, or one that's only ever had the plain store-submitted
+  /// photo, simply doesn't appear in the result.
+  static Future<Map<String, String>> fetchEnhancedCatalogueImages(
+    List<String> barcodes,
+  ) async {
+    if (barcodes.isEmpty) return {};
+    final rows = await supabaseClient
+        .from('catalogue_products')
+        .select('barcode, image_url')
+        .inFilter('barcode', barcodes)
+        .eq('is_image_enhanced', true);
+
+    final result = <String, String>{};
+    for (final row in rows) {
+      final url = row['image_url'] as String?;
+      if (url != null && url.isNotEmpty) {
+        result[row['barcode'] as String] = url;
+      }
+    }
+    return result;
+  }
 }

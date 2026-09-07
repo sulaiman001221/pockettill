@@ -37,50 +37,65 @@ const StoreConfigSchema = CollectionSchema(
       name: r'deviceId',
       type: IsarType.string,
     ),
-    r'isBetaAdopter': PropertySchema(
+    r'imageDefaultsMigrated': PropertySchema(
       id: 4,
+      name: r'imageDefaultsMigrated',
+      type: IsarType.bool,
+    ),
+    r'imagesWifiOnly': PropertySchema(
+      id: 5,
+      name: r'imagesWifiOnly',
+      type: IsarType.bool,
+    ),
+    r'isBetaAdopter': PropertySchema(
+      id: 6,
       name: r'isBetaAdopter',
       type: IsarType.bool,
     ),
     r'isLoggedIn': PropertySchema(
-      id: 5,
+      id: 7,
       name: r'isLoggedIn',
       type: IsarType.bool,
     ),
     r'lastSyncedAt': PropertySchema(
-      id: 6,
+      id: 8,
       name: r'lastSyncedAt',
       type: IsarType.dateTime,
     ),
     r'ownerName': PropertySchema(
-      id: 7,
+      id: 9,
       name: r'ownerName',
       type: IsarType.string,
     ),
     r'ownerPhone': PropertySchema(
-      id: 8,
+      id: 10,
       name: r'ownerPhone',
       type: IsarType.string,
     ),
     r'paymentSoundEnabled': PropertySchema(
-      id: 9,
+      id: 11,
       name: r'paymentSoundEnabled',
       type: IsarType.bool,
     ),
     r'scanSoundEnabled': PropertySchema(
-      id: 10,
+      id: 12,
       name: r'scanSoundEnabled',
       type: IsarType.bool,
     ),
     r'storeId': PropertySchema(
-      id: 11,
+      id: 13,
       name: r'storeId',
       type: IsarType.string,
     ),
     r'storeName': PropertySchema(
-      id: 12,
+      id: 14,
       name: r'storeName',
       type: IsarType.string,
+    ),
+    r'useCatalogueImages': PropertySchema(
+      id: 15,
+      name: r'useCatalogueImages',
+      type: IsarType.bool,
     )
   },
   estimateSize: _storeConfigEstimateSize,
@@ -149,15 +164,18 @@ void _storeConfigSerialize(
   writer.writeString(offsets[1], object.authPhone);
   writer.writeString(offsets[2], object.authUserId);
   writer.writeString(offsets[3], object.deviceId);
-  writer.writeBool(offsets[4], object.isBetaAdopter);
-  writer.writeBool(offsets[5], object.isLoggedIn);
-  writer.writeDateTime(offsets[6], object.lastSyncedAt);
-  writer.writeString(offsets[7], object.ownerName);
-  writer.writeString(offsets[8], object.ownerPhone);
-  writer.writeBool(offsets[9], object.paymentSoundEnabled);
-  writer.writeBool(offsets[10], object.scanSoundEnabled);
-  writer.writeString(offsets[11], object.storeId);
-  writer.writeString(offsets[12], object.storeName);
+  writer.writeBool(offsets[4], object.imageDefaultsMigrated);
+  writer.writeBool(offsets[5], object.imagesWifiOnly);
+  writer.writeBool(offsets[6], object.isBetaAdopter);
+  writer.writeBool(offsets[7], object.isLoggedIn);
+  writer.writeDateTime(offsets[8], object.lastSyncedAt);
+  writer.writeString(offsets[9], object.ownerName);
+  writer.writeString(offsets[10], object.ownerPhone);
+  writer.writeBool(offsets[11], object.paymentSoundEnabled);
+  writer.writeBool(offsets[12], object.scanSoundEnabled);
+  writer.writeString(offsets[13], object.storeId);
+  writer.writeString(offsets[14], object.storeName);
+  writer.writeBool(offsets[15], object.useCatalogueImages);
 }
 
 StoreConfig _storeConfigDeserialize(
@@ -172,15 +190,18 @@ StoreConfig _storeConfigDeserialize(
   object.authUserId = reader.readStringOrNull(offsets[2]);
   object.deviceId = reader.readString(offsets[3]);
   object.id = id;
-  object.isBetaAdopter = reader.readBool(offsets[4]);
-  object.isLoggedIn = reader.readBool(offsets[5]);
-  object.lastSyncedAt = reader.readDateTimeOrNull(offsets[6]);
-  object.ownerName = reader.readStringOrNull(offsets[7]);
-  object.ownerPhone = reader.readStringOrNull(offsets[8]);
-  object.paymentSoundEnabled = reader.readBool(offsets[9]);
-  object.scanSoundEnabled = reader.readBool(offsets[10]);
-  object.storeId = reader.readString(offsets[11]);
-  object.storeName = reader.readString(offsets[12]);
+  object.imageDefaultsMigrated = reader.readBool(offsets[4]);
+  object.imagesWifiOnly = reader.readBool(offsets[5]);
+  object.isBetaAdopter = reader.readBool(offsets[6]);
+  object.isLoggedIn = reader.readBool(offsets[7]);
+  object.lastSyncedAt = reader.readDateTimeOrNull(offsets[8]);
+  object.ownerName = reader.readStringOrNull(offsets[9]);
+  object.ownerPhone = reader.readStringOrNull(offsets[10]);
+  object.paymentSoundEnabled = reader.readBool(offsets[11]);
+  object.scanSoundEnabled = reader.readBool(offsets[12]);
+  object.storeId = reader.readString(offsets[13]);
+  object.storeName = reader.readString(offsets[14]);
+  object.useCatalogueImages = reader.readBool(offsets[15]);
   return object;
 }
 
@@ -204,19 +225,25 @@ P _storeConfigDeserializeProp<P>(
     case 5:
       return (reader.readBool(offset)) as P;
     case 6:
-      return (reader.readDateTimeOrNull(offset)) as P;
+      return (reader.readBool(offset)) as P;
     case 7:
-      return (reader.readStringOrNull(offset)) as P;
+      return (reader.readBool(offset)) as P;
     case 8:
-      return (reader.readStringOrNull(offset)) as P;
+      return (reader.readDateTimeOrNull(offset)) as P;
     case 9:
-      return (reader.readBool(offset)) as P;
+      return (reader.readStringOrNull(offset)) as P;
     case 10:
-      return (reader.readBool(offset)) as P;
+      return (reader.readStringOrNull(offset)) as P;
     case 11:
-      return (reader.readString(offset)) as P;
+      return (reader.readBool(offset)) as P;
     case 12:
+      return (reader.readBool(offset)) as P;
+    case 13:
       return (reader.readString(offset)) as P;
+    case 14:
+      return (reader.readString(offset)) as P;
+    case 15:
+      return (reader.readBool(offset)) as P;
     default:
       throw IsarError('Unknown property with id $propertyId');
   }
@@ -964,6 +991,26 @@ extension StoreConfigQueryFilter
   }
 
   QueryBuilder<StoreConfig, StoreConfig, QAfterFilterCondition>
+      imageDefaultsMigratedEqualTo(bool value) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'imageDefaultsMigrated',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<StoreConfig, StoreConfig, QAfterFilterCondition>
+      imagesWifiOnlyEqualTo(bool value) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'imagesWifiOnly',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<StoreConfig, StoreConfig, QAfterFilterCondition>
       isBetaAdopterEqualTo(bool value) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.equalTo(
@@ -1654,6 +1701,16 @@ extension StoreConfigQueryFilter
       ));
     });
   }
+
+  QueryBuilder<StoreConfig, StoreConfig, QAfterFilterCondition>
+      useCatalogueImagesEqualTo(bool value) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'useCatalogueImages',
+        value: value,
+      ));
+    });
+  }
 }
 
 extension StoreConfigQueryObject
@@ -1709,6 +1766,33 @@ extension StoreConfigQuerySortBy
   QueryBuilder<StoreConfig, StoreConfig, QAfterSortBy> sortByDeviceIdDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'deviceId', Sort.desc);
+    });
+  }
+
+  QueryBuilder<StoreConfig, StoreConfig, QAfterSortBy>
+      sortByImageDefaultsMigrated() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'imageDefaultsMigrated', Sort.asc);
+    });
+  }
+
+  QueryBuilder<StoreConfig, StoreConfig, QAfterSortBy>
+      sortByImageDefaultsMigratedDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'imageDefaultsMigrated', Sort.desc);
+    });
+  }
+
+  QueryBuilder<StoreConfig, StoreConfig, QAfterSortBy> sortByImagesWifiOnly() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'imagesWifiOnly', Sort.asc);
+    });
+  }
+
+  QueryBuilder<StoreConfig, StoreConfig, QAfterSortBy>
+      sortByImagesWifiOnlyDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'imagesWifiOnly', Sort.desc);
     });
   }
 
@@ -1825,6 +1909,20 @@ extension StoreConfigQuerySortBy
       return query.addSortBy(r'storeName', Sort.desc);
     });
   }
+
+  QueryBuilder<StoreConfig, StoreConfig, QAfterSortBy>
+      sortByUseCatalogueImages() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'useCatalogueImages', Sort.asc);
+    });
+  }
+
+  QueryBuilder<StoreConfig, StoreConfig, QAfterSortBy>
+      sortByUseCatalogueImagesDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'useCatalogueImages', Sort.desc);
+    });
+  }
 }
 
 extension StoreConfigQuerySortThenBy
@@ -1886,6 +1984,33 @@ extension StoreConfigQuerySortThenBy
   QueryBuilder<StoreConfig, StoreConfig, QAfterSortBy> thenByIdDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'id', Sort.desc);
+    });
+  }
+
+  QueryBuilder<StoreConfig, StoreConfig, QAfterSortBy>
+      thenByImageDefaultsMigrated() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'imageDefaultsMigrated', Sort.asc);
+    });
+  }
+
+  QueryBuilder<StoreConfig, StoreConfig, QAfterSortBy>
+      thenByImageDefaultsMigratedDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'imageDefaultsMigrated', Sort.desc);
+    });
+  }
+
+  QueryBuilder<StoreConfig, StoreConfig, QAfterSortBy> thenByImagesWifiOnly() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'imagesWifiOnly', Sort.asc);
+    });
+  }
+
+  QueryBuilder<StoreConfig, StoreConfig, QAfterSortBy>
+      thenByImagesWifiOnlyDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'imagesWifiOnly', Sort.desc);
     });
   }
 
@@ -2002,6 +2127,20 @@ extension StoreConfigQuerySortThenBy
       return query.addSortBy(r'storeName', Sort.desc);
     });
   }
+
+  QueryBuilder<StoreConfig, StoreConfig, QAfterSortBy>
+      thenByUseCatalogueImages() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'useCatalogueImages', Sort.asc);
+    });
+  }
+
+  QueryBuilder<StoreConfig, StoreConfig, QAfterSortBy>
+      thenByUseCatalogueImagesDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'useCatalogueImages', Sort.desc);
+    });
+  }
 }
 
 extension StoreConfigQueryWhereDistinct
@@ -2031,6 +2170,19 @@ extension StoreConfigQueryWhereDistinct
       {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
       return query.addDistinctBy(r'deviceId', caseSensitive: caseSensitive);
+    });
+  }
+
+  QueryBuilder<StoreConfig, StoreConfig, QDistinct>
+      distinctByImageDefaultsMigrated() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'imageDefaultsMigrated');
+    });
+  }
+
+  QueryBuilder<StoreConfig, StoreConfig, QDistinct> distinctByImagesWifiOnly() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'imagesWifiOnly');
     });
   }
 
@@ -2093,6 +2245,13 @@ extension StoreConfigQueryWhereDistinct
       return query.addDistinctBy(r'storeName', caseSensitive: caseSensitive);
     });
   }
+
+  QueryBuilder<StoreConfig, StoreConfig, QDistinct>
+      distinctByUseCatalogueImages() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'useCatalogueImages');
+    });
+  }
 }
 
 extension StoreConfigQueryProperty
@@ -2124,6 +2283,19 @@ extension StoreConfigQueryProperty
   QueryBuilder<StoreConfig, String, QQueryOperations> deviceIdProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'deviceId');
+    });
+  }
+
+  QueryBuilder<StoreConfig, bool, QQueryOperations>
+      imageDefaultsMigratedProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'imageDefaultsMigrated');
+    });
+  }
+
+  QueryBuilder<StoreConfig, bool, QQueryOperations> imagesWifiOnlyProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'imagesWifiOnly');
     });
   }
 
@@ -2180,6 +2352,13 @@ extension StoreConfigQueryProperty
   QueryBuilder<StoreConfig, String, QQueryOperations> storeNameProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'storeName');
+    });
+  }
+
+  QueryBuilder<StoreConfig, bool, QQueryOperations>
+      useCatalogueImagesProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'useCatalogueImages');
     });
   }
 }

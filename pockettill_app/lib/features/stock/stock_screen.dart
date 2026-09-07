@@ -3,21 +3,26 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/sync/sync_service.dart';
 import '../../shared/models/product.dart';
 import '../../shared/repositories/repositories.dart';
 import '../../shared/theme/app_theme.dart';
 import '../../shared/widgets/pockettill_app_bar.dart';
+import '../../shared/widgets/scroll_to_top_button.dart';
 import 'add_product_screen.dart';
 import 'barcode_scanner_screen.dart';
+import 'catalogue_browse_screen.dart';
 import 'risk_log_providers.dart';
 import 'risk_log_screen.dart';
 import 'stock_ui.dart';
 
 enum _StockFilter { all, normal, lowStock, outOfStock }
 
-/// Stock screen: search/scan, filter chips, summary cards, and the
-/// scrollable product list. All reads/writes go through
-/// [productRepositoryProvider] - never directly to Isar.
+enum _AddProductChoice { browseCatalogue, addManually }
+
+/// Stock screen: search/scan, filter chips, and the scrollable product
+/// list. All reads/writes go through [productRepositoryProvider] - never
+/// directly to Isar.
 class StockScreen extends ConsumerStatefulWidget {
   const StockScreen({super.key});
 
@@ -28,6 +33,7 @@ class StockScreen extends ConsumerStatefulWidget {
 class _StockScreenState extends ConsumerState<StockScreen> {
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocusNode = FocusNode(debugLabel: 'search');
+  final ScrollController _scrollController = ScrollController();
 
   List<Product> _products = [];
   bool _loading = true;
@@ -38,12 +44,31 @@ class _StockScreenState extends ConsumerState<StockScreen> {
   void initState() {
     super.initState();
     _loadProducts();
+    _syncImagesEagerly();
+  }
+
+  /// Proactively checks for newer catalogue/enhanced images and re-caches
+  /// anything missing as soon as Stock opens, rather than waiting for the
+  /// next periodic background sync (up to ~30s away, per
+  /// ReachabilityService's ping interval) - the whole point of opening
+  /// Stock right after an admin enhances a photo is to see it promptly, not
+  /// on whatever schedule the next unrelated sync happens to land on
+  /// (found slow to update 2026-09-08). Silent refresh - doesn't toggle the
+  /// loading spinner, since the products themselves are usually already
+  /// loaded and only their images might change.
+  Future<void> _syncImagesEagerly() async {
+    await ref.read(imageSyncServiceProvider).syncStoreImages();
+    if (!mounted) return;
+    final products = await ref.read(productRepositoryProvider).getAll();
+    if (!mounted) return;
+    setState(() => _products = products);
   }
 
   @override
   void dispose() {
     _searchController.dispose();
     _searchFocusNode.dispose();
+    _scrollController.dispose();
     super.dispose();
   }
 
@@ -116,6 +141,77 @@ class _StockScreenState extends ConsumerState<StockScreen> {
         context,
       ).showSnackBar(const SnackBar(content: Text('Product updated')));
     }
+  }
+
+  /// Replaces the earlier expand-in-place FAB animation (dropped per user
+  /// feedback, 2026-09-05) with a plain modal bottom sheet - same pattern
+  /// [_quickAddStock] already uses for [_AddStockSheet], so "tap the FAB,
+  /// choose from a sheet" is one consistent idiom across this screen
+  /// instead of two different interaction styles.
+  Future<void> _openAddProductMenu() async {
+    final choice = await showModalBottomSheet<_AddProductChoice>(
+      context: context,
+      backgroundColor: AppTheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Padding(
+              padding: EdgeInsets.fromLTRB(20, 20, 20, 8),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text('Add Product', style: AppTheme.mainTitle),
+              ),
+            ),
+            ListTile(
+              leading: const Icon(Icons.search, color: AppTheme.primary),
+              title: const Text('Browse Catalogue'),
+              subtitle: const Text('Import an existing product'),
+              onTap: () => Navigator.of(
+                context,
+              ).pop(_AddProductChoice.browseCatalogue),
+            ),
+            ListTile(
+              leading: const Icon(Icons.edit_outlined, color: AppTheme.primary),
+              title: const Text('Add Manually'),
+              subtitle: const Text('Enter product details yourself'),
+              onTap: () =>
+                  Navigator.of(context).pop(_AddProductChoice.addManually),
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+
+    if (!mounted || choice == null) return;
+    switch (choice) {
+      case _AddProductChoice.browseCatalogue:
+        await _openCatalogueBrowse();
+      case _AddProductChoice.addManually:
+        await _openAddProduct();
+    }
+  }
+
+  Future<void> _openCatalogueBrowse() async {
+    // An int (how many products were imported) once the browse ->
+    // price-setting flow finishes, or null if the user just backed out.
+    final imported = await Navigator.of(context).push<int>(
+      MaterialPageRoute(builder: (_) => const CatalogueBrowseScreen()),
+    );
+    await _loadProducts();
+    if (!mounted || imported == null || imported <= 0) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          '$imported product${imported == 1 ? '' : 's'} added to your store',
+        ),
+      ),
+    );
   }
 
   /// Deletes [product] immediately (removing it from the list and Isar) and
@@ -228,7 +324,7 @@ class _StockScreenState extends ConsumerState<StockScreen> {
         ),
         backgroundColor: AppTheme.background,
         floatingActionButton: FloatingActionButton.extended(
-          onPressed: () => _openAddProduct(),
+          onPressed: _openAddProductMenu,
           backgroundColor: AppTheme.primary,
           icon: const Icon(Icons.add, color: Colors.white),
           label: const Text(
@@ -236,52 +332,62 @@ class _StockScreenState extends ConsumerState<StockScreen> {
             style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
           ),
         ),
-        body: _loading
-            ? const Center(child: CircularProgressIndicator())
-            : RefreshIndicator(
-                onRefresh: _loadProducts,
-                child: CustomScrollView(
-                  slivers: [
-                    SliverToBoxAdapter(child: _buildSearchBar()),
-                    SliverToBoxAdapter(child: _buildFilterChips()),
-                    SliverToBoxAdapter(child: _buildSummaryCards()),
-                    const SliverToBoxAdapter(child: _SectionLabel('PRODUCTS')),
-                    if (_products.isEmpty)
-                      SliverFillRemaining(
-                        hasScrollBody: false,
-                        child: _EmptyState(
-                          icon: Icons.inventory_2_outlined,
-                          title: 'No products yet',
-                          subtitle: 'Tap Add Product to get started',
-                        ),
-                      )
-                    else if (filtered.isEmpty)
-                      SliverFillRemaining(
-                        hasScrollBody: false,
-                        child: _EmptyState(
-                          icon: Icons.search_off,
-                          title: 'No matching products',
-                          subtitle: 'Try a different search or filter',
-                        ),
-                      )
-                    else
-                      SliverList(
-                        delegate: SliverChildBuilderDelegate(
-                          (context, index) {
-                            final product = filtered[index];
-                            return _ProductListItem(
-                              product: product,
-                              onQuickAdd: () => _quickAddStock(product),
-                              onEdit: () => _openAddProduct(existing: product),
-                            );
-                          },
-                          childCount: filtered.length,
-                        ),
-                      ),
-                    const SliverToBoxAdapter(child: SizedBox(height: 96)),
-                  ],
-                ),
-              ),
+        body: Stack(
+          children: [
+            _loading
+                ? const Center(child: CircularProgressIndicator())
+                : RefreshIndicator(
+                    onRefresh: _loadProducts,
+                    child: CustomScrollView(
+                      controller: _scrollController,
+                      slivers: [
+                        SliverToBoxAdapter(child: _buildSearchBar()),
+                        SliverToBoxAdapter(child: _buildFilterChips()),
+                        const SliverToBoxAdapter(child: SizedBox(height: 8)),
+                        const SliverToBoxAdapter(child: _SectionLabel('PRODUCTS')),
+                        if (_products.isEmpty)
+                          SliverFillRemaining(
+                            hasScrollBody: false,
+                            child: _EmptyState(
+                              icon: Icons.inventory_2_outlined,
+                              title: 'No products yet',
+                              subtitle: 'Tap Add Product to get started',
+                            ),
+                          )
+                        else if (filtered.isEmpty)
+                          SliverFillRemaining(
+                            hasScrollBody: false,
+                            child: _EmptyState(
+                              icon: Icons.search_off,
+                              title: 'No matching products',
+                              subtitle: 'Try a different search or filter',
+                            ),
+                          )
+                        else
+                          SliverList(
+                            delegate: SliverChildBuilderDelegate(
+                              (context, index) {
+                                final product = filtered[index];
+                                return _ProductListItem(
+                                  product: product,
+                                  onQuickAdd: () => _quickAddStock(product),
+                                  onEdit: () => _openAddProduct(existing: product),
+                                );
+                              },
+                              childCount: filtered.length,
+                            ),
+                          ),
+                        // Enough clearance that the last card's edit/quick-add
+                        // buttons never sit under the scroll-to-top button or
+                        // the main Add Product FAB once scrolled all the way
+                        // down - 96 wasn't quite enough (2026-09-06).
+                        const SliverToBoxAdapter(child: SizedBox(height: 140)),
+                      ],
+                    ),
+                  ),
+            ScrollToTopButton(controller: _scrollController, bottom: 108),
+          ],
+        ),
       ),
     );
   }
@@ -370,41 +476,6 @@ class _StockScreenState extends ConsumerState<StockScreen> {
     );
   }
 
-  Widget _buildSummaryCards() {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
-      child: Row(
-        children: [
-          Expanded(
-            child: _SummaryCard(
-              label: 'Total Products',
-              value: '${_products.length}',
-              color: AppTheme.textPrimary,
-              background: AppTheme.surface,
-            ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: _SummaryCard(
-              label: 'Low Stock',
-              value: '${_countFor(_StockFilter.lowStock)}',
-              color: AppTheme.syncAmber,
-              background: AppTheme.surface,
-            ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: _SummaryCard(
-              label: 'Out of Stock',
-              value: '${_countFor(_StockFilter.outOfStock)}',
-              color: AppTheme.logoutRed,
-              background: AppTheme.surface,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 }
 
 class _SectionLabel extends StatelessWidget {
@@ -472,53 +543,9 @@ class _FilterChipButton extends StatelessWidget {
   }
 }
 
-class _SummaryCard extends StatelessWidget {
-  const _SummaryCard({
-    required this.label,
-    required this.value,
-    required this.color,
-    required this.background,
-  });
-
-  final String label;
-  final String value;
-  final Color color;
-  final Color background;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-      decoration: BoxDecoration(
-        color: background,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            value,
-            style: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-              color: color,
-            ),
-          ),
-          const SizedBox(height: 2),
-          Text(
-            label,
-            style: const TextStyle(
-              fontSize: 11,
-              color: AppTheme.textSecondary,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
+/// Figma-specified row (2026-09-05): a big product photo, name, stock
+/// count (color-coded instead of the old status pill), and price - no card
+/// background/shadow, just [ProductRow]'s own divider between rows.
 class _ProductListItem extends StatelessWidget {
   const _ProductListItem({
     required this.product,
@@ -534,97 +561,70 @@ class _ProductListItem extends StatelessWidget {
   Widget build(BuildContext context) {
     final status = stockStatusOf(product);
 
-    return Container(
-      margin: const EdgeInsets.fromLTRB(20, 0, 20, 12),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: AppTheme.surface,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
-            offset: const Offset(0, 2),
-            blurRadius: 4,
+    return ProductRow(
+      name: productDisplayName(product),
+      imageUrl: product.imageUrl,
+      cacheKey: product.barcode,
+      cachedImagePath: product.cachedImagePath,
+      subtitle: status == ProductStockStatus.outOfStock
+          ? const _OutOfStockTag()
+          : Text(
+              '${product.stock} in stock',
+              style: TextStyle(color: stockStatusColor(status), fontSize: 13),
+            ),
+      bottomLeft: Text(
+        'R${product.price.toStringAsFixed(2)}',
+        style: const TextStyle(
+          color: AppTheme.primary,
+          fontWeight: FontWeight.bold,
+          fontSize: 15,
+        ),
+      ),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          RowSquareButton(
+            icon: Icons.edit_outlined,
+            onTap: onEdit,
+            background: AppTheme.surface,
+            iconColor: AppTheme.iconBorder,
+            border: AppTheme.divider,
+          ),
+          const SizedBox(width: 8),
+          RowSquareButton(
+            icon: Icons.add,
+            onTap: onQuickAdd,
+            background: AppTheme.primary,
+            iconColor: Colors.white,
           ),
         ],
       ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          ProductAvatar(name: product.name),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        productDisplayName(product),
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 15,
-                          color: AppTheme.textPrimary,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    StockStatusBadge(status: status),
-                  ],
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'R${product.price.toStringAsFixed(2)}',
-                  style: const TextStyle(
-                    color: AppTheme.primary,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 14,
-                  ),
-                ),
-                Text(
-                  '${product.stock} in stock',
-                  style: const TextStyle(
-                    color: AppTheme.textSecondary,
-                    fontSize: 12,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 8),
-          Column(
-            children: [
-              InkWell(
-                borderRadius: BorderRadius.circular(9999),
-                onTap: onQuickAdd,
-                child: Container(
-                  width: 32,
-                  height: 32,
-                  decoration: const BoxDecoration(
-                    color: AppTheme.primary,
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(Icons.add, color: Colors.white, size: 18),
-                ),
-              ),
-              const SizedBox(height: 8),
-              InkWell(
-                borderRadius: BorderRadius.circular(9999),
-                onTap: onEdit,
-                child: const Padding(
-                  padding: EdgeInsets.all(4),
-                  child: Icon(
-                    Icons.edit_outlined,
-                    color: AppTheme.iconBorder,
-                    size: 20,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ],
+    );
+  }
+}
+
+/// Brought back 2026-09-06, out-of-stock only - "like it was before" (the
+/// old 3-state StockStatusBadge, dropped 2026-09-05 in favor of plain
+/// color-coded "X in stock" text). Normal/low stock still use the plain
+/// text - only the zero-stock case is urgent enough to warrant a tag.
+class _OutOfStockTag extends StatelessWidget {
+  const _OutOfStockTag();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: AppTheme.logoutRed.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(9999),
+      ),
+      child: const Text(
+        'Out of Stock',
+        style: TextStyle(
+          color: AppTheme.logoutRed,
+          fontSize: 11,
+          fontWeight: FontWeight.w600,
+        ),
       ),
     );
   }

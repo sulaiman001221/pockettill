@@ -6,7 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../shared/models/credit_customer.dart';
 import '../../shared/repositories/repositories.dart';
 import '../../shared/theme/app_theme.dart';
-import '../../shared/utils/credit_balance_display.dart';
+import '../../shared/widgets/customer_display.dart';
 import '../../shared/widgets/pockettill_app_bar.dart';
 import '../stock/risk_log_providers.dart';
 import '../stock/risk_log_screen.dart';
@@ -215,9 +215,8 @@ class _CreditScreenState extends ConsumerState<CreditScreen> {
                   slivers: [
                     SliverToBoxAdapter(child: _buildSearchBar()),
                     SliverToBoxAdapter(child: _buildFilterChips()),
-                    SliverToBoxAdapter(child: _buildSummaryCards()),
                     SliverToBoxAdapter(
-                      child: _SectionHeader(count: _customers.length),
+                      child: _SectionHeader(totalCreditTaken: _totalOwing),
                     ),
                     if (_customers.isEmpty)
                       SliverFillRemaining(
@@ -328,52 +327,23 @@ class _CreditScreenState extends ConsumerState<CreditScreen> {
     );
   }
 
-  Widget _buildSummaryCards() {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
-      child: Row(
-        children: [
-          Expanded(
-            child: _SummaryCard(
-              label: 'Total Customers',
-              value: '${_customers.length}',
-              color: AppTheme.textPrimary,
-              background: AppTheme.surface,
-            ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: _SummaryCard(
-              label: 'Total Credit Taken',
-              value: _totalOwing < 0
-                  ? '-R${(-_totalOwing).toStringAsFixed(0)}'
-                  : 'R${_totalOwing.toStringAsFixed(0)}',
-              color: creditBalanceColor(_totalOwing),
-              background: AppTheme.surface,
-            ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: _SummaryCard(
-              label: 'Settled Customers',
-              value: '${_countFor(_CreditFilter.settled)}',
-              color: AppTheme.syncGreen,
-              background: AppTheme.surface,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 }
 
+/// The right-hand text used to show a plain customer count - now shows the
+/// total credit taken instead, since the count duplicated the "All" filter
+/// chip and the old 3-card summary row (Total Customers/Total Credit
+/// Taken/Settled Customers) duplicated the filter chips too and was removed
+/// outright, keeping only this one figure.
 class _SectionHeader extends StatelessWidget {
-  const _SectionHeader({required this.count});
+  const _SectionHeader({required this.totalCreditTaken});
 
-  final int count;
+  final double totalCreditTaken;
 
   @override
   Widget build(BuildContext context) {
+    final amount = totalCreditTaken < 0
+        ? '-R${(-totalCreditTaken).toStringAsFixed(0)}'
+        : 'R${totalCreditTaken.toStringAsFixed(0)}';
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
       child: Row(
@@ -389,7 +359,7 @@ class _SectionHeader extends StatelessWidget {
           ),
           const Spacer(),
           Text(
-            '$count customer${count == 1 ? '' : 's'}',
+            'Total Credit Taken: $amount',
             style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary),
           ),
         ],
@@ -439,50 +409,6 @@ class _FilterChipButton extends StatelessWidget {
   }
 }
 
-class _SummaryCard extends StatelessWidget {
-  const _SummaryCard({
-    required this.label,
-    required this.value,
-    required this.color,
-    required this.background,
-  });
-
-  final String label;
-  final String value;
-  final Color color;
-  final Color background;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-      decoration: BoxDecoration(
-        color: background,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            value,
-            style: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-              color: color,
-            ),
-          ),
-          const SizedBox(height: 2),
-          Text(
-            label,
-            style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 class _CustomerListItem extends StatelessWidget {
   const _CustomerListItem({required this.customer, required this.onTap});
 
@@ -491,71 +417,16 @@ class _CustomerListItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final owing = customer.balance > 0;
-    final phone = customer.phone;
-
-    final String label;
-    final Color color;
-    final bool showDot;
-    if (owing) {
-      label = 'Owes ${formatCreditBalance(customer.balance)}';
-      color = AppTheme.logoutRed;
-      showDot = false;
-    } else if (customer.balance < 0) {
-      label = 'Credit ${formatCreditBalance(customer.balance)}';
-      color = AppTheme.syncGreen;
-      showDot = true;
-    } else {
-      label = 'Settled';
-      color = AppTheme.syncGreen;
-      showDot = true;
-    }
-
-    // Settled/Credit get their shaded pill back; Owes stays plain colored
-    // text - matches the user's "circled shaded as it was before" request
-    // for the positive states while leaving the negative one unshaded.
-    final Widget statusWidget = showDot
-        ? Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(9999),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: 6,
-                  height: 6,
-                  decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-                ),
-                const SizedBox(width: 6),
-                Text(
-                  label,
-                  style: TextStyle(
-                    color: color,
-                    fontWeight: FontWeight.w600,
-                    fontSize: 13,
-                  ),
-                ),
-              ],
-            ),
-          )
-        : Text(
-            label,
-            style: TextStyle(
-              color: color,
-              fontWeight: FontWeight.w600,
-              fontSize: 13,
-            ),
-          );
-
+    // Same box padding/margin as checkout's customer tile
+    // (_CustomerTile) - the two are meant to look identical apart from the
+    // right-side control (a selection radio there, a navigation chevron
+    // here), per explicit design direction rather than coincidence.
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(16),
       child: Container(
-        margin: const EdgeInsets.fromLTRB(20, 0, 20, 12),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 16),
+        margin: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+        padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
           color: AppTheme.surface,
           borderRadius: BorderRadius.circular(16),
@@ -569,7 +440,7 @@ class _CustomerListItem extends StatelessWidget {
         ),
         child: Row(
           children: [
-            _CustomerAvatar(name: customer.name),
+            CustomerAvatar(name: customer.name, size: 40),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
@@ -579,78 +450,30 @@ class _CustomerListItem extends StatelessWidget {
                     customer.name,
                     style: const TextStyle(
                       fontWeight: FontWeight.bold,
-                      fontSize: 15,
                       color: AppTheme.textPrimary,
                     ),
                     overflow: TextOverflow.ellipsis,
                   ),
-                  if ((phone ?? '').isNotEmpty) ...[
-                    const SizedBox(height: 6),
-                    Text(phone!, style: AppTheme.bodySubtitle),
-                  ],
+                  const SizedBox(height: 4),
+                  CustomerBalanceStatus(balance: customer.balance),
                 ],
               ),
             ),
             const SizedBox(width: 8),
-            Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Container(
-                  width: 28,
-                  height: 28,
-                  decoration: BoxDecoration(
-                    color: AppTheme.background,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: const Icon(
-                    Icons.chevron_right,
-                    color: AppTheme.iconBorder,
-                    size: 18,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                statusWidget,
-              ],
+            Container(
+              width: 28,
+              height: 28,
+              decoration: BoxDecoration(
+                color: AppTheme.background,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(
+                Icons.chevron_right,
+                color: AppTheme.iconBorder,
+                size: 18,
+              ),
             ),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-/// Rounded-square initials avatar for a customer - solid brand-blue
-/// background matching the "New Customer Profile" icon tile on
-/// [AddCustomerScreen], rather than a per-name colour.
-class _CustomerAvatar extends StatelessWidget {
-  const _CustomerAvatar({required this.name});
-
-  final String name;
-
-  @override
-  Widget build(BuildContext context) {
-    final words = name.trim().split(RegExp(r'\s+')).where((w) => w.isNotEmpty);
-    final initials = words.isEmpty
-        ? '?'
-        : words.length == 1
-        ? words.first[0].toUpperCase()
-        : (words.first[0] + words.last[0]).toUpperCase();
-
-    return Container(
-      width: 44,
-      height: 44,
-      alignment: Alignment.center,
-      decoration: BoxDecoration(
-        color: AppTheme.primary,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Text(
-        initials,
-        style: const TextStyle(
-          color: Colors.white,
-          fontWeight: FontWeight.bold,
-          fontSize: 15,
         ),
       ),
     );

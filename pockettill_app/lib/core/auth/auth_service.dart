@@ -226,6 +226,9 @@ class AuthService {
     // previously configured on this device, so any cached data left over
     // from that old store must go the same way login's store-switch does -
     // see the matching comment in _completeLogin for why.
+    // NOT cleared here: cachedCatalogueProducts. It's a shared, cross-store
+    // catalogue cache, not this store's own data - see
+    // CachedCatalogueProduct's doc comment.
     if (existingConfig != null && existingConfig.storeId.isNotEmpty) {
       await IsarService.db.writeTxn(() async {
         await IsarService.db.products.clear();
@@ -256,7 +259,15 @@ class AuthService {
       // This physical device's own settings, not the new store's - see the
       // matching comment in _completeLogin.
       ..scanSoundEnabled = existingConfig?.scanSoundEnabled ?? true
-      ..paymentSoundEnabled = existingConfig?.paymentSoundEnabled ?? true;
+      ..paymentSoundEnabled = existingConfig?.paymentSoundEnabled ?? true
+      // Matches the `stores` table's own column defaults - a brand-new
+      // store row was inserted above without specifying either, so this
+      // just mirrors what Postgres already applied server-side.
+      ..useCatalogueImages = true
+      ..imagesWifiOnly = false
+      // A brand-new StoreConfig already has the correct default - no
+      // repair needed, see StoreConfigRepository's one-time migration.
+      ..imageDefaultsMigrated = true;
 
     await repo.save(config);
   }
@@ -580,6 +591,8 @@ class AuthService {
     // only thing that makes the two stores' local data no longer collide -
     // [RestoreService] below is what repopulates this store's own history
     // afterward.
+    // NOT cleared here either: cachedCatalogueProducts - same reasoning as
+    // createStore's matching block above.
     if (isSwitchingStore) {
       await IsarService.db.writeTxn(() async {
         await IsarService.db.products.clear();
@@ -618,7 +631,17 @@ class AuthService {
       // than silently resetting to the class default, which is what a
       // fresh `StoreConfig()` here would otherwise do every single login.
       ..scanSoundEnabled = existingConfig?.scanSoundEnabled ?? true
-      ..paymentSoundEnabled = existingConfig?.paymentSoundEnabled ?? true;
+      ..paymentSoundEnabled = existingConfig?.paymentSoundEnabled ?? true
+      // Product Images prefs, unlike sound, DO belong to the store (synced
+      // via store_profile), so they're read from the fetched `stores` row
+      // itself, not carried over from whatever device-local config existed
+      // before - this is what makes them "survive a reinstall" per spec.
+      ..useCatalogueImages = store['use_catalogue_images'] as bool? ?? true
+      ..imagesWifiOnly = store['images_wifi_only'] as bool? ?? false
+      // Read straight from the `stores` row above, which is always
+      // correct - no repair needed, see StoreConfigRepository's one-time
+      // migration.
+      ..imageDefaultsMigrated = true;
 
     final repo = StoreConfigRepository(isar: IsarService.db);
     await repo.save(config);

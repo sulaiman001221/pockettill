@@ -9,6 +9,7 @@ import 'package:uuid/uuid.dart';
 
 import '../../core/auth/auth_service.dart';
 import '../../core/hardware/hardware_detector.dart';
+import '../../core/storage/image_cache_service.dart';
 import '../../core/supabase/supabase_service.dart';
 import '../../core/sync/sync_service.dart';
 import '../../core/sync/sync_status_provider.dart';
@@ -66,6 +67,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   StoreConfig? _config;
   bool _loading = true;
 
+  int? _imageCacheBytes;
+
   _FoundingProgress? _foundingProgress;
   bool _foundingProgressLoading = false;
   bool _checkingStatus = false;
@@ -93,6 +96,35 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     if (config != null && !config.isBetaAdopter && config.storeId.isNotEmpty) {
       unawaited(_loadFoundingProgress());
     }
+    unawaited(_loadImageCacheSize());
+  }
+
+  Future<void> _loadImageCacheSize() async {
+    final bytes = await ImageCacheService.totalCacheBytes();
+    if (mounted) setState(() => _imageCacheBytes = bytes);
+  }
+
+  Future<void> _confirmClearImageCache() {
+    return showDialog<void>(
+      context: context,
+      builder: (_) => ConfirmationDialog(
+        message:
+            'Clear cached product images? They\'ll re-download the next '
+            'time each product is shown, or the next sync.',
+        confirmLabel: 'Clear Cache',
+        confirmColor: AppTheme.primary,
+        onConfirm: _clearImageCache,
+      ),
+    );
+  }
+
+  Future<void> _clearImageCache() async {
+    await ImageCacheService.clearCache();
+    await _loadImageCacheSize();
+    if (!mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Image cache cleared')));
   }
 
   Future<Map<String, dynamic>> _fetchQualification(String storeId) {
@@ -230,6 +262,20 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         'owner_name': config.ownerName,
         'owner_phone': config.ownerPhone,
         'address': config.address,
+        'use_catalogue_images': config.useCatalogueImages,
+        'images_wifi_only': config.imagesWifiOnly,
+        // Required for the upsert's RLS check to pass, not just cosmetic -
+        // `stores`' INSERT policy checks `auth_user_id = auth.uid()`, and
+        // Postgres evaluates that WITH CHECK against the *proposed* row
+        // even when `ON CONFLICT DO UPDATE` ends up taking the update path
+        // (this is documented Postgres RLS behaviour, not a bug in the
+        // policy itself). Omitting this column left it NULL on the
+        // attempted insert, which never equals auth.uid() - every
+        // store-profile edit (any Settings field, not just today's new
+        // toggles) has been silently failing with a 42501 the whole time,
+        // invisible until SyncService.sync()'s catch block actually logged
+        // the exception (found 2026-09-08).
+        'auth_user_id': config.authUserId,
       })
       ..deviceId = config.deviceId
       ..createdAt = DateTime.now();
@@ -444,6 +490,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 _buildDeviceInfoCard(),
                 const SizedBox(height: 16),
                 _buildSoundCard(),
+                const SizedBox(height: 16),
+                _buildProductImagesCard(),
                 const SizedBox(height: 16),
                 _buildSupportCard(),
                 const SizedBox(height: 16),
@@ -917,6 +965,72 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             value: config?.paymentSoundEnabled ?? true,
             onChanged: (value) => _saveSoundPreference(
               (c) => c.paymentSoundEnabled = value,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildProductImagesCard() {
+    final config = _config;
+    final bytes = _imageCacheBytes;
+    final cacheLabel = bytes == null
+        ? '…'
+        : '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+
+    return _SettingsCard(
+      child: Column(
+        children: [
+          _ToggleRow(
+            label: 'Use PocketTill catalogue images',
+            subtitle:
+                'Automatically update your product images with enhanced '
+                'catalogue versions when available.',
+            value: config?.useCatalogueImages ?? true,
+            onChanged: (value) =>
+                _saveConfig((c) => c.useCatalogueImages = value),
+          ),
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 12),
+            child: Divider(color: AppTheme.divider, height: 1),
+          ),
+          _ToggleRow(
+            label: 'Download images on WiFi only',
+            subtitle:
+                'Only download new product images when connected to WiFi '
+                'to save mobile data.',
+            value: config?.imagesWifiOnly ?? false,
+            onChanged: (value) =>
+                _saveConfig((c) => c.imagesWifiOnly = value),
+          ),
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 12),
+            child: Divider(color: AppTheme.divider, height: 1),
+          ),
+          InkWell(
+            onTap: _confirmClearImageCache,
+            child: Row(
+              children: [
+                const Text(
+                  'Images cached',
+                  style: TextStyle(color: AppTheme.textPrimary, fontSize: 14),
+                ),
+                const Spacer(),
+                Text(
+                  cacheLabel,
+                  style: const TextStyle(
+                    color: AppTheme.textSecondary,
+                    fontSize: 13,
+                  ),
+                ),
+                const SizedBox(width: 6),
+                const Icon(
+                  Icons.chevron_right,
+                  color: AppTheme.iconBorder,
+                  size: 18,
+                ),
+              ],
             ),
           ),
         ],

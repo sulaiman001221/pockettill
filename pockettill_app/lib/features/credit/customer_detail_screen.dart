@@ -10,6 +10,7 @@ import '../../shared/repositories/repositories.dart';
 import '../../shared/theme/app_theme.dart';
 import '../../shared/utils/credit_balance_display.dart';
 import '../../shared/widgets/confirmation_dialog.dart';
+import '../../shared/widgets/scroll_to_top_button.dart';
 import 'add_customer_screen.dart';
 import 'add_payment_screen.dart';
 import 'date_range_sheet.dart';
@@ -43,11 +44,18 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
   bool _loading = true;
   _HistoryFilter _filter = _HistoryFilter.today;
   DateTimeRange? _customRange;
+  final _scrollController = ScrollController();
 
   @override
   void initState() {
     super.initState();
     _load();
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
   }
 
   Future<void> _load() async {
@@ -440,15 +448,18 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
         onWriteOffBalance: customer == null ? null : _writeOffBalanceFlow,
       ),
       backgroundColor: AppTheme.background,
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : customer == null
-          ? const Center(child: Text('Customer not found'))
-          : RefreshIndicator(
-              onRefresh: _load,
-              child: ListView(
-                padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
-                children: [
+      body: Stack(
+        children: [
+          _loading
+              ? const Center(child: CircularProgressIndicator())
+              : customer == null
+              ? const Center(child: Text('Customer not found'))
+              : RefreshIndicator(
+                  onRefresh: _load,
+                  child: ListView(
+                    controller: _scrollController,
+                    padding: const EdgeInsets.fromLTRB(20, 16, 20, 96),
+                    children: [
                   _BalanceCard(customer: customer),
                   const SizedBox(height: 16),
                   SizedBox(
@@ -468,9 +479,12 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
                   _buildFilterChips(),
                   const SizedBox(height: 16),
                   _buildTransactionList(),
-                ],
-              ),
-            ),
+                    ],
+                  ),
+                ),
+          ScrollToTopButton(controller: _scrollController),
+        ],
+      ),
     );
   }
 

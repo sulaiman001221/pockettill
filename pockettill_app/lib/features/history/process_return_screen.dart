@@ -9,6 +9,7 @@ import '../../shared/repositories/repositories.dart';
 import '../../shared/theme/app_theme.dart';
 import '../../shared/utils/credit_balance_display.dart';
 import '../../shared/utils/friendly_error.dart';
+import '../../shared/widgets/customer_display.dart';
 import '../stock/barcode_scanner_screen.dart';
 import '../stock/stock_ui.dart';
 import 'return_success_screen.dart';
@@ -168,9 +169,17 @@ class _ProcessReturnScreenState extends ConsumerState<ProcessReturnScreen> {
         if (_resolutionType == null) return false;
         if (_resolutionType == 'exchange') return _exchangeProduct != null;
         if (_resolutionType == 'store_credit') {
-          // Store credit only makes sense for a customer who doesn't
-          // already owe money - see _MoneyOutcome's class doc.
-          return _selectedCustomer != null && _selectedCustomer!.balance <= 0;
+          // Any credit customer, regardless of current balance - the
+          // balanceDelta math in _moneyOutcome already reduces whatever
+          // they owe (or adds to existing credit) correctly either way, so
+          // restricting this to balance <= 0 (removed 2026-09-06) was
+          // blocking a real case: routing a cash/card sale's return value
+          // into a credit customer's account instead of handing back cash,
+          // which Refund can never do for a non-credit original sale
+          // (_balanceCustomer is null whenever widget.sale.paymentType !=
+          // 'credit') - "use Refund instead" was a dead end for exactly
+          // that case.
+          return _selectedCustomer != null;
         }
         return true;
       case _ReturnStep.summary:
@@ -662,7 +671,7 @@ class _ProcessReturnScreenState extends ConsumerState<ProcessReturnScreen> {
               width: double.infinity,
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: AppTheme.syncAmber.withValues(alpha: 0.12),
+                color: AppTheme.primary.withValues(alpha: 0.08),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Row(
@@ -670,18 +679,18 @@ class _ProcessReturnScreenState extends ConsumerState<ProcessReturnScreen> {
                 children: [
                   const Icon(
                     Icons.info_outline,
-                    color: AppTheme.syncAmber,
+                    color: AppTheme.primary,
                     size: 18,
                   ),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      'Store credit isn\'t available for ${_selectedCustomer!.name} '
-                      'because they still owe '
+                      '${_selectedCustomer!.name} currently owes '
                       '${formatCreditBalance(_selectedCustomer!.balance)}. '
-                      'Use Refund instead.',
+                      'This will reduce that balance by '
+                      'R${_itemsValue.toStringAsFixed(2)}.',
                       style: const TextStyle(
-                        color: AppTheme.syncAmber,
+                        color: AppTheme.primary,
                         fontSize: 13,
                         fontWeight: FontWeight.w600,
                       ),
@@ -1247,7 +1256,12 @@ class _ExchangeProductPickerState extends ConsumerState<_ExchangeProductPicker> 
             ),
             child: Row(
               children: [
-                ProductAvatar(name: productDisplayName(selected)),
+                ProductAvatar(
+                  name: productDisplayName(selected),
+                  imageUrl: selected.imageUrl,
+                  cacheKey: selected.barcode,
+                  cachedImagePath: selected.cachedImagePath,
+                ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Text(
@@ -1334,6 +1348,9 @@ class _ExchangeProductPickerState extends ConsumerState<_ExchangeProductPicker> 
                   return ListTile(
                     leading: ProductAvatar(
                       name: productDisplayName(product),
+                      imageUrl: product.imageUrl,
+                      cacheKey: product.barcode,
+                      cachedImagePath: product.cachedImagePath,
                       size: 36,
                     ),
                     title: Text(productDisplayName(product)),
@@ -1565,7 +1582,7 @@ class _CustomerPickerState extends ConsumerState<_CustomerPicker> {
             ),
             child: Row(
               children: [
-                ProductAvatar(name: selected.name),
+                CustomerAvatar(name: selected.name),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Text(
@@ -1601,7 +1618,7 @@ class _CustomerPickerState extends ConsumerState<_CustomerPicker> {
             for (final customer in _filtered)
               ListTile(
                 contentPadding: EdgeInsets.zero,
-                leading: ProductAvatar(name: customer.name, size: 36),
+                leading: CustomerAvatar(name: customer.name, size: 36),
                 title: Text(customer.name),
                 subtitle: Text(
                   'Balance: ${formatCreditBalance(customer.balance)}',

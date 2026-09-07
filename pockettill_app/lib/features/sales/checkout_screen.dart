@@ -6,8 +6,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../shared/models/credit_customer.dart';
 import '../../shared/repositories/repositories.dart';
 import '../../shared/theme/app_theme.dart';
-import '../../shared/utils/credit_balance_display.dart';
 import '../../shared/utils/friendly_error.dart';
+import '../../shared/widgets/customer_display.dart';
 import '../../shared/widgets/quick_stock_update_sheet.dart';
 import '../stock/stock_ui.dart';
 import 'cart_item.dart';
@@ -958,7 +958,6 @@ class _CustomerTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final hasBalance = customer.balance > 0;
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(12),
@@ -977,7 +976,7 @@ class _CustomerTile extends StatelessWidget {
         ),
         child: Row(
           children: [
-            ProductAvatar(name: customer.name, size: 40),
+            CustomerAvatar(name: customer.name, size: 40),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
@@ -990,15 +989,8 @@ class _CustomerTile extends StatelessWidget {
                       color: AppTheme.textPrimary,
                     ),
                   ),
-                  Text(
-                    'Balance: ${formatCreditBalance(customer.balance)}',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: hasBalance
-                          ? AppTheme.syncAmber
-                          : creditBalanceColor(customer.balance),
-                    ),
-                  ),
+                  const SizedBox(height: 4),
+                  CustomerBalanceStatus(balance: customer.balance),
                 ],
               ),
             ),

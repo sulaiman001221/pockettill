@@ -1,7 +1,12 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:uuid/uuid.dart';
 
 import '../../core/catalogue/open_food_facts_service.dart';
+import '../../core/storage/product_image_service.dart';
 import '../../core/supabase/supabase_service.dart';
 import '../../core/sync/reachability_service.dart';
 import '../../shared/models/product.dart';
@@ -12,6 +17,8 @@ import '../../shared/widgets/pockettill_app_bar.dart';
 import 'barcode_scanner_screen.dart';
 import 'product_success_screen.dart';
 import 'stock_ui.dart';
+
+const _uuid = Uuid();
 
 const List<String> _categoryOptions = ['Drinks', 'Snacks', 'Groceries', 'Other'];
 
@@ -38,19 +45,30 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
   final _customCategoryController = TextEditingController();
   final _priceController = TextEditingController();
   final _costController = TextEditingController();
-  final _stockController = TextEditingController();
+  final _stockController = TextEditingController(text: '0');
   final _lowStockController = TextEditingController(text: '5');
 
   String? _selectedCategoryChip;
   bool _catalogueAutoFilled = false;
   bool _offAutoFilled = false;
-  // Captured from Open Food Facts but not shown anywhere yet - reserved for
-  // a post-beta feature (see OpenFoodFactsProduct).
-  // ignore: unused_field
-  String? _offBrands;
-  // ignore: unused_field
-  String? _offImageUrl;
+  // Auto-filled image from either lookup layer (own catalogue or Open Food
+  // Facts) - applied on save unless the owner has since uploaded their own
+  // photo, which always wins (see _save).
+  String? _autoFilledImageUrl;
+  // The image already saved on this product before this screen opened
+  // (edit mode only) - kept separate from _autoFilledImageUrl so a fresh
+  // barcode re-lookup can never silently clobber a photo the owner already
+  // took, only an explicit pick or removal can.
+  String? _existingImageUrl;
+  File? _pickedImageFile;
+  bool _imageRemoved = false;
   bool _saving = false;
+  // Suggestions for the "Other" category free-text field, drawn from the
+  // verified catalogue so a custom category has a chance of matching one
+  // that already exists rather than fragmenting into near-duplicates (e.g.
+  // "Household" vs "Household Items"). The field stays free-text either
+  // way - these are suggestions, not a constraint.
+  List<String> _verifiedCategories = [];
 
   bool get _isEditMode => widget.existingProduct != null;
 
@@ -66,6 +84,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
       _costController.text = existing.costPrice?.toStringAsFixed(2) ?? '';
       _stockController.text = '${existing.stock}';
       _lowStockController.text = '${existing.lowStockThreshold}';
+      _existingImageUrl = existing.imageUrl;
       if (existing.category != null) {
         _applyCategory(existing.category!);
       }
@@ -90,6 +109,25 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
         widget.initialBarcode != null &&
         widget.initialBarcode!.isNotEmpty) {
       _lookupCatalogue(widget.initialBarcode!);
+    }
+
+    _loadVerifiedCategories();
+  }
+
+  Future<void> _loadVerifiedCategories() async {
+    try {
+      final categories = await ref
+          .read(catalogueBrowseRepositoryProvider)
+          .fetchCategories();
+      if (!mounted) return;
+      setState(() {
+        _verifiedCategories =
+            categories.map((c) => c.category).where((c) => c != 'Uncategorised').toList()
+              ..sort();
+      });
+    } catch (_) {
+      // Offline, or the request failed - the field still works as plain
+      // free text without suggestions.
     }
   }
 
@@ -118,6 +156,23 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
       _selectedCategoryChip = 'Other';
       _customCategoryController.text = category;
     }
+  }
+
+  /// Verified categories matching what's typed so far, for the tappable
+  /// suggestion chips under the "Other" field - up to 6 so the chips never
+  /// crowd out the rest of the form. Deliberately plain chips rather than
+  /// Flutter's `Autocomplete` widget: `Autocomplete` inserts an overlay
+  /// entry that Flutter has a long-standing bug with when its route is
+  /// popped while the field is still active (crashes with
+  /// `_children.contains(child)` in framework.dart) - found 2026-09-05 via
+  /// exactly that crash when backing out of this screen from the catalogue
+  /// scan-not-found flow.
+  List<String> get _matchingVerifiedCategories {
+    final query = _customCategoryController.text.trim().toLowerCase();
+    final matches = query.isEmpty
+        ? _verifiedCategories
+        : _verifiedCategories.where((c) => c.toLowerCase().contains(query));
+    return matches.take(6).toList();
   }
 
   String? _resolvedCategory() {
@@ -151,8 +206,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
     await _lookupOpenFoodFacts(barcode);
   }
 
-  /// Layer 1 - do not change (per spec, this lookup already exists as-is).
-  /// Returns whether a match was found and applied.
+  /// Layer 1. Returns whether a match was found and applied.
   Future<bool> _lookupOwnCatalogue(String barcode) async {
     try {
       // Supabase: shared catalogue - verified only (filtered inside
@@ -179,6 +233,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
         if (category != null && category.isNotEmpty) {
           _applyCategory(category);
         }
+        _autoFilledImageUrl = row['image_url'] as String?;
         _catalogueAutoFilled = true;
         _offAutoFilled = false;
       });
@@ -208,16 +263,13 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
     // a public source" when nothing was actually sourced - found
     // 2026-08-23 from exactly that badge appearing on an unfillable
     // product.
-    final hasUsefulData =
-        product.name != null || product.mass != null || product.category != null;
+    final hasUsefulData = product.name != null || product.mass != null;
     if (!hasUsefulData) return;
 
     setState(() {
       if (product.name != null) _nameController.text = product.name!;
       if (product.mass != null) _massController.text = product.mass!;
-      if (product.category != null) _applyCategory(product.category!);
-      _offBrands = product.brands;
-      _offImageUrl = product.imageUrl;
+      _autoFilledImageUrl = product.imageUrl;
       _offAutoFilled = true;
       _catalogueAutoFilled = false;
     });
@@ -231,6 +283,44 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
       setState(() => _barcodeController.text = barcode);
       await _lookupCatalogue(barcode);
     }
+  }
+
+  Future<void> _pickImage() async {
+    final source = await showModalBottomSheet<ImageSource>(
+      context: context,
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.photo_camera_outlined),
+              title: const Text('Take Photo'),
+              onTap: () => Navigator.of(sheetContext).pop(ImageSource.camera),
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library_outlined),
+              title: const Text('Choose from Gallery'),
+              onTap: () => Navigator.of(sheetContext).pop(ImageSource.gallery),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (source == null) return;
+
+    final file = await ProductImageService.pickImage(source);
+    if (file == null || !mounted) return;
+    setState(() {
+      _pickedImageFile = file;
+      _imageRemoved = false;
+    });
+  }
+
+  void _removeImage() {
+    setState(() {
+      _pickedImageFile = null;
+      _imageRemoved = true;
+    });
   }
 
   /// Checks the barcode (if any) and the name+mass combination against every
@@ -265,6 +355,48 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
     return null;
   }
 
+  /// Resolves what [product]'s `imageUrl` should be for this save, uploading
+  /// a freshly-picked photo or deleting a removed one along the way. A
+  /// manual pick or explicit removal always wins; short of either of those,
+  /// an existing image is preserved as-is (never silently replaced by a
+  /// fresh autofill - see [_existingImageUrl]'s doc comment), and autofill
+  /// only applies when there was never an image to begin with. Returns a
+  /// user-facing error message on failure, or null on success.
+  Future<String?> _resolveImageUrl(Product product) async {
+    final picked = _pickedImageFile;
+    if (picked != null) {
+      final storeId = (await ref.read(storeConfigRepositoryProvider).get())?.storeId;
+      if (storeId == null || storeId.isEmpty) {
+        return 'Could not upload photo — no store found. Try again.';
+      }
+      try {
+        product.imageUrl = await ProductImageService.uploadProductImage(
+          source: picked,
+          storeId: storeId,
+          productUuid: product.uuid,
+        );
+      } catch (_) {
+        return 'Could not upload photo — check your connection and try again.';
+      }
+      return null;
+    }
+
+    if (_imageRemoved) {
+      final storeId = (await ref.read(storeConfigRepositoryProvider).get())?.storeId;
+      if (storeId != null && storeId.isNotEmpty) {
+        await ProductImageService.deleteProductImage(
+          storeId: storeId,
+          productUuid: product.uuid,
+        );
+      }
+      product.imageUrl = null;
+      return null;
+    }
+
+    product.imageUrl = _existingImageUrl ?? _autoFilledImageUrl;
+    return null;
+  }
+
   Future<void> _save() async {
     if (!(_formKey.currentState?.validate() ?? false)) return;
 
@@ -283,7 +415,8 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
       return;
     }
 
-    final product = widget.existingProduct ?? (Product()..uuid = '');
+    final product =
+        widget.existingProduct ?? (Product()..uuid = _uuid.v4());
     final mass = _massController.text.trim();
     product
       ..barcode = _barcodeController.text.trim()
@@ -295,6 +428,16 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
       ..stock = int.parse(_stockController.text.trim())
       ..lowStockThreshold =
           int.tryParse(_lowStockController.text.trim()) ?? 5;
+
+    final imageError = await _resolveImageUrl(product);
+    if (imageError != null) {
+      setState(() => _saving = false);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(imageError), backgroundColor: AppTheme.logoutRed),
+      );
+      return;
+    }
 
     await ref.read(productRepositoryProvider).save(product);
 
@@ -360,6 +503,9 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
               const _OpenFoodFactsBadge(),
             ],
             const SizedBox(height: 24),
+            const _SectionLabel('PHOTO'),
+            _buildImagePicker(),
+            const SizedBox(height: 24),
             const _SectionLabel('PRODUCT DETAILS'),
             TextFormField(
               controller: _nameController,
@@ -388,8 +534,31 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
               const SizedBox(height: 8),
               TextFormField(
                 controller: _customCategoryController,
-                decoration: const InputDecoration(hintText: 'Custom category'),
+                decoration: const InputDecoration(
+                  hintText: 'Custom category',
+                  helperText: 'Pick an existing category if one matches',
+                ),
               ),
+              if (_matchingVerifiedCategories.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: _matchingVerifiedCategories
+                      .map(
+                        (category) => ActionChip(
+                          label: Text(category),
+                          onPressed: () => setState(() {
+                            _customCategoryController.text = category;
+                          }),
+                          backgroundColor: AppTheme.surface,
+                          side: const BorderSide(color: AppTheme.divider),
+                          labelStyle: const TextStyle(color: AppTheme.textPrimary),
+                        ),
+                      )
+                      .toList(),
+                ),
+              ],
             ],
             const SizedBox(height: 16),
             Row(
@@ -523,6 +692,72 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
     );
   }
 
+  Widget _buildImagePicker() {
+    final picked = _pickedImageFile;
+    final networkUrl = (picked == null && !_imageRemoved)
+        ? (_existingImageUrl ?? _autoFilledImageUrl)
+        : null;
+    final hasImage = picked != null || networkUrl != null;
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        GestureDetector(
+          onTap: _saving ? null : _pickImage,
+          child: Container(
+            width: 88,
+            height: 88,
+            clipBehavior: Clip.antiAlias,
+            decoration: BoxDecoration(
+              color: AppTheme.background,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: AppTheme.divider),
+            ),
+            child: picked != null
+                ? Image.file(picked, fit: BoxFit.cover)
+                : networkUrl != null
+                ? Image.network(
+                    networkUrl,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, _, _) => const Icon(
+                      Icons.image_not_supported_outlined,
+                      color: AppTheme.iconBorder,
+                    ),
+                  )
+                : const Icon(
+                    Icons.add_a_photo_outlined,
+                    color: AppTheme.iconBorder,
+                  ),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Add a photo (optional)', style: AppTheme.bodySubtitle),
+              const SizedBox(height: 8),
+              TextButton(
+                onPressed: _saving ? null : _pickImage,
+                style: TextButton.styleFrom(padding: EdgeInsets.zero),
+                child: Text(hasImage ? 'Change Photo' : 'Take or Choose Photo'),
+              ),
+              if (hasImage)
+                TextButton(
+                  onPressed: _saving ? null : _removeImage,
+                  style: TextButton.styleFrom(
+                    foregroundColor: AppTheme.logoutRed,
+                    padding: EdgeInsets.zero,
+                  ),
+                  child: const Text('Remove Photo'),
+                ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildBarcodeField() {
     return Row(
       children: [
@@ -641,7 +876,14 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
       ),
       child: Row(
         children: [
-          ProductAvatar(name: name),
+          ProductAvatar(
+            name: name,
+            // The freshly-picked local file isn't shown here - it's already
+            // visible in the photo picker above, and ProductAvatar only
+            // deals in network URLs (every other call site's Product.imageUrl
+            // already is one).
+            imageUrl: _imageRemoved ? null : (_existingImageUrl ?? _autoFilledImageUrl),
+          ),
           const SizedBox(width: 12),
           Expanded(
             child: Column(

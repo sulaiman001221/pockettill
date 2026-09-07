@@ -39,6 +39,8 @@ Owning-account row per store. One row per Supabase Auth user (via
 | qualification_sales_count | integer | nullable |
 | active_device_id | text | nullable — added 2026-08-16, single-active-device enforcement. See the naming-collision note under `devices` below before assuming this is the same feature as `devices.verified_at`. |
 | excluded_from_founding | boolean | default false — added 2026-08-23. Opts a store out of ever auto-qualifying for founding-store status via `check_founding_store_qualification`, regardless of age/sales - set true for the team's own test/dev stores (and the Play Store reviewer account) so internal testing sales don't consume founding slots or grant the badge to non-real users. |
+| use_catalogue_images | boolean | default true — added 2026-09-07. Flutter app's Settings > Product Images > "Use PocketTill catalogue images" toggle, synced here (as part of the `store_profile` sync event, same as name/owner_name/etc.) so the preference survives a reinstall. Gates whether the background image sync (see `catalogue_products.is_image_enhanced` below) is allowed to overwrite a product's `image_url` with the catalogue's enhanced version. |
+| images_wifi_only | boolean | default false — added 2026-09-07. Same sync path as `use_catalogue_images`. Flutter app checks device connectivity type before any product-image download when true; skips on mobile data and retries once WiFi is detected. |
 
 ### `products`
 A store's own private inventory — **only** that, as of 2026-08-17. Until
@@ -67,6 +69,7 @@ migration (it had briefly been made nullable to support an interim
 | created_at | timestamptz | |
 | updated_at | timestamptz | nullable |
 | store_id | uuid | FK `stores(uuid)`, **NOT NULL** |
+| image_url | text | nullable — added 2026-09-04. An Open Food Facts pull or the owner's own upload (Supabase Storage `product-images/{store_id}/{product_id}.jpg`, public-read). Owner upload always wins if both exist. |
 
 ### `catalogue_products`
 The shared, admin-moderated cross-store catalogue. Added 2026-08-17,
@@ -88,6 +91,9 @@ checks.
 | submitted_by_store_id | uuid | FK `stores(uuid)` **`on delete set null`**, nullable — attribution only (which store's submission this originated from, for admin reference), never used to grant that store any special access to this row |
 | created_at | timestamptz | default `now()` |
 | updated_at | timestamptz | nullable |
+| image_url | text | nullable — added 2026-09-04. Copied over from the approved `products` row's `image_url` by `approveProduct` (pockettill_datamaster) at approval time; not backfilled for anything approved before this date. As of 2026-09-07, this is the *catalogue image* shown to stores - if an admin has uploaded an enhanced version (see `is_image_enhanced` below), this column holds that enhanced image, not the original submission. |
+| original_image_url | text | nullable — added 2026-09-07. The unmodified image a store originally submitted for this barcode, preserved for reference once an admin uploads an enhanced replacement. Only ever set alongside `is_image_enhanced = true`; stays null for a barcode that's never had an enhanced image uploaded (its `image_url` *is* the original in that case - nothing to preserve separately). Never deleted/overwritten when a newer enhanced image replaces an older one - it always tracks the true original submission, not the previous enhanced version. |
+| is_image_enhanced | boolean | not null, default false — added 2026-09-07. True once an admin has uploaded a manually-enhanced replacement image via pockettill_datamaster's verification-queue image workflow (`ProductPanel`'s "Enhanced (Catalogue)" panel). Gates the Flutter app's automatic image sync (see `stores.use_catalogue_images` above) - a catalogue entry that's just the plain store-submitted photo (`is_image_enhanced = false`) never auto-overwrites a store's own product image, regardless of the toggle. |
 
 ### `sales`
 | column | type | notes |
@@ -225,6 +231,20 @@ pre-existing gap, not introduced by this entry.
 | entity_name | text | product or customer name |
 | created_at | timestamptz | |
 | store_id | uuid | FK `stores(uuid)`, nullable, **populated on every row** |
+
+### `rejected_catalogue_barcodes`
+Added 2026-09-07. Denylist backing pockettill_datamaster's `rejectProduct`
+action - see `pending_catalogue_items` below for why this exists (a plain
+`delete from products` wasn't durable: any store still holding that barcode
+in local Stock resurrects it the moment it touches that product again).
+RLS enabled with **zero policies** (same deny-all posture as `audit_log`/
+`support_queries` - service-role only).
+
+| column | type | notes |
+|---|---|---|
+| barcode | text PK | |
+| rejected_at | timestamptz | default `now()` |
+| rejected_by | uuid | nullable, FK `admin_users(id)` `on delete set null` |
 
 ### `admin_users`
 Backs the **pockettill_datamaster** admin dashboard, not the Flutter app. A
@@ -378,13 +398,29 @@ select
   min(p.created_at) as first_submitted,
   mode() within group (order by p.name) as most_common_name,
   mode() within group (order by p.category) as most_common_category,
-  mode() within group (order by p.mass) as most_common_mass
+  mode() within group (order by p.mass) as most_common_mass,
+  mode() within group (order by p.image_url) as most_common_image_url
 from public.products p
 where not exists (
   select 1 from public.catalogue_products cp where cp.barcode = p.barcode
 )
+and not exists (
+  select 1 from public.rejected_catalogue_barcodes r where r.barcode = p.barcode
+)
 group by p.barcode;
 ```
+
+`most_common_image_url` added 2026-09-04 alongside `products.image_url` (see above) — same "most-frequent-value" behavior as the other `mode()` columns, `mode()` ignores NULLs so a barcode nobody's submitted an image for just yields NULL.
+
+The `rejected_catalogue_barcodes` exclusion was added 2026-09-07, fixing a
+real bug: rejecting a submission only ever deleted the `products` rows that
+existed *at that moment* — any store still holding the barcode in local
+Stock would silently resurrect it here the next time it touched that
+product at all (a sale, a stock/price edit all re-push the full row). The
+denylist makes a reject permanent regardless of what any store's device
+does afterward. There's currently no admin UI to view or reverse an entry
+in it — removing a row from `rejected_catalogue_barcodes` directly (SQL) is
+the only way to let a barcode back into the pending queue.
 
 ### `verified_catalogue_items`
 `security_invoker = true` (same 2026-08-17 regression/2026-08-20 fix as
@@ -397,9 +433,16 @@ per-store flag. `pockettill_datamaster`'s `VerifiedCatalogueItem` type
 dropped `storeCount` accordingly (it was already unrendered in the UI).
 
 ```sql
-select barcode, name, category, mass, verified_at, submitted_by_store_id
+select
+  barcode, name, category, mass, image_url, verified_at, submitted_by_store_id,
+  original_image_url, is_image_enhanced
 from public.catalogue_products;
 ```
+
+`image_url` added 2026-09-04 alongside `catalogue_products.image_url` (see above).
+`original_image_url`/`is_image_enhanced` added 2026-09-07, appended at the end
+of the column list rather than next to `image_url` - `create or replace view`
+rejects reordering existing columns, only appending is allowed.
 
 ### `sales_daily_stats`
 `security_invoker = true`. Added 2026-08-09 for pockettill_datamaster's
@@ -417,6 +460,30 @@ select
 from public.sales
 group by date_trunc('day', created_at)::date;
 ```
+
+## Storage
+
+### `product-images` bucket
+Added 2026-09-04. **Public-read** - product photos aren't sensitive, and
+Catalogue Browse needs every store's images viewable by every other store,
+not just the uploader. Path convention: `{store_id}/{product_id}.jpg`.
+
+Write access (insert/update/delete on `storage.objects` for this bucket) is
+restricted per-store via `(storage.foldername(name))[1] = current_store_id()::text`
+- same `current_store_id()` RPC every other table's RLS policy uses, just
+applied to the storage path's first segment instead of a `store_id` column.
+Uploading a new image for a product replaces the object at the same path
+(same `{product_id}.jpg` key) rather than versioning it.
+
+### `catalogue-images` bucket
+Added 2026-09-07. **Public-read**, same reasoning as `product-images`. Path
+convention: `{barcode}.jpg` - one admin-uploaded "enhanced" image per
+canonical catalogue barcode (pockettill_datamaster's verification-queue
+image-enhancement workflow), replacing on re-upload rather than versioning.
+Unlike `product-images`, there is **no** write policy for `anon`/
+`authenticated` at all - only pockettill_datamaster's service-role client
+(which bypasses RLS entirely) ever writes here, mirroring
+`catalogue_products`' own admin-write-only posture.
 
 ## Row Level Security
 
@@ -468,6 +535,7 @@ they don't need elevated privilege, so they run under the caller's own RLS.
 - **`median_sync_gap_hours() returns numeric`** — `security invoker`, `set search_path = ''`. Added 2026-08-07 for pockettill_datamaster's Sync Health summary stat. Platform-wide median of the gaps (in hours) between consecutive `sync_log` rows for the same store (`lag()` partitioned by `store_id`). Runs under the caller's RLS, so calling it as `anon`/`authenticated` only aggregates over rows that role can see — the dashboard calls it via the service-role client to get the true platform-wide figure.
 - **`category_sales_stats(days integer) returns table(category text, total_quantity bigint)`** — `security invoker`, `set search_path = ''`. Added 2026-08-09 for pockettill_datamaster's Analytics page. Joins `sale_items` → `sales` (for the date bound) → `products` (for category) in raw SQL, sidestepping the missing FK on `sale_items` noted above. `days` is how far back from `now()` to include.
 - **`signed_out_by_new_device(p_store_id uuid, p_device_id text) returns boolean`** — `security definer`, `set search_path = 'public'`. Added 2026-08-16. Lets a device that's just been signed out (no valid JWT left) distinguish "revoked because a different device logged into this account" from a natural session expiry — both surface identically client-side as `SignOutReason.sessionExpired`, so this is the only way to tell them apart. Compares `stores.active_device_id` (see the correction below) against the caller-supplied `p_device_id`; true means a different device is now active. Callable by `anon` (mirrors `phone_has_account`'s pre-auth-callable pattern).
+- **`catalogue_category_counts() returns table(category text, product_count bigint)`** — `security invoker`, `set search_path = ''`. Added 2026-09-04 for the Flutter app's Catalogue Browse screen ("Beverages (124)"). No elevated privilege needed - `catalogue_products` is already readable by any `authenticated` store via its own RLS policy, this just aggregates over what the caller can already see. `category IS NULL` rows are grouped under `'Uncategorised'`.
 - **`database_usage_bytes() returns table(db_size_bytes bigint, storage_size_bytes bigint)`** — `security definer`, `set search_path = ''`, **execute revoked from `public`/`anon`/`authenticated`** (only the service-role client can call it — this one actually needs to be locked down, unlike the others in this list, since it exposes infra sizing that shouldn't be publicly queryable). Added 2026-08-10 for pockettill_datamaster's Infrastructure Costs page, after discovering Supabase's public Management API has **no endpoint for database/storage size** despite what the page's original spec assumed (`GET /v1/projects/{ref}/usage` doesn't exist — confirmed 404 against the real API; the only real usage endpoints are `analytics/endpoints/usage.api-counts` and `usage.api-requests-count`). `pg_database_size(current_database())` and a `sum` over `storage.objects.metadata->>'size'` are the actual, reliable sources. Note when creating any new `security definer` function: **Postgres grants `EXECUTE` to `PUBLIC` by default** — `revoke ... from anon, authenticated` alone does not remove a standing `PUBLIC` grant; revoke from `public` explicitly too, or the security advisor will still flag it (this bit us once already, see `20260810141855_fix_database_usage_bytes_grants.sql`).
 
 ## Known advisor warnings (accepted, not bugs)

@@ -120,6 +120,7 @@ class RestoreService {
     ..costPrice = (row['cost_price'] as num?)?.toDouble()
     ..stock = row['stock'] as int
     ..lowStockThreshold = row['low_stock_threshold'] as int? ?? 5
+    ..imageUrl = row['image_url'] as String?
     ..synced = true
     ..createdAt = _parseLocal(row['created_at'] as String)
     ..updatedAt = row['updated_at'] != null

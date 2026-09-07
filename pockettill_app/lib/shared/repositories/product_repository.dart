@@ -3,12 +3,14 @@ import 'dart:convert';
 import 'package:isar/isar.dart';
 import 'package:uuid/uuid.dart';
 
+import '../../core/storage/image_cache_service.dart';
 import '../../core/sync/event_queue.dart';
 import '../models/product.dart';
 import '../models/sale.dart';
 import '../models/sale_item.dart';
 import '../models/store_config.dart';
 import '../models/sync_event.dart';
+import 'catalogue_browse_repository.dart';
 import 'risk_log_repository.dart';
 
 /// Business logic for [Product] records. Sits between the UI and Isar -
@@ -122,6 +124,21 @@ class ProductRepository {
       product.updatedAt = now;
     }
 
+    // If the image actually changed, any previously cached file is now
+    // stale - drop it (and forget the now-wrong cachedImagePath) so the
+    // next display re-downloads the new one instead of silently
+    // continuing to show the old cached bytes forever. The on-device cache
+    // has no other way to notice its bytes no longer match imageUrl: it's
+    // keyed purely by barcode, not by which URL was last fetched. Found
+    // 2026-09-08 - Stock kept showing the pre-edit photo after a manual
+    // re-upload via Add/Edit Product, even though the edit screen's own
+    // preview (which reads imageUrl fresh over the network) showed the
+    // new one correctly.
+    if (!isNew && existing.imageUrl != product.imageUrl) {
+      await ImageCacheService.deleteCachedFile(product.barcode);
+      product.cachedImagePath = null;
+    }
+
     await _isar.writeTxn(() async {
       await _isar.products.put(product);
     });
@@ -135,6 +152,60 @@ class ProductRepository {
     if (existing != null) {
       await _recordEditRiskEvents(before: existing, after: product);
     }
+  }
+
+  /// Updates just [Product.cachedImagePath] for [productUuid] - a pure
+  /// local-cache bookkeeping write, deliberately bypassing [save]'s sync
+  /// event/risk-log logic: a device-local file path means nothing to sync
+  /// (another device can't read this device's disk) and isn't an edit
+  /// worth auditing.
+  Future<void> updateCachedImagePath(String productUuid, String path) async {
+    final product = await getByUuid(productUuid);
+    if (product == null) return;
+    product.cachedImagePath = path;
+    await _isar.writeTxn(() async {
+      await _isar.products.put(product);
+    });
+  }
+
+  /// Imports [items] from Catalogue Browse as new products - stock 0,
+  /// price from [prices] (keyed by barcode) or 0 if that barcode has no
+  /// entry ("Set prices later" is an explicit supported path, so 0 has to
+  /// be a valid starting price rather than something [save] rejects).
+  ///
+  /// Callers must only invoke this once the import is actually confirmed
+  /// (e.g. the price-setting screen's "Save Prices"/"Set prices later"
+  /// buttons, never just landing on that screen or backing out of it) -
+  /// this is the one place products actually get created, so calling it
+  /// eagerly before the user confirms is what previously let a bare back-arrow
+  /// tap silently add products nobody approved.
+  ///
+  /// Duplicate barcodes already in stock are skipped rather than
+  /// overwritten - the browse screen already disables already-owned items,
+  /// this is just the same guarantee enforced server-side against a stale
+  /// selection.
+  Future<List<Product>> importFromCatalogue(
+    List<CatalogueBrowseItem> items, {
+    Map<String, double>? prices,
+  }) async {
+    final imported = <Product>[];
+    for (final item in items) {
+      final alreadyOwned = await getByBarcode(item.barcode);
+      if (alreadyOwned != null) continue;
+
+      final product = Product()
+        ..uuid = _uuid.v4()
+        ..barcode = item.barcode
+        ..name = item.name
+        ..mass = item.mass
+        ..category = item.category
+        ..imageUrl = item.imageUrl
+        ..price = prices?[item.barcode] ?? 0
+        ..stock = 0;
+      await save(product);
+      imported.add(product);
+    }
+    return imported;
   }
 
   Future<void> _recordEditRiskEvents({
@@ -197,6 +268,7 @@ class ProductRepository {
     await _isar.writeTxn(() async {
       await _isar.products.delete(product.id);
     });
+    await ImageCacheService.deleteCachedFile(product.barcode);
 
     await _enqueueEvent(
       entityUuid: product.uuid,
@@ -254,6 +326,7 @@ class ProductRepository {
     'cost_price': product.costPrice,
     'stock': product.stock,
     'low_stock_threshold': product.lowStockThreshold,
+    'image_url': product.imageUrl,
     'created_at': product.createdAt.toUtc().toIso8601String(),
     'updated_at': product.updatedAt?.toUtc().toIso8601String(),
   };

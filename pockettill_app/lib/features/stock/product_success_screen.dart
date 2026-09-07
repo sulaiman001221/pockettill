@@ -201,7 +201,12 @@ class _ProductSummaryCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              ProductAvatar(name: product.name),
+              ProductAvatar(
+                name: product.name,
+                imageUrl: product.imageUrl,
+                cacheKey: product.barcode,
+                cachedImagePath: product.cachedImagePath,
+              ),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(

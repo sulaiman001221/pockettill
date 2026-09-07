@@ -8,9 +8,9 @@ import '../../shared/repositories/repositories.dart';
 import '../../shared/theme/app_theme.dart';
 import '../../shared/utils/credit_balance_display.dart';
 import '../../shared/utils/friendly_error.dart';
+import '../../shared/widgets/customer_display.dart';
 import '../../shared/widgets/pockettill_app_bar.dart';
 import '../sales/payment_success_screen.dart';
-import '../stock/stock_ui.dart';
 
 const TextStyle _sectionLabelStyle = TextStyle(
   fontSize: 12,
@@ -377,7 +377,7 @@ class _CustomerHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        ProductAvatar(name: customer.name),
+        CustomerAvatar(name: customer.name),
         const SizedBox(width: 12),
         Expanded(
           child: Text(
