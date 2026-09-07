@@ -34,11 +34,18 @@ export function VerifiedTable({
   const { page, setPage, pageItems: visibleItems, pageSize, total } = usePagination(items, 10);
 
   function openEdit(item: VerifiedCatalogueItem) {
+    // catalogue_products.image_url IS the catalogue image regardless of
+    // whether it's enhanced - split it back into "Original"/"Enhanced" for
+    // the panel: an enhanced barcode shows its preserved original_image_url
+    // as Original and image_url as Enhanced; an un-enhanced one just shows
+    // image_url as Original (there's no separate enhanced version to show).
     setPanelItem({
       barcode: item.barcode,
       name: item.name,
       category: item.category ?? "",
       mass: item.mass ?? "",
+      imageUrl: item.isImageEnhanced ? item.originalImageUrl : item.imageUrl,
+      enhancedImageUrl: item.isImageEnhanced ? item.imageUrl : null,
     });
     setPanelOpen(true);
   }
@@ -56,6 +63,7 @@ export function VerifiedTable({
         <Table>
           <TableHeader>
             <TableRow>
+              <TableHead>Image</TableHead>
               <TableHead>Barcode</TableHead>
               <TableHead>Name</TableHead>
               <TableHead>Category</TableHead>
@@ -67,13 +75,25 @@ export function VerifiedTable({
           <TableBody>
             {visibleItems.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={canManage ? 6 : 5} className="h-96 text-center text-muted-foreground">
+                <TableCell colSpan={canManage ? 7 : 6} className="h-96 text-center text-muted-foreground">
                   No verified products match your filters.
                 </TableCell>
               </TableRow>
             ) : (
               visibleItems.map((item) => (
                 <TableRow key={item.barcode}>
+                  <TableCell>
+                    {item.imageUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element -- arbitrary external domain, see product-panel.tsx
+                      <img
+                        src={item.imageUrl}
+                        alt=""
+                        className="size-10 rounded-md border border-border object-cover"
+                      />
+                    ) : (
+                      <div className="size-10 rounded-md bg-muted" />
+                    )}
+                  </TableCell>
                   <TableCell className="font-mono text-xs">{item.barcode}</TableCell>
                   <TableCell className="font-medium">
                     <Tooltip>
