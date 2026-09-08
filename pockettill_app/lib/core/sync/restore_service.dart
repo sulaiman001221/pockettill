@@ -9,6 +9,7 @@ import '../../shared/models/return_record.dart';
 import '../../shared/models/risk_log.dart';
 import '../../shared/models/sale.dart';
 import '../../shared/models/sale_item.dart';
+import '../../shared/models/store_config.dart';
 import '../supabase/supabase_service.dart';
 
 /// Re-hydrates a store's own products/sales/customers/returns from Supabase
@@ -37,6 +38,28 @@ class RestoreService {
     if (hasLocalData) return;
 
     final products = await _fetchAll('products', storeId);
+    // The `products.stock` column pulled above is only as fresh as the last
+    // *manual* edit - a sale/return/manual adjustment updates it locally
+    // via a stock_event delta, never by pushing the whole product row (see
+    // ProductRepository.recordStockEvent). That means it can genuinely be
+    // stale here, on a fresh install/reinstall pulling from Supabase for
+    // the first time. stock_events is the actual authoritative ledger, so
+    // recompute each product's real stock as the sum of its events instead
+    // of trusting the column directly - the exact scenario
+    // get_product_stock() exists for.
+    final stockEventRows = await _fetchAll('stock_events', storeId);
+    final stockByProduct = <String, int>{};
+    DateTime? maxSyncedAt;
+    for (final row in stockEventRows) {
+      final productId = row['product_id'] as String;
+      stockByProduct[productId] =
+          (stockByProduct[productId] ?? 0) + (row['quantity_delta'] as int);
+      final syncedAt = _parseLocal(row['synced_at'] as String);
+      if (maxSyncedAt == null || syncedAt.isAfter(maxSyncedAt)) {
+        maxSyncedAt = syncedAt;
+      }
+    }
+
     final sales = await _fetchAll('sales', storeId);
     final saleItems = await _fetchAll('sale_items', storeId);
     final creditCustomers = await _fetchAll('credit_customers', storeId);
@@ -58,7 +81,11 @@ class RestoreService {
     }
 
     await _isar.writeTxn(() async {
-      await _isar.products.putAll(products.map(_productFromRow).toList());
+      await _isar.products.putAll(
+        products
+            .map((row) => _productFromRow(row, stockByProduct))
+            .toList(),
+      );
       await _isar.sales.putAll(sales.map(_saleFromRow).toList());
       await _isar.saleItems.putAll(saleItems.map(_saleItemFromRow).toList());
       await _isar.creditCustomers.putAll(
@@ -77,6 +104,18 @@ class RestoreService {
         extraIncome.map(_extraIncomeFromRow).toList(),
       );
       await _isar.riskLogs.putAll(riskLog.map(_riskLogFromRow).toList());
+
+      // High-water mark for RealtimeStockSyncService's reconnect catch-up
+      // query - without this, the first catch-up after a fresh restore
+      // would treat every event just summed above as "missed" and
+      // needlessly re-fetch/re-apply all of them.
+      if (maxSyncedAt != null) {
+        final config = await _isar.storeConfigs.get(1);
+        if (config != null) {
+          config.lastStockEventSyncedAt = maxSyncedAt;
+          await _isar.storeConfigs.put(config);
+        }
+      }
     });
   }
 
@@ -109,7 +148,16 @@ class RestoreService {
     return rows;
   }
 
-  Product _productFromRow(Map<String, dynamic> row) => Product()
+  /// [stockByProduct] (keyed by `products.uuid`) is the sum of every
+  /// `stock_events` delta for that product - the authoritative current
+  /// stock, used in place of the possibly-stale `stock` column whenever
+  /// this product has at least one event. Falls back to the column itself
+  /// for a product with none (shouldn't happen post-backfill, but a plain
+  /// `products.stock` read is still a reasonable default over 0).
+  Product _productFromRow(
+    Map<String, dynamic> row,
+    Map<String, int> stockByProduct,
+  ) => Product()
     ..uuid = row['uuid'] as String
     ..barcode = row['barcode'] as String
     ..name = row['name'] as String
@@ -118,7 +166,7 @@ class RestoreService {
     ..unit = row['unit'] as String?
     ..price = (row['price'] as num).toDouble()
     ..costPrice = (row['cost_price'] as num?)?.toDouble()
-    ..stock = row['stock'] as int
+    ..stock = stockByProduct[row['uuid'] as String] ?? row['stock'] as int
     ..lowStockThreshold = row['low_stock_threshold'] as int? ?? 5
     ..imageUrl = row['image_url'] as String?
     ..synced = true

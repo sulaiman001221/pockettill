@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/sync/realtime_stock_sync_service.dart';
 import '../../core/sync/sync_service.dart';
 import '../../shared/models/product.dart';
 import '../../shared/repositories/repositories.dart';
@@ -166,22 +167,35 @@ class _StockScreenState extends ConsumerState<StockScreen> {
                 child: Text('Add Product', style: AppTheme.mainTitle),
               ),
             ),
-            ListTile(
-              leading: const Icon(Icons.search, color: AppTheme.primary),
-              title: const Text('Browse Catalogue'),
-              subtitle: const Text('Import an existing product'),
-              onTap: () => Navigator.of(
-                context,
-              ).pop(_AddProductChoice.browseCatalogue),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
+              child: SizedBox(
+                width: double.infinity,
+                height: 52,
+                // Same blue ElevatedButton.icon style as History's "End of
+                // Day Summary" button (2026-09-09 per feedback).
+                child: ElevatedButton.icon(
+                  onPressed: () => Navigator.of(
+                    context,
+                  ).pop(_AddProductChoice.browseCatalogue),
+                  icon: const Icon(Icons.search),
+                  label: const Text('Browse Catalogue'),
+                ),
+              ),
             ),
-            ListTile(
-              leading: const Icon(Icons.edit_outlined, color: AppTheme.primary),
-              title: const Text('Add Manually'),
-              subtitle: const Text('Enter product details yourself'),
-              onTap: () =>
-                  Navigator.of(context).pop(_AddProductChoice.addManually),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+              child: SizedBox(
+                width: double.infinity,
+                height: 52,
+                child: ElevatedButton.icon(
+                  onPressed: () =>
+                      Navigator.of(context).pop(_AddProductChoice.addManually),
+                  icon: const Icon(Icons.edit_outlined),
+                  label: const Text('Add Manually'),
+                ),
+              ),
             ),
-            const SizedBox(height: 8),
           ],
         ),
       ),
@@ -287,6 +301,12 @@ class _StockScreenState extends ConsumerState<StockScreen> {
   @override
   Widget build(BuildContext context) {
     final filtered = _filteredProducts;
+
+    // Another device's sale/return/adjustment landed - reload so this
+    // screen reflects it without the owner having to pull to refresh
+    // themselves. Silent, same as _syncImagesEagerly - the underlying
+    // Product read is local/instant, no loading spinner needed for it.
+    ref.listen(stockChangedProvider, (_, _) => _loadProducts());
 
     return GestureDetector(
       // Tapping anywhere outside the search field dismisses its focus -

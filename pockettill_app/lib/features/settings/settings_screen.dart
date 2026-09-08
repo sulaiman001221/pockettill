@@ -22,6 +22,7 @@ import '../../shared/utils/contact_support.dart';
 import '../../shared/utils/sync_status.dart';
 import '../../shared/widgets/confirmation_dialog.dart';
 import '../../shared/widgets/pockettill_app_bar.dart';
+import 'active_devices_screen.dart';
 import 'privacy_policy_screen.dart';
 import 'terms_of_service_screen.dart';
 import '../auth/welcome_screen.dart';
@@ -929,6 +930,29 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 ),
               ),
             ],
+          ),
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 12),
+            child: Divider(color: AppTheme.divider, height: 1),
+          ),
+          InkWell(
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const ActiveDevicesScreen()),
+            ),
+            child: const Row(
+              children: [
+                Text(
+                  'Active Devices',
+                  style: TextStyle(color: AppTheme.textPrimary, fontSize: 14),
+                ),
+                Spacer(),
+                Icon(
+                  Icons.chevron_right,
+                  color: AppTheme.iconBorder,
+                  size: 18,
+                ),
+              ],
+            ),
           ),
         ],
       ),

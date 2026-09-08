@@ -12,6 +12,7 @@ import '../../shared/models/return_record.dart';
 import '../../shared/models/risk_log.dart';
 import '../../shared/models/sale.dart';
 import '../../shared/models/sale_item.dart';
+import '../../shared/models/stock_event.dart';
 import '../../shared/models/store_config.dart';
 import '../../shared/models/sync_event.dart';
 
@@ -51,6 +52,7 @@ class IsarService {
         ExtraIncomeSchema,
         RiskLogSchema,
         CachedCatalogueProductSchema,
+        StockEventSchema,
       ],
       directory: directory.path,
     );

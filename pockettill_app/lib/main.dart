@@ -15,6 +15,7 @@ import 'core/hardware/sunmi_printer_service.dart';
 import 'core/hardware/sunmi_scanner_service.dart';
 import 'core/supabase/supabase_service.dart';
 import 'core/sync/reachability_service.dart';
+import 'core/sync/realtime_stock_sync_service.dart';
 import 'core/sync/sync_service.dart';
 import 'shared/theme/system_ui.dart';
 
@@ -69,13 +70,26 @@ Future<void> main() async {
   );
 
   final syncService = container.read(syncServiceProvider);
+  final realtimeStockSync = container.read(realtimeStockSyncServiceProvider);
 
   reachabilityService.isReachable.listen((reachable) {
     if (reachable) {
-      unawaited(syncService.sync());
+      // Push this device's own pending changes first, then open the
+      // Realtime channel (which itself starts with a catch-up pull of
+      // whatever other devices recorded while this one was offline) -
+      // pushing first means other devices' next catch-up already sees this
+      // device's latest, even though the ordering doesn't affect this
+      // device's own correctness (catch-up always excludes its own
+      // device_id regardless of push timing).
+      unawaited(
+        syncService.sync().then((_) => realtimeStockSync.start()),
+      );
+    } else {
+      // A dead channel doesn't deliver anything useful anyway - closing it
+      // here means the next reconnect always starts from a clean
+      // catch-up-then-subscribe, not a stale channel silently doing nothing.
+      unawaited(realtimeStockSync.stop());
     }
-    // When unreachable, do nothing - the next confirmed-reachable ping
-    // triggers the next sync attempt.
   });
 
   runApp(

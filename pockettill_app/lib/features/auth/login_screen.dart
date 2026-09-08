@@ -116,7 +116,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 invalidateStoreScopedProviders(ref);
                 if (!mounted) return;
                 Navigator.of(context).pushAndRemoveUntil(
-                  MaterialPageRoute(builder: (_) => const ShellScreen()),
+                  MaterialPageRoute(
+                    builder: (_) => const ShellScreen(showNewDeviceNotice: true),
+                  ),
                   (route) => false,
                 );
               },

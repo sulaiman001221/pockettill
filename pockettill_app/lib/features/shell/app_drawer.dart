@@ -100,82 +100,112 @@ class AppDrawer extends ConsumerWidget {
       backgroundColor: AppTheme.surface,
       width: 280,
       child: SafeArea(
-        child: Column(
-          children: [
-            _Header(onLogoTap: onGoHome),
-            const Divider(color: AppTheme.divider, height: 1),
-            // Primary nav items sit at the top; Settings/Logout are pinned
-            // near the bottom, just above the sync status row, regardless
-            // of how much empty space is left in between.
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.only(left: 12, right: 12, top: 8),
-                child: Column(
-                  children: [
-                    _MenuItem(
-                      icon: Icons.storefront_outlined,
-                      label: 'Sales',
-                      isActive: activeRoute == 'sales',
-                      onTap: onGoHome,
-                    ),
-                    _MenuItem(
-                      icon: Icons.inventory_2_outlined,
-                      label: 'Stock',
-                      isActive: activeRoute == 'stock',
-                      onTap: () => onNavigate('stock', const StockScreen()),
-                    ),
-                    _MenuItem(
-                      icon: Icons.receipt_long_outlined,
-                      label: 'Sales History',
-                      isActive: activeRoute == 'history',
-                      onTap: () =>
-                          onNavigate('history', const HistoryScreen()),
-                    ),
-                    _MenuItem(
-                      icon: Icons.people_outlined,
-                      label: 'Customers',
-                      isActive: activeRoute == 'customers',
-                      onTap: () =>
-                          onNavigate('customers', const CreditScreen()),
-                      trailing: const _CreditBadge(),
-                    ),
-                    _MenuItem(
-                      icon: Icons.bar_chart_outlined,
-                      label: 'Analytics',
-                      isActive: activeRoute == 'analytics',
-                      onTap: () =>
-                          onNavigate('analytics', const AnalyticsScreen()),
-                    ),
-                  ],
-                ),
-              ),
+        // CustomScrollView + SliverFillRemaining(hasScrollBody: false),
+        // not a plain Column with an Expanded nav list - a rigid Column
+        // hard-overflows (the same RenderFlex error the Till screen had)
+        // whenever available height is smaller than the header + footer's
+        // fixed content combined, which extreme split-screen/multi-window
+        // layouts can trigger (found 2026-09-09). SliverFillRemaining
+        // still gives the nav-list-to-footer block at least the remaining
+        // viewport height in the normal case (so spaceBetween keeps
+        // pushing the footer down exactly as before), but lets the whole
+        // drawer scroll instead of overflowing when it doesn't fit.
+        child: CustomScrollView(
+          slivers: [
+            SliverToBoxAdapter(child: _Header(onLogoTap: onGoHome)),
+            const SliverToBoxAdapter(
+              child: Divider(color: AppTheme.divider, height: 1),
             ),
-            const Divider(color: AppTheme.divider),
-            Padding(
-              padding: const EdgeInsets.only(left: 12, right: 12, bottom: 8),
+            SliverFillRemaining(
+              hasScrollBody: false,
               child: Column(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  _MenuItem(
-                    icon: Icons.settings_outlined,
-                    label: 'Settings',
-                    isActive: false,
-                    onTap: () => onNavigateWithoutTrackingActive(
-                      const SettingsScreen(),
+                  Padding(
+                    padding: const EdgeInsets.only(
+                      left: 12,
+                      right: 12,
+                      top: 8,
+                    ),
+                    child: Column(
+                      children: [
+                        _MenuItem(
+                          icon: Icons.storefront_outlined,
+                          label: 'Sales',
+                          isActive: activeRoute == 'sales',
+                          onTap: onGoHome,
+                        ),
+                        _MenuItem(
+                          icon: Icons.inventory_2_outlined,
+                          label: 'Stock',
+                          isActive: activeRoute == 'stock',
+                          onTap: () =>
+                              onNavigate('stock', const StockScreen()),
+                        ),
+                        _MenuItem(
+                          icon: Icons.receipt_long_outlined,
+                          label: 'Sales History',
+                          isActive: activeRoute == 'history',
+                          onTap: () =>
+                              onNavigate('history', const HistoryScreen()),
+                        ),
+                        _MenuItem(
+                          icon: Icons.people_outlined,
+                          label: 'Customers',
+                          isActive: activeRoute == 'customers',
+                          onTap: () =>
+                              onNavigate('customers', const CreditScreen()),
+                          trailing: const _CreditBadge(),
+                        ),
+                        _MenuItem(
+                          icon: Icons.bar_chart_outlined,
+                          label: 'Analytics',
+                          isActive: activeRoute == 'analytics',
+                          onTap: () => onNavigate(
+                            'analytics',
+                            const AnalyticsScreen(),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                  _MenuItem(
-                    icon: Icons.logout,
-                    label: 'Logout',
-                    isActive: false,
-                    iconColor: AppTheme.logoutRed,
-                    labelColor: AppTheme.logoutRed,
-                    onTap: () => _confirmLogout(context, ref),
+                  Column(
+                    children: [
+                      const Divider(color: AppTheme.divider),
+                      Padding(
+                        padding: const EdgeInsets.only(
+                          left: 12,
+                          right: 12,
+                          bottom: 8,
+                        ),
+                        child: Column(
+                          children: [
+                            _MenuItem(
+                              icon: Icons.settings_outlined,
+                              label: 'Settings',
+                              isActive: false,
+                              onTap: () => onNavigateWithoutTrackingActive(
+                                const SettingsScreen(),
+                              ),
+                            ),
+                            _MenuItem(
+                              icon: Icons.logout,
+                              label: 'Logout',
+                              isActive: false,
+                              iconColor: AppTheme.logoutRed,
+                              labelColor: AppTheme.logoutRed,
+                              onTap: () => _confirmLogout(context, ref),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const Divider(color: AppTheme.divider, height: 1),
+                      const _SyncStatusRow(),
+                    ],
                   ),
                 ],
               ),
             ),
-            const Divider(color: AppTheme.divider, height: 1),
-            const _SyncStatusRow(),
           ],
         ),
       ),

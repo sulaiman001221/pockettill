@@ -8,6 +8,7 @@ import 'package:isar/isar.dart';
 import '../../shared/models/store_config.dart';
 import '../../shared/models/sync_event.dart';
 import '../../shared/repositories/repositories.dart';
+import '../../shared/repositories/risk_log_repository.dart';
 import '../../shared/utils/sync_status.dart';
 import '../database/isar_service.dart';
 import '../supabase/supabase_service.dart';
@@ -19,6 +20,7 @@ const List<String> _entityTypePriority = [
   'credit_tx',
   'sale',
   'sale_item',
+  'stock_event',
   'extra_income',
   'return',
   'return_item',
@@ -38,9 +40,11 @@ class SyncService {
     required Isar isar,
     required EventQueue eventQueue,
     ImageSyncService? imageSync,
+    RiskLogRepository? riskLog,
   }) : _isar = isar,
        _eventQueue = eventQueue,
-       _imageSync = imageSync;
+       _imageSync = imageSync,
+       _riskLog = riskLog;
 
   final Isar _isar;
   final EventQueue _eventQueue;
@@ -53,6 +57,11 @@ class SyncService {
   // entirely for those, which is fine since it's fire-and-forget anyway.
   final ImageSyncService? _imageSync;
 
+  // Nullable for the same reason as [_imageSync] above - only used for
+  // concurrent-edit detection (see _detectProductConflicts), never for
+  // anything the bare-constructed logout() flush needs.
+  final RiskLogRepository? _riskLog;
+
   final StreamController<SyncStatus> _statusController =
       StreamController<SyncStatus>.broadcast();
 
@@ -64,15 +73,19 @@ class SyncService {
   /// Emits the current phase of the sync cycle.
   Stream<SyncStatus> get syncStatus => _statusController.stream;
 
-  /// Emits once this device has been displaced - someone logged into this
-  /// store on another device, which revokes this one's session server-side.
+  /// Emits once this device has been remotely logged out - the owner tapped
+  /// "Log out this device" for it in Settings > Active Devices (clears this
+  /// device's `devices.verified_at`).
   ///
-  /// This needs its own signal because nothing else notices promptly:
-  /// revoking the refresh token doesn't invalidate the access token already
-  /// on this device (a JWT is verified by signature, not by a lookup), so
-  /// this device keeps working - and keeps syncing - until that token
-  /// expires up to an hour later. Sync is the app's regular check-in with
-  /// the server, so it's also where being displaced gets noticed.
+  /// Used to feed a forced single-active-device logout on every new login
+  /// until 2026-09-09 - removed since it didn't prevent the real problem
+  /// (two devices working offline simultaneously, neither yet revoked) and
+  /// stock is event-sourced now anyway (see stock_events). This needs its
+  /// own signal for the same reason the old mechanism did: a JWT is
+  /// verified by signature, not looked up, so a revoked device keeps
+  /// working - and keeps syncing - until its access token naturally expires
+  /// up to an hour later. Sync is the app's regular check-in with the
+  /// server, so it's also where a remote logout gets noticed promptly.
   Stream<void> get displacedByAnotherDevice => _displacedController.stream;
 
   /// Runs one full sync cycle: push pending events, then pull catalogue
@@ -123,6 +136,13 @@ class SyncService {
           final events = eventsByType[entityType];
           if (events == null || events.isEmpty) continue;
 
+          // Checked before pushing, not after: once this device's own
+          // upsert lands, the remote row's updated_at becomes *this*
+          // device's edit, so there'd be nothing left to compare against.
+          if (entityType == 'product') {
+            await _detectProductConflicts(events, storeId);
+          }
+
           for (var offset = 0; offset < events.length; offset += _batchSize) {
             final batch = events.skip(offset).take(_batchSize).toList();
             await SupabaseService.pushEvents(
@@ -161,16 +181,16 @@ class SyncService {
       if (imageSync != null) unawaited(imageSync.syncStoreImages());
 
       // Deliberately last, after everything above has pushed: this device's
-      // access token is still valid until it expires, so a displaced device
-      // can still upload the sales it recorded before being displaced -
+      // access token is still valid until it expires, so a revoked device
+      // can still upload the sales it recorded before being revoked -
       // signing it out first would strand them locally until the owner
       // logged back in on this device.
       if (storeConfig.isLoggedIn) {
-        final displaced = await SupabaseService.isDisplacedByAnotherDevice(
+        final revoked = await SupabaseService.isThisDeviceRevoked(
           storeId: storeId,
           deviceId: storeConfig.deviceId,
         );
-        if (displaced) _displacedController.add(null);
+        if (revoked) _displacedController.add(null);
       }
     } catch (e, st) {
       // Was a silent `catch (_)` - a sync failure had genuinely no trace
@@ -182,6 +202,90 @@ class SyncService {
       _statusController.add(SyncStatus.error);
     } finally {
       _isSyncing = false;
+    }
+  }
+
+  /// Best-effort visibility for the "last write wins" conflict resolution
+  /// products already get for free from a plain Postgres upsert - this
+  /// doesn't change what happens to the data (the push below still
+  /// proceeds and still wins), it just logs to risk_log when it detects
+  /// that this device's edit and another device's edit to the *same*
+  /// product genuinely raced.
+  ///
+  /// A single batched read, not one query per event: for every pending
+  /// [events] with a [SyncEvent.baseUpdatedAt] (i.e. an edit to an
+  /// *existing* product, not a brand-new one - see ProductRepository.save),
+  /// compares the remote row's *current* updated_at against that baseline.
+  /// If the remote value has moved past it, some other device's edit must
+  /// have reached the server after this device's edit was made (this
+  /// device can't have caused that itself - it hasn't pushed since) - a
+  /// genuine concurrent edit, not just this device re-syncing its own
+  /// earlier change.
+  Future<void> _detectProductConflicts(
+    List<SyncEvent> events,
+    String storeId,
+  ) async {
+    final riskLog = _riskLog;
+    if (riskLog == null) return;
+
+    final withBase = events.where((e) => e.baseUpdatedAt != null).toList();
+    if (withBase.isEmpty) return;
+
+    try {
+      final uuids = withBase.map((e) => e.entityUuid).toSet().toList();
+      final rows = await SupabaseService.supabaseClient
+          .from('products')
+          .select('uuid, updated_at, price, stock, name')
+          .inFilter('uuid', uuids)
+          .eq('store_id', storeId);
+      final remoteByUuid = {
+        for (final row in rows) row['uuid'] as String: row,
+      };
+
+      for (final event in withBase) {
+        final remote = remoteByUuid[event.entityUuid];
+        final remoteUpdatedAt = remote?['updated_at'] as String?;
+        if (remote == null || remoteUpdatedAt == null) continue;
+        if (!DateTime.parse(
+          remoteUpdatedAt,
+        ).isAfter(DateTime.parse(event.baseUpdatedAt!))) {
+          continue;
+        }
+
+        final payload = jsonDecode(event.payload) as Map<String, dynamic>;
+        final name =
+            payload['name'] as String? ?? remote['name'] as String? ?? 'Product';
+        final localPrice = (payload['price'] as num?)?.toDouble();
+        final remotePrice = (remote['price'] as num?)?.toDouble();
+        final localStock = payload['stock'] as int?;
+        final remoteStock = remote['stock'] as int?;
+
+        if (localPrice != null &&
+            remotePrice != null &&
+            localPrice != remotePrice) {
+          await riskLog.record(
+            type: 'concurrent_price_edit',
+            description: 'Price edited on two devices at the same time for $name',
+            beforeValue: 'R${remotePrice.toStringAsFixed(2)}',
+            afterValue: 'R${localPrice.toStringAsFixed(2)}',
+            entityName: name,
+          );
+        } else if (localStock != null &&
+            remoteStock != null &&
+            localStock != remoteStock) {
+          await riskLog.record(
+            type: 'concurrent_stock_adjustment',
+            description:
+                'Stock adjusted on two devices at the same time for $name',
+            beforeValue: '$remoteStock',
+            afterValue: '$localStock',
+            entityName: name,
+          );
+        }
+      }
+    } catch (_) {
+      // Best-effort - a failed conflict check must never block the actual
+      // push, and there's nothing a caller could usefully do about it.
     }
   }
 
@@ -235,6 +339,7 @@ final syncServiceProvider = Provider<SyncService>((ref) {
     isar: ref.watch(isarProvider),
     eventQueue: EventQueue(ref.watch(isarProvider)),
     imageSync: ref.watch(imageSyncServiceProvider),
+    riskLog: ref.watch(riskLogRepositoryProvider),
   );
 });
 

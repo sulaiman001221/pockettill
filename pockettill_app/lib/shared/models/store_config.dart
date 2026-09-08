@@ -36,4 +36,12 @@ class StoreConfig {
   // regardless of this class-level initializer) so the repair reliably
   // runs exactly once for every install that predates it.
   bool imageDefaultsMigrated = false;
+
+  // High-water mark for RealtimeStockSyncService's reconnect catch-up query
+  // (`stock_events where store_id = ? and synced_at > lastStockEventSyncedAt`)
+  // - null means "never checked", which the catch-up treats as epoch (pull
+  // everything). Set after every successful catch-up/restore, independent
+  // of [lastSyncedAt] (that one tracks the main push/pull cycle, this one
+  // tracks stock_events specifically).
+  DateTime? lastStockEventSyncedAt;
 }

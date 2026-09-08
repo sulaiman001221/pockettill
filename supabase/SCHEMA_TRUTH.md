@@ -37,7 +37,7 @@ Owning-account row per store. One row per Supabase Auth user (via
 | otp_channel | text | default `'whatsapp'` — which channel a new-device login challenges the owner on |
 | qualification_checked_at | timestamptz | nullable |
 | qualification_sales_count | integer | nullable |
-| active_device_id | text | nullable — added 2026-08-16, single-active-device enforcement. See the naming-collision note under `devices` below before assuming this is the same feature as `devices.verified_at`. |
+| active_device_id | text | nullable — added 2026-08-16, single-active-device enforcement. **Unused as of 2026-09-09** - the forced-logout behaviour that read/wrote this column was removed (see `devices` below and the Flutter app's `AuthService._completeLogin`); left in place rather than dropped for no functional benefit. See the naming-collision note under `devices` below before assuming this is the same feature as `devices.verified_at`. |
 | excluded_from_founding | boolean | default false — added 2026-08-23. Opts a store out of ever auto-qualifying for founding-store status via `check_founding_store_qualification`, regardless of age/sales - set true for the team's own test/dev stores (and the Play Store reviewer account) so internal testing sales don't consume founding slots or grant the badge to non-real users. |
 | use_catalogue_images | boolean | default true — added 2026-09-07. Flutter app's Settings > Product Images > "Use PocketTill catalogue images" toggle, synced here (as part of the `store_profile` sync event, same as name/owner_name/etc.) so the preference survives a reinstall. Gates whether the background image sync (see `catalogue_products.is_image_enhanced` below) is allowed to overwrite a product's `image_url` with the catalogue's enhanced version. |
 | images_wifi_only | boolean | default false — added 2026-09-07. Same sync path as `use_catalogue_images`. Flutter app checks device connectivity type before any product-image download when true; skips on mobile data and retries once WiFi is detected. |
@@ -166,8 +166,9 @@ other just because the column name repeats.
 |---|---|---|
 | id | text | part of composite PK — stable per physical device install, not per store |
 | store_id | uuid | FK `stores(uuid)`, part of composite PK |
-| verified_at | timestamptz | nullable — null means this (device, store) pairing has never passed the new-device OTP challenge; set once, on first successful verification, and never cleared |
+| verified_at | timestamptz | nullable — null means this (device, store) pairing has never passed the new-device OTP challenge; set once, on first successful verification. **As of 2026-09-09, also cleared deliberately** by Settings > Active Devices' "Log out this device" (`SupabaseService.revokeDevice`) - that device's own next sync/app-open notices (`SupabaseService.isThisDeviceRevoked`, checked every `SyncService.sync()` cycle) and gets challenged with OTP again, same as a genuinely new device. This is the actual replacement for the removed forced-single-active-device logout. |
 | last_seen_at | timestamptz | nullable |
+| device_name | text | nullable — added 2026-09-09. Best-effort human-readable label (`"${manufacturer} ${model}"`, e.g. `"samsung SM-A225F"`, via `device_info_plus`) stamped at login/registration (`HardwareDetector.deviceName()`), for Settings > Active Devices. Not re-sent on every plain sync heartbeat (`SupabaseService.updateLastSeen`) - it never changes for a given physical device, and omitting a column from an upsert leaves the existing value untouched rather than nulling it. |
 
 PK: `(id, store_id)`.
 
@@ -231,6 +232,53 @@ pre-existing gap, not introduced by this entry.
 | entity_name | text | product or customer name |
 | created_at | timestamptz | |
 | store_id | uuid | FK `stores(uuid)`, nullable, **populated on every row** |
+
+### `stock_events`
+Added 2026-09-09. Event-sourced stock changes - a product's stock is the
+sum of `quantity_delta` across its events, never a value any single device
+overwrites directly. This is what lets two devices sell the same product
+while both offline: both deltas land once each syncs, instead of whichever
+device's push happens to reach Supabase last silently clobbering the
+other's sale. Replaces relying on forced single-active-device logout to
+avoid the conflict in the first place (see `devices.verified_at` above and
+`stores.active_device_id`).
+
+Each device still maintains `products.stock` locally as a running total
+(applying each delta once, own-device events skipped on the realtime/
+catch-up path since that device already applied its own at creation time) -
+`products.stock` is **not** recomputed from this table on every read, this
+table is the durable ledger backing it. Note `products.stock` is *not* kept
+live-updated in Supabase itself by a sale/return/adjustment (no `product`
+row push for those, unlike a manual edit via Add/Edit Product) - it can
+genuinely lag behind `stock_events`, which is why a fresh restore
+(`RestoreService.restoreIfEmpty`) recomputes each product's stock as the
+sum of its events rather than trusting the column directly.
+
+Primary key is `id`, not `uuid` (unlike every other synced table) -
+`ProductRepository.recordStockEvent`'s payload builder deliberately keys it
+`'id'` for this reason.
+
+| column | type | notes |
+|---|---|---|
+| id | uuid PK | `gen_random_uuid()` |
+| store_id | uuid | FK `stores(uuid)` |
+| product_id | uuid | FK `products(uuid)` |
+| device_id | text | which device recorded this delta |
+| change_type | text | `sale` \| `restock` \| `manual_adjustment` \| `return` \| `initial_stock` |
+| quantity_delta | integer | negative for reductions, positive for additions |
+| reference_id | uuid | nullable — the sale/return uuid this delta is attributable to, where applicable |
+| created_at | timestamptz | set on-device at the time of the change |
+| synced_at | timestamptz | default `now()` — set by Supabase on receipt; the high-water mark `RealtimeStockSyncService`'s reconnect catch-up query compares against |
+
+RLS: same `store_id = current_store_id()` `for all` pattern as every other
+store-scoped table (`stock_events_store_all`). Added to the
+`supabase_realtime` publication so `RealtimeStockSyncService` can subscribe
+to inserts live.
+
+One-time backfill (2026-09-09): every pre-existing product with
+`stock > 0` got a single `initial_stock` event (`device_id = 'migration'`)
+equal to its stock at that time, bringing existing data into the
+event-sourcing model without loss.
 
 ### `rejected_catalogue_barcodes`
 Added 2026-09-07. Denylist backing pockettill_datamaster's `rejectProduct`
@@ -508,6 +556,7 @@ replaced.
 | returns | `returns_store_all` | ALL | `store_id = current_store_id()` |
 | return_items | `return_items_store_all` | ALL | `store_id = current_store_id()` |
 | risk_log | `risk_log_store_all` | ALL | `store_id = current_store_id()` |
+| stock_events | `stock_events_store_all` | ALL | `store_id = current_store_id()` |
 | admin_users | `admin_users_select_own` | SELECT | `id = auth.uid()` |
 | audit_log | *(none — deny all)* | — | service-role only |
 | support_queries | *(none — deny all)* | — | service-role only |
@@ -534,7 +583,8 @@ they don't need elevated privilege, so they run under the caller's own RLS.
 - **`phone_has_account(check_phone text) returns boolean`** — true only when the phone has **both** an `auth.users` row and a matching `stores` row (as of 2026-08-02; previously just checked `auth.users`, which permanently blocked re-registration for a phone whose registration was interrupted before its `stores` row was created). Checks `auth.users.phone` (stored **without** a leading `+`) against `ltrim(check_phone, '+')`, so the app can pass a `+27...`-formatted number directly.
 - **`median_sync_gap_hours() returns numeric`** — `security invoker`, `set search_path = ''`. Added 2026-08-07 for pockettill_datamaster's Sync Health summary stat. Platform-wide median of the gaps (in hours) between consecutive `sync_log` rows for the same store (`lag()` partitioned by `store_id`). Runs under the caller's RLS, so calling it as `anon`/`authenticated` only aggregates over rows that role can see — the dashboard calls it via the service-role client to get the true platform-wide figure.
 - **`category_sales_stats(days integer) returns table(category text, total_quantity bigint)`** — `security invoker`, `set search_path = ''`. Added 2026-08-09 for pockettill_datamaster's Analytics page. Joins `sale_items` → `sales` (for the date bound) → `products` (for category) in raw SQL, sidestepping the missing FK on `sale_items` noted above. `days` is how far back from `now()` to include.
-- **`signed_out_by_new_device(p_store_id uuid, p_device_id text) returns boolean`** — `security definer`, `set search_path = 'public'`. Added 2026-08-16. Lets a device that's just been signed out (no valid JWT left) distinguish "revoked because a different device logged into this account" from a natural session expiry — both surface identically client-side as `SignOutReason.sessionExpired`, so this is the only way to tell them apart. Compares `stores.active_device_id` (see the correction below) against the caller-supplied `p_device_id`; true means a different device is now active. Callable by `anon` (mirrors `phone_has_account`'s pre-auth-callable pattern).
+- **`signed_out_by_new_device(p_store_id uuid, p_device_id text) returns boolean`** — `security definer`, `set search_path = 'public'`. Added 2026-08-16. **Unused as of 2026-09-09** - fed the forced-single-active-device logout that's since been removed (the Flutter app now calls `SupabaseService.isThisDeviceRevoked`, a direct `devices` read, instead). Left in place rather than dropped, same reasoning as `stores.active_device_id`. Compares `stores.active_device_id` against the caller-supplied `p_device_id`; true means a different device is now active - still technically correct, just nothing calls it anymore.
+- **`get_product_stock(p_product_id uuid, p_store_id uuid) returns integer`** — `security invoker`, `set search_path = ''`. Added 2026-09-09. Sums `quantity_delta` from `stock_events` for one product - the authoritative recompute path, not on the Flutter app's hot read path (each device maintains `products.stock` as a running total instead, see `stock_events` above). Exists for reconciliation/debugging.
 - **`catalogue_category_counts() returns table(category text, product_count bigint)`** — `security invoker`, `set search_path = ''`. Added 2026-09-04 for the Flutter app's Catalogue Browse screen ("Beverages (124)"). No elevated privilege needed - `catalogue_products` is already readable by any `authenticated` store via its own RLS policy, this just aggregates over what the caller can already see. `category IS NULL` rows are grouped under `'Uncategorised'`.
 - **`database_usage_bytes() returns table(db_size_bytes bigint, storage_size_bytes bigint)`** — `security definer`, `set search_path = ''`, **execute revoked from `public`/`anon`/`authenticated`** (only the service-role client can call it — this one actually needs to be locked down, unlike the others in this list, since it exposes infra sizing that shouldn't be publicly queryable). Added 2026-08-10 for pockettill_datamaster's Infrastructure Costs page, after discovering Supabase's public Management API has **no endpoint for database/storage size** despite what the page's original spec assumed (`GET /v1/projects/{ref}/usage` doesn't exist — confirmed 404 against the real API; the only real usage endpoints are `analytics/endpoints/usage.api-counts` and `usage.api-requests-count`). `pg_database_size(current_database())` and a `sum` over `storage.objects.metadata->>'size'` are the actual, reliable sources. Note when creating any new `security definer` function: **Postgres grants `EXECUTE` to `PUBLIC` by default** — `revoke ... from anon, authenticated` alone does not remove a standing `PUBLIC` grant; revoke from `public` explicitly too, or the security advisor will still flag it (this bit us once already, see `20260810141855_fix_database_usage_bytes_grants.sql`).
 
