@@ -17,48 +17,53 @@ const SyncEventSchema = CollectionSchema(
   name: r'SyncEvent',
   id: -997542156317500190,
   properties: {
-    r'createdAt': PropertySchema(
+    r'baseUpdatedAt': PropertySchema(
       id: 0,
+      name: r'baseUpdatedAt',
+      type: IsarType.string,
+    ),
+    r'createdAt': PropertySchema(
+      id: 1,
       name: r'createdAt',
       type: IsarType.dateTime,
     ),
     r'deviceId': PropertySchema(
-      id: 1,
+      id: 2,
       name: r'deviceId',
       type: IsarType.string,
     ),
     r'entityType': PropertySchema(
-      id: 2,
+      id: 3,
       name: r'entityType',
       type: IsarType.string,
     ),
     r'entityUuid': PropertySchema(
-      id: 3,
+      id: 4,
       name: r'entityUuid',
       type: IsarType.string,
     ),
     r'operation': PropertySchema(
-      id: 4,
+      id: 5,
       name: r'operation',
       type: IsarType.string,
     ),
     r'payload': PropertySchema(
-      id: 5,
+      id: 6,
       name: r'payload',
       type: IsarType.string,
     ),
     r'pushed': PropertySchema(
-      id: 6,
+      id: 7,
       name: r'pushed',
       type: IsarType.bool,
     ),
     r'pushedAt': PropertySchema(
-      id: 7,
+      id: 8,
       name: r'pushedAt',
       type: IsarType.dateTime,
     ),
     r'uuid': PropertySchema(
-      id: 8,
+      id: 9,
       name: r'uuid',
       type: IsarType.string,
     )
@@ -83,6 +88,12 @@ int _syncEventEstimateSize(
   Map<Type, List<int>> allOffsets,
 ) {
   var bytesCount = offsets.last;
+  {
+    final value = object.baseUpdatedAt;
+    if (value != null) {
+      bytesCount += 3 + value.length * 3;
+    }
+  }
   bytesCount += 3 + object.deviceId.length * 3;
   bytesCount += 3 + object.entityType.length * 3;
   bytesCount += 3 + object.entityUuid.length * 3;
@@ -98,15 +109,16 @@ void _syncEventSerialize(
   List<int> offsets,
   Map<Type, List<int>> allOffsets,
 ) {
-  writer.writeDateTime(offsets[0], object.createdAt);
-  writer.writeString(offsets[1], object.deviceId);
-  writer.writeString(offsets[2], object.entityType);
-  writer.writeString(offsets[3], object.entityUuid);
-  writer.writeString(offsets[4], object.operation);
-  writer.writeString(offsets[5], object.payload);
-  writer.writeBool(offsets[6], object.pushed);
-  writer.writeDateTime(offsets[7], object.pushedAt);
-  writer.writeString(offsets[8], object.uuid);
+  writer.writeString(offsets[0], object.baseUpdatedAt);
+  writer.writeDateTime(offsets[1], object.createdAt);
+  writer.writeString(offsets[2], object.deviceId);
+  writer.writeString(offsets[3], object.entityType);
+  writer.writeString(offsets[4], object.entityUuid);
+  writer.writeString(offsets[5], object.operation);
+  writer.writeString(offsets[6], object.payload);
+  writer.writeBool(offsets[7], object.pushed);
+  writer.writeDateTime(offsets[8], object.pushedAt);
+  writer.writeString(offsets[9], object.uuid);
 }
 
 SyncEvent _syncEventDeserialize(
@@ -116,16 +128,17 @@ SyncEvent _syncEventDeserialize(
   Map<Type, List<int>> allOffsets,
 ) {
   final object = SyncEvent();
-  object.createdAt = reader.readDateTime(offsets[0]);
-  object.deviceId = reader.readString(offsets[1]);
-  object.entityType = reader.readString(offsets[2]);
-  object.entityUuid = reader.readString(offsets[3]);
+  object.baseUpdatedAt = reader.readStringOrNull(offsets[0]);
+  object.createdAt = reader.readDateTime(offsets[1]);
+  object.deviceId = reader.readString(offsets[2]);
+  object.entityType = reader.readString(offsets[3]);
+  object.entityUuid = reader.readString(offsets[4]);
   object.id = id;
-  object.operation = reader.readString(offsets[4]);
-  object.payload = reader.readString(offsets[5]);
-  object.pushed = reader.readBool(offsets[6]);
-  object.pushedAt = reader.readDateTimeOrNull(offsets[7]);
-  object.uuid = reader.readString(offsets[8]);
+  object.operation = reader.readString(offsets[5]);
+  object.payload = reader.readString(offsets[6]);
+  object.pushed = reader.readBool(offsets[7]);
+  object.pushedAt = reader.readDateTimeOrNull(offsets[8]);
+  object.uuid = reader.readString(offsets[9]);
   return object;
 }
 
@@ -137,9 +150,9 @@ P _syncEventDeserializeProp<P>(
 ) {
   switch (propertyId) {
     case 0:
-      return (reader.readDateTime(offset)) as P;
+      return (reader.readStringOrNull(offset)) as P;
     case 1:
-      return (reader.readString(offset)) as P;
+      return (reader.readDateTime(offset)) as P;
     case 2:
       return (reader.readString(offset)) as P;
     case 3:
@@ -149,10 +162,12 @@ P _syncEventDeserializeProp<P>(
     case 5:
       return (reader.readString(offset)) as P;
     case 6:
-      return (reader.readBool(offset)) as P;
+      return (reader.readString(offset)) as P;
     case 7:
-      return (reader.readDateTimeOrNull(offset)) as P;
+      return (reader.readBool(offset)) as P;
     case 8:
+      return (reader.readDateTimeOrNull(offset)) as P;
+    case 9:
       return (reader.readString(offset)) as P;
     default:
       throw IsarError('Unknown property with id $propertyId');
@@ -250,6 +265,160 @@ extension SyncEventQueryWhere
 
 extension SyncEventQueryFilter
     on QueryBuilder<SyncEvent, SyncEvent, QFilterCondition> {
+  QueryBuilder<SyncEvent, SyncEvent, QAfterFilterCondition>
+      baseUpdatedAtIsNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(const FilterCondition.isNull(
+        property: r'baseUpdatedAt',
+      ));
+    });
+  }
+
+  QueryBuilder<SyncEvent, SyncEvent, QAfterFilterCondition>
+      baseUpdatedAtIsNotNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(const FilterCondition.isNotNull(
+        property: r'baseUpdatedAt',
+      ));
+    });
+  }
+
+  QueryBuilder<SyncEvent, SyncEvent, QAfterFilterCondition>
+      baseUpdatedAtEqualTo(
+    String? value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'baseUpdatedAt',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<SyncEvent, SyncEvent, QAfterFilterCondition>
+      baseUpdatedAtGreaterThan(
+    String? value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'baseUpdatedAt',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<SyncEvent, SyncEvent, QAfterFilterCondition>
+      baseUpdatedAtLessThan(
+    String? value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'baseUpdatedAt',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<SyncEvent, SyncEvent, QAfterFilterCondition>
+      baseUpdatedAtBetween(
+    String? lower,
+    String? upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'baseUpdatedAt',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<SyncEvent, SyncEvent, QAfterFilterCondition>
+      baseUpdatedAtStartsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.startsWith(
+        property: r'baseUpdatedAt',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<SyncEvent, SyncEvent, QAfterFilterCondition>
+      baseUpdatedAtEndsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.endsWith(
+        property: r'baseUpdatedAt',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<SyncEvent, SyncEvent, QAfterFilterCondition>
+      baseUpdatedAtContains(String value, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.contains(
+        property: r'baseUpdatedAt',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<SyncEvent, SyncEvent, QAfterFilterCondition>
+      baseUpdatedAtMatches(String pattern, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.matches(
+        property: r'baseUpdatedAt',
+        wildcard: pattern,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<SyncEvent, SyncEvent, QAfterFilterCondition>
+      baseUpdatedAtIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'baseUpdatedAt',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<SyncEvent, SyncEvent, QAfterFilterCondition>
+      baseUpdatedAtIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        property: r'baseUpdatedAt',
+        value: '',
+      ));
+    });
+  }
+
   QueryBuilder<SyncEvent, SyncEvent, QAfterFilterCondition> createdAtEqualTo(
       DateTime value) {
     return QueryBuilder.apply(this, (query) {
@@ -1237,6 +1406,18 @@ extension SyncEventQueryLinks
     on QueryBuilder<SyncEvent, SyncEvent, QFilterCondition> {}
 
 extension SyncEventQuerySortBy on QueryBuilder<SyncEvent, SyncEvent, QSortBy> {
+  QueryBuilder<SyncEvent, SyncEvent, QAfterSortBy> sortByBaseUpdatedAt() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'baseUpdatedAt', Sort.asc);
+    });
+  }
+
+  QueryBuilder<SyncEvent, SyncEvent, QAfterSortBy> sortByBaseUpdatedAtDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'baseUpdatedAt', Sort.desc);
+    });
+  }
+
   QueryBuilder<SyncEvent, SyncEvent, QAfterSortBy> sortByCreatedAt() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'createdAt', Sort.asc);
@@ -1348,6 +1529,18 @@ extension SyncEventQuerySortBy on QueryBuilder<SyncEvent, SyncEvent, QSortBy> {
 
 extension SyncEventQuerySortThenBy
     on QueryBuilder<SyncEvent, SyncEvent, QSortThenBy> {
+  QueryBuilder<SyncEvent, SyncEvent, QAfterSortBy> thenByBaseUpdatedAt() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'baseUpdatedAt', Sort.asc);
+    });
+  }
+
+  QueryBuilder<SyncEvent, SyncEvent, QAfterSortBy> thenByBaseUpdatedAtDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'baseUpdatedAt', Sort.desc);
+    });
+  }
+
   QueryBuilder<SyncEvent, SyncEvent, QAfterSortBy> thenByCreatedAt() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'createdAt', Sort.asc);
@@ -1471,6 +1664,14 @@ extension SyncEventQuerySortThenBy
 
 extension SyncEventQueryWhereDistinct
     on QueryBuilder<SyncEvent, SyncEvent, QDistinct> {
+  QueryBuilder<SyncEvent, SyncEvent, QDistinct> distinctByBaseUpdatedAt(
+      {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'baseUpdatedAt',
+          caseSensitive: caseSensitive);
+    });
+  }
+
   QueryBuilder<SyncEvent, SyncEvent, QDistinct> distinctByCreatedAt() {
     return QueryBuilder.apply(this, (query) {
       return query.addDistinctBy(r'createdAt');
@@ -1537,6 +1738,12 @@ extension SyncEventQueryProperty
   QueryBuilder<SyncEvent, int, QQueryOperations> idProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'id');
+    });
+  }
+
+  QueryBuilder<SyncEvent, String?, QQueryOperations> baseUpdatedAtProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'baseUpdatedAt');
     });
   }
 

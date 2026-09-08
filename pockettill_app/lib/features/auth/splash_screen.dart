@@ -147,7 +147,9 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
               await ref.read(storeConfigProvider.notifier).refresh();
               if (!mounted) return;
               Navigator.of(context).pushAndRemoveUntil(
-                MaterialPageRoute(builder: (_) => const ShellScreen()),
+                MaterialPageRoute(
+                  builder: (_) => const ShellScreen(showNewDeviceNotice: true),
+                ),
                 (route) => false,
               );
             },

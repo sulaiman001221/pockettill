@@ -57,43 +57,48 @@ const StoreConfigSchema = CollectionSchema(
       name: r'isLoggedIn',
       type: IsarType.bool,
     ),
-    r'lastSyncedAt': PropertySchema(
+    r'lastStockEventSyncedAt': PropertySchema(
       id: 8,
+      name: r'lastStockEventSyncedAt',
+      type: IsarType.dateTime,
+    ),
+    r'lastSyncedAt': PropertySchema(
+      id: 9,
       name: r'lastSyncedAt',
       type: IsarType.dateTime,
     ),
     r'ownerName': PropertySchema(
-      id: 9,
+      id: 10,
       name: r'ownerName',
       type: IsarType.string,
     ),
     r'ownerPhone': PropertySchema(
-      id: 10,
+      id: 11,
       name: r'ownerPhone',
       type: IsarType.string,
     ),
     r'paymentSoundEnabled': PropertySchema(
-      id: 11,
+      id: 12,
       name: r'paymentSoundEnabled',
       type: IsarType.bool,
     ),
     r'scanSoundEnabled': PropertySchema(
-      id: 12,
+      id: 13,
       name: r'scanSoundEnabled',
       type: IsarType.bool,
     ),
     r'storeId': PropertySchema(
-      id: 13,
+      id: 14,
       name: r'storeId',
       type: IsarType.string,
     ),
     r'storeName': PropertySchema(
-      id: 14,
+      id: 15,
       name: r'storeName',
       type: IsarType.string,
     ),
     r'useCatalogueImages': PropertySchema(
-      id: 15,
+      id: 16,
       name: r'useCatalogueImages',
       type: IsarType.bool,
     )
@@ -168,14 +173,15 @@ void _storeConfigSerialize(
   writer.writeBool(offsets[5], object.imagesWifiOnly);
   writer.writeBool(offsets[6], object.isBetaAdopter);
   writer.writeBool(offsets[7], object.isLoggedIn);
-  writer.writeDateTime(offsets[8], object.lastSyncedAt);
-  writer.writeString(offsets[9], object.ownerName);
-  writer.writeString(offsets[10], object.ownerPhone);
-  writer.writeBool(offsets[11], object.paymentSoundEnabled);
-  writer.writeBool(offsets[12], object.scanSoundEnabled);
-  writer.writeString(offsets[13], object.storeId);
-  writer.writeString(offsets[14], object.storeName);
-  writer.writeBool(offsets[15], object.useCatalogueImages);
+  writer.writeDateTime(offsets[8], object.lastStockEventSyncedAt);
+  writer.writeDateTime(offsets[9], object.lastSyncedAt);
+  writer.writeString(offsets[10], object.ownerName);
+  writer.writeString(offsets[11], object.ownerPhone);
+  writer.writeBool(offsets[12], object.paymentSoundEnabled);
+  writer.writeBool(offsets[13], object.scanSoundEnabled);
+  writer.writeString(offsets[14], object.storeId);
+  writer.writeString(offsets[15], object.storeName);
+  writer.writeBool(offsets[16], object.useCatalogueImages);
 }
 
 StoreConfig _storeConfigDeserialize(
@@ -194,14 +200,15 @@ StoreConfig _storeConfigDeserialize(
   object.imagesWifiOnly = reader.readBool(offsets[5]);
   object.isBetaAdopter = reader.readBool(offsets[6]);
   object.isLoggedIn = reader.readBool(offsets[7]);
-  object.lastSyncedAt = reader.readDateTimeOrNull(offsets[8]);
-  object.ownerName = reader.readStringOrNull(offsets[9]);
-  object.ownerPhone = reader.readStringOrNull(offsets[10]);
-  object.paymentSoundEnabled = reader.readBool(offsets[11]);
-  object.scanSoundEnabled = reader.readBool(offsets[12]);
-  object.storeId = reader.readString(offsets[13]);
-  object.storeName = reader.readString(offsets[14]);
-  object.useCatalogueImages = reader.readBool(offsets[15]);
+  object.lastStockEventSyncedAt = reader.readDateTimeOrNull(offsets[8]);
+  object.lastSyncedAt = reader.readDateTimeOrNull(offsets[9]);
+  object.ownerName = reader.readStringOrNull(offsets[10]);
+  object.ownerPhone = reader.readStringOrNull(offsets[11]);
+  object.paymentSoundEnabled = reader.readBool(offsets[12]);
+  object.scanSoundEnabled = reader.readBool(offsets[13]);
+  object.storeId = reader.readString(offsets[14]);
+  object.storeName = reader.readString(offsets[15]);
+  object.useCatalogueImages = reader.readBool(offsets[16]);
   return object;
 }
 
@@ -231,18 +238,20 @@ P _storeConfigDeserializeProp<P>(
     case 8:
       return (reader.readDateTimeOrNull(offset)) as P;
     case 9:
-      return (reader.readStringOrNull(offset)) as P;
+      return (reader.readDateTimeOrNull(offset)) as P;
     case 10:
       return (reader.readStringOrNull(offset)) as P;
     case 11:
-      return (reader.readBool(offset)) as P;
+      return (reader.readStringOrNull(offset)) as P;
     case 12:
       return (reader.readBool(offset)) as P;
     case 13:
-      return (reader.readString(offset)) as P;
+      return (reader.readBool(offset)) as P;
     case 14:
       return (reader.readString(offset)) as P;
     case 15:
+      return (reader.readString(offset)) as P;
+    case 16:
       return (reader.readBool(offset)) as P;
     default:
       throw IsarError('Unknown property with id $propertyId');
@@ -1026,6 +1035,80 @@ extension StoreConfigQueryFilter
       return query.addFilterCondition(FilterCondition.equalTo(
         property: r'isLoggedIn',
         value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<StoreConfig, StoreConfig, QAfterFilterCondition>
+      lastStockEventSyncedAtIsNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(const FilterCondition.isNull(
+        property: r'lastStockEventSyncedAt',
+      ));
+    });
+  }
+
+  QueryBuilder<StoreConfig, StoreConfig, QAfterFilterCondition>
+      lastStockEventSyncedAtIsNotNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(const FilterCondition.isNotNull(
+        property: r'lastStockEventSyncedAt',
+      ));
+    });
+  }
+
+  QueryBuilder<StoreConfig, StoreConfig, QAfterFilterCondition>
+      lastStockEventSyncedAtEqualTo(DateTime? value) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'lastStockEventSyncedAt',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<StoreConfig, StoreConfig, QAfterFilterCondition>
+      lastStockEventSyncedAtGreaterThan(
+    DateTime? value, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'lastStockEventSyncedAt',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<StoreConfig, StoreConfig, QAfterFilterCondition>
+      lastStockEventSyncedAtLessThan(
+    DateTime? value, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'lastStockEventSyncedAt',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<StoreConfig, StoreConfig, QAfterFilterCondition>
+      lastStockEventSyncedAtBetween(
+    DateTime? lower,
+    DateTime? upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'lastStockEventSyncedAt',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
       ));
     });
   }
@@ -1821,6 +1904,20 @@ extension StoreConfigQuerySortBy
     });
   }
 
+  QueryBuilder<StoreConfig, StoreConfig, QAfterSortBy>
+      sortByLastStockEventSyncedAt() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'lastStockEventSyncedAt', Sort.asc);
+    });
+  }
+
+  QueryBuilder<StoreConfig, StoreConfig, QAfterSortBy>
+      sortByLastStockEventSyncedAtDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'lastStockEventSyncedAt', Sort.desc);
+    });
+  }
+
   QueryBuilder<StoreConfig, StoreConfig, QAfterSortBy> sortByLastSyncedAt() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'lastSyncedAt', Sort.asc);
@@ -2039,6 +2136,20 @@ extension StoreConfigQuerySortThenBy
     });
   }
 
+  QueryBuilder<StoreConfig, StoreConfig, QAfterSortBy>
+      thenByLastStockEventSyncedAt() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'lastStockEventSyncedAt', Sort.asc);
+    });
+  }
+
+  QueryBuilder<StoreConfig, StoreConfig, QAfterSortBy>
+      thenByLastStockEventSyncedAtDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'lastStockEventSyncedAt', Sort.desc);
+    });
+  }
+
   QueryBuilder<StoreConfig, StoreConfig, QAfterSortBy> thenByLastSyncedAt() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'lastSyncedAt', Sort.asc);
@@ -2198,6 +2309,13 @@ extension StoreConfigQueryWhereDistinct
     });
   }
 
+  QueryBuilder<StoreConfig, StoreConfig, QDistinct>
+      distinctByLastStockEventSyncedAt() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'lastStockEventSyncedAt');
+    });
+  }
+
   QueryBuilder<StoreConfig, StoreConfig, QDistinct> distinctByLastSyncedAt() {
     return QueryBuilder.apply(this, (query) {
       return query.addDistinctBy(r'lastSyncedAt');
@@ -2308,6 +2426,13 @@ extension StoreConfigQueryProperty
   QueryBuilder<StoreConfig, bool, QQueryOperations> isLoggedInProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'isLoggedIn');
+    });
+  }
+
+  QueryBuilder<StoreConfig, DateTime?, QQueryOperations>
+      lastStockEventSyncedAtProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'lastStockEventSyncedAt');
     });
   }
 

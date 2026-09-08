@@ -278,6 +278,18 @@ _RiskTypeInfo _infoForType(String type) {
         'Customer Deleted While Owing',
         AppTheme.logoutRed,
       );
+    case 'concurrent_price_edit':
+      return const _RiskTypeInfo(
+        Icons.sync_problem,
+        'Concurrent Price Edit',
+        AppTheme.syncAmber,
+      );
+    case 'concurrent_stock_adjustment':
+      return const _RiskTypeInfo(
+        Icons.sync_problem,
+        'Concurrent Stock Edit',
+        AppTheme.syncAmber,
+      );
     default:
       return const _RiskTypeInfo(
         Icons.warning_amber_outlined,

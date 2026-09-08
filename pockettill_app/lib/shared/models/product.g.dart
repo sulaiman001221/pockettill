@@ -27,68 +27,73 @@ const ProductSchema = CollectionSchema(
       name: r'cachedImagePath',
       type: IsarType.string,
     ),
-    r'category': PropertySchema(
+    r'catalogueSyncedImageUrl': PropertySchema(
       id: 2,
+      name: r'catalogueSyncedImageUrl',
+      type: IsarType.string,
+    ),
+    r'category': PropertySchema(
+      id: 3,
       name: r'category',
       type: IsarType.string,
     ),
     r'costPrice': PropertySchema(
-      id: 3,
+      id: 4,
       name: r'costPrice',
       type: IsarType.double,
     ),
     r'createdAt': PropertySchema(
-      id: 4,
+      id: 5,
       name: r'createdAt',
       type: IsarType.dateTime,
     ),
     r'imageUrl': PropertySchema(
-      id: 5,
+      id: 6,
       name: r'imageUrl',
       type: IsarType.string,
     ),
     r'lowStockThreshold': PropertySchema(
-      id: 6,
+      id: 7,
       name: r'lowStockThreshold',
       type: IsarType.long,
     ),
     r'mass': PropertySchema(
-      id: 7,
+      id: 8,
       name: r'mass',
       type: IsarType.string,
     ),
     r'name': PropertySchema(
-      id: 8,
+      id: 9,
       name: r'name',
       type: IsarType.string,
     ),
     r'price': PropertySchema(
-      id: 9,
+      id: 10,
       name: r'price',
       type: IsarType.double,
     ),
     r'stock': PropertySchema(
-      id: 10,
+      id: 11,
       name: r'stock',
       type: IsarType.long,
     ),
     r'synced': PropertySchema(
-      id: 11,
+      id: 12,
       name: r'synced',
       type: IsarType.bool,
     ),
     r'unit': PropertySchema(
-      id: 12,
+      id: 13,
       name: r'unit',
       type: IsarType.string,
     ),
     r'updatedAt': PropertySchema(
-      id: 13,
+      id: 14,
       name: r'updatedAt',
       type: IsarType.dateTime,
     ),
     r'uuid': PropertySchema(
-      id: 14,
+      id: 15,
       name: r'uuid',
       type: IsarType.string,
     )
@@ -116,6 +121,12 @@ int _productEstimateSize(
   bytesCount += 3 + object.barcode.length * 3;
   {
     final value = object.cachedImagePath;
+    if (value != null) {
+      bytesCount += 3 + value.length * 3;
+    }
+  }
+  {
+    final value = object.catalogueSyncedImageUrl;
     if (value != null) {
       bytesCount += 3 + value.length * 3;
     }
@@ -157,19 +168,20 @@ void _productSerialize(
 ) {
   writer.writeString(offsets[0], object.barcode);
   writer.writeString(offsets[1], object.cachedImagePath);
-  writer.writeString(offsets[2], object.category);
-  writer.writeDouble(offsets[3], object.costPrice);
-  writer.writeDateTime(offsets[4], object.createdAt);
-  writer.writeString(offsets[5], object.imageUrl);
-  writer.writeLong(offsets[6], object.lowStockThreshold);
-  writer.writeString(offsets[7], object.mass);
-  writer.writeString(offsets[8], object.name);
-  writer.writeDouble(offsets[9], object.price);
-  writer.writeLong(offsets[10], object.stock);
-  writer.writeBool(offsets[11], object.synced);
-  writer.writeString(offsets[12], object.unit);
-  writer.writeDateTime(offsets[13], object.updatedAt);
-  writer.writeString(offsets[14], object.uuid);
+  writer.writeString(offsets[2], object.catalogueSyncedImageUrl);
+  writer.writeString(offsets[3], object.category);
+  writer.writeDouble(offsets[4], object.costPrice);
+  writer.writeDateTime(offsets[5], object.createdAt);
+  writer.writeString(offsets[6], object.imageUrl);
+  writer.writeLong(offsets[7], object.lowStockThreshold);
+  writer.writeString(offsets[8], object.mass);
+  writer.writeString(offsets[9], object.name);
+  writer.writeDouble(offsets[10], object.price);
+  writer.writeLong(offsets[11], object.stock);
+  writer.writeBool(offsets[12], object.synced);
+  writer.writeString(offsets[13], object.unit);
+  writer.writeDateTime(offsets[14], object.updatedAt);
+  writer.writeString(offsets[15], object.uuid);
 }
 
 Product _productDeserialize(
@@ -181,20 +193,21 @@ Product _productDeserialize(
   final object = Product();
   object.barcode = reader.readString(offsets[0]);
   object.cachedImagePath = reader.readStringOrNull(offsets[1]);
-  object.category = reader.readStringOrNull(offsets[2]);
-  object.costPrice = reader.readDoubleOrNull(offsets[3]);
-  object.createdAt = reader.readDateTime(offsets[4]);
+  object.catalogueSyncedImageUrl = reader.readStringOrNull(offsets[2]);
+  object.category = reader.readStringOrNull(offsets[3]);
+  object.costPrice = reader.readDoubleOrNull(offsets[4]);
+  object.createdAt = reader.readDateTime(offsets[5]);
   object.id = id;
-  object.imageUrl = reader.readStringOrNull(offsets[5]);
-  object.lowStockThreshold = reader.readLong(offsets[6]);
-  object.mass = reader.readStringOrNull(offsets[7]);
-  object.name = reader.readString(offsets[8]);
-  object.price = reader.readDouble(offsets[9]);
-  object.stock = reader.readLong(offsets[10]);
-  object.synced = reader.readBool(offsets[11]);
-  object.unit = reader.readStringOrNull(offsets[12]);
-  object.updatedAt = reader.readDateTimeOrNull(offsets[13]);
-  object.uuid = reader.readString(offsets[14]);
+  object.imageUrl = reader.readStringOrNull(offsets[6]);
+  object.lowStockThreshold = reader.readLong(offsets[7]);
+  object.mass = reader.readStringOrNull(offsets[8]);
+  object.name = reader.readString(offsets[9]);
+  object.price = reader.readDouble(offsets[10]);
+  object.stock = reader.readLong(offsets[11]);
+  object.synced = reader.readBool(offsets[12]);
+  object.unit = reader.readStringOrNull(offsets[13]);
+  object.updatedAt = reader.readDateTimeOrNull(offsets[14]);
+  object.uuid = reader.readString(offsets[15]);
   return object;
 }
 
@@ -212,28 +225,30 @@ P _productDeserializeProp<P>(
     case 2:
       return (reader.readStringOrNull(offset)) as P;
     case 3:
-      return (reader.readDoubleOrNull(offset)) as P;
+      return (reader.readStringOrNull(offset)) as P;
     case 4:
-      return (reader.readDateTime(offset)) as P;
+      return (reader.readDoubleOrNull(offset)) as P;
     case 5:
-      return (reader.readStringOrNull(offset)) as P;
+      return (reader.readDateTime(offset)) as P;
     case 6:
-      return (reader.readLong(offset)) as P;
+      return (reader.readStringOrNull(offset)) as P;
     case 7:
-      return (reader.readStringOrNull(offset)) as P;
-    case 8:
-      return (reader.readString(offset)) as P;
-    case 9:
-      return (reader.readDouble(offset)) as P;
-    case 10:
       return (reader.readLong(offset)) as P;
-    case 11:
-      return (reader.readBool(offset)) as P;
-    case 12:
+    case 8:
       return (reader.readStringOrNull(offset)) as P;
+    case 9:
+      return (reader.readString(offset)) as P;
+    case 10:
+      return (reader.readDouble(offset)) as P;
+    case 11:
+      return (reader.readLong(offset)) as P;
+    case 12:
+      return (reader.readBool(offset)) as P;
     case 13:
-      return (reader.readDateTimeOrNull(offset)) as P;
+      return (reader.readStringOrNull(offset)) as P;
     case 14:
+      return (reader.readDateTimeOrNull(offset)) as P;
+    case 15:
       return (reader.readString(offset)) as P;
     default:
       throw IsarError('Unknown property with id $propertyId');
@@ -606,6 +621,162 @@ extension ProductQueryFilter
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.greaterThan(
         property: r'cachedImagePath',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<Product, Product, QAfterFilterCondition>
+      catalogueSyncedImageUrlIsNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(const FilterCondition.isNull(
+        property: r'catalogueSyncedImageUrl',
+      ));
+    });
+  }
+
+  QueryBuilder<Product, Product, QAfterFilterCondition>
+      catalogueSyncedImageUrlIsNotNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(const FilterCondition.isNotNull(
+        property: r'catalogueSyncedImageUrl',
+      ));
+    });
+  }
+
+  QueryBuilder<Product, Product, QAfterFilterCondition>
+      catalogueSyncedImageUrlEqualTo(
+    String? value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'catalogueSyncedImageUrl',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<Product, Product, QAfterFilterCondition>
+      catalogueSyncedImageUrlGreaterThan(
+    String? value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'catalogueSyncedImageUrl',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<Product, Product, QAfterFilterCondition>
+      catalogueSyncedImageUrlLessThan(
+    String? value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'catalogueSyncedImageUrl',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<Product, Product, QAfterFilterCondition>
+      catalogueSyncedImageUrlBetween(
+    String? lower,
+    String? upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'catalogueSyncedImageUrl',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<Product, Product, QAfterFilterCondition>
+      catalogueSyncedImageUrlStartsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.startsWith(
+        property: r'catalogueSyncedImageUrl',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<Product, Product, QAfterFilterCondition>
+      catalogueSyncedImageUrlEndsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.endsWith(
+        property: r'catalogueSyncedImageUrl',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<Product, Product, QAfterFilterCondition>
+      catalogueSyncedImageUrlContains(String value,
+          {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.contains(
+        property: r'catalogueSyncedImageUrl',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<Product, Product, QAfterFilterCondition>
+      catalogueSyncedImageUrlMatches(String pattern,
+          {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.matches(
+        property: r'catalogueSyncedImageUrl',
+        wildcard: pattern,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<Product, Product, QAfterFilterCondition>
+      catalogueSyncedImageUrlIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'catalogueSyncedImageUrl',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<Product, Product, QAfterFilterCondition>
+      catalogueSyncedImageUrlIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        property: r'catalogueSyncedImageUrl',
         value: '',
       ));
     });
@@ -1920,6 +2091,19 @@ extension ProductQuerySortBy on QueryBuilder<Product, Product, QSortBy> {
     });
   }
 
+  QueryBuilder<Product, Product, QAfterSortBy> sortByCatalogueSyncedImageUrl() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'catalogueSyncedImageUrl', Sort.asc);
+    });
+  }
+
+  QueryBuilder<Product, Product, QAfterSortBy>
+      sortByCatalogueSyncedImageUrlDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'catalogueSyncedImageUrl', Sort.desc);
+    });
+  }
+
   QueryBuilder<Product, Product, QAfterSortBy> sortByCategory() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'category', Sort.asc);
@@ -2100,6 +2284,19 @@ extension ProductQuerySortThenBy
   QueryBuilder<Product, Product, QAfterSortBy> thenByCachedImagePathDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'cachedImagePath', Sort.desc);
+    });
+  }
+
+  QueryBuilder<Product, Product, QAfterSortBy> thenByCatalogueSyncedImageUrl() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'catalogueSyncedImageUrl', Sort.asc);
+    });
+  }
+
+  QueryBuilder<Product, Product, QAfterSortBy>
+      thenByCatalogueSyncedImageUrlDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'catalogueSyncedImageUrl', Sort.desc);
     });
   }
 
@@ -2289,6 +2486,14 @@ extension ProductQueryWhereDistinct
     });
   }
 
+  QueryBuilder<Product, Product, QDistinct> distinctByCatalogueSyncedImageUrl(
+      {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'catalogueSyncedImageUrl',
+          caseSensitive: caseSensitive);
+    });
+  }
+
   QueryBuilder<Product, Product, QDistinct> distinctByCategory(
       {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
@@ -2391,6 +2596,13 @@ extension ProductQueryProperty
   QueryBuilder<Product, String?, QQueryOperations> cachedImagePathProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'cachedImagePath');
+    });
+  }
+
+  QueryBuilder<Product, String?, QQueryOperations>
+      catalogueSyncedImageUrlProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'catalogueSyncedImageUrl');
     });
   }
 

@@ -11,6 +11,7 @@ import '../models/return_record.dart';
 import '../models/sale.dart';
 import '../models/sale_item.dart';
 import '../models/sync_event.dart';
+import 'product_repository.dart';
 
 /// Business logic for processing returns against past sales. Sits between
 /// the UI and Isar - screens never touch Isar directly.
@@ -209,6 +210,13 @@ class ReturnRepository {
               payload: _productToPayload(product),
             ),
           );
+          await ProductRepository.recordStockEvent(
+            isar: _isar,
+            productUuid: product.uuid,
+            changeType: 'return',
+            quantityDelta: item.quantity,
+            referenceId: returnUuid,
+          );
         }
       }
       // stockAction == 'write_off': nothing to adjust - the product is
@@ -231,6 +239,13 @@ class ReturnRepository {
               deviceId: deviceId,
               payload: _productToPayload(product),
             ),
+          );
+          await ProductRepository.recordStockEvent(
+            isar: _isar,
+            productUuid: product.uuid,
+            changeType: 'sale',
+            quantityDelta: -1,
+            referenceId: returnUuid,
           );
         }
       }

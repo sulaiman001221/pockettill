@@ -9,6 +9,7 @@ import '../models/product.dart';
 import '../models/sale.dart';
 import '../models/sale_item.dart';
 import '../models/sync_event.dart';
+import 'product_repository.dart';
 
 /// Business logic for sales and sale line items, plus the daily/weekly
 /// analytics derived from them. Sits between the UI and Isar - screens never
@@ -144,6 +145,17 @@ class SaleRepository {
         product.stock -= quantity;
         product.updatedAt = now;
         await _isar.products.put(product);
+        // Durable delta, not just the absolute value above - see
+        // StockEvent's doc comment. This is what lets two devices sell the
+        // same product offline without one silently overwriting the
+        // other's sale once both sync.
+        await ProductRepository.recordStockEvent(
+          isar: _isar,
+          productUuid: product.uuid,
+          changeType: 'sale',
+          quantityDelta: -quantity,
+          referenceId: saleUuid,
+        );
       }
 
       if (paymentType == 'credit') {

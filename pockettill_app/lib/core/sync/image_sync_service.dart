@@ -67,12 +67,46 @@ class ImageSyncService {
       final enhanced = await SupabaseService.fetchEnhancedCatalogueImages(barcodes);
       for (final product in products) {
         final catalogueUrl = enhanced[product.barcode];
-        if (catalogueUrl == null) continue;
-        if (product.imageUrl == catalogueUrl) continue; // already current
-        if (!_shouldReplace(storeConfig, product)) continue;
+        if (catalogueUrl != null) {
+          if (product.imageUrl == catalogueUrl) {
+            // Already showing exactly this catalogue image - just make
+            // sure the tracking field agrees. Matters for any product that
+            // already had this image synced in before
+            // catalogueSyncedImageUrl existed (a one-time backfill) - a
+            // plain field write, not a real edit, so it bypasses save()
+            // (no point enqueuing a sync event for a row that hasn't
+            // actually changed).
+            if (product.catalogueSyncedImageUrl != catalogueUrl) {
+              product.catalogueSyncedImageUrl = catalogueUrl;
+              await _isar.writeTxn(() async {
+                await _isar.products.put(product);
+              });
+            }
+          } else if (_shouldReplace(storeConfig, product)) {
+            product.imageUrl = catalogueUrl;
+            product.catalogueSyncedImageUrl = catalogueUrl;
+            await _productRepository.save(product);
+          }
+          continue;
+        }
 
-        product.imageUrl = catalogueUrl;
-        await _productRepository.save(product);
+        // No enhanced image currently offered for this barcode. If this
+        // product's photo is exactly the last one this device pulled in
+        // from the catalogue - not something the owner has since replaced
+        // themselves - the catalogue's enhancement must have been cleared
+        // (or un-enhanced) since, with no replacement. Revert rather than
+        // leaving a stale, possibly wrong photo stuck on this device
+        // forever - nothing else ever un-syncs it. Found 2026-09-08: a
+        // wrongly-enhanced photo synced down, then correctly cleared in
+        // DataMaster, kept showing on the store's own Stock screen until a
+        // *replacement* enhanced photo happened to be uploaded (the one
+        // case the block above already handled correctly).
+        if (product.catalogueSyncedImageUrl != null &&
+            product.imageUrl == product.catalogueSyncedImageUrl) {
+          product.imageUrl = null;
+          product.catalogueSyncedImageUrl = null;
+          await _productRepository.save(product);
+        }
       }
 
       // Step 2: make sure every product with a photo actually has it

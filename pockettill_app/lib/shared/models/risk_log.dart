@@ -8,7 +8,11 @@ part 'risk_log.g.dart';
 ///
 /// [type] is one of: `manual_stock_reduction`, `product_deleted`,
 /// `price_changed`, `manual_credit`, `credit_writeoff`,
-/// `customer_deleted_with_balance` - a plain string
+/// `customer_deleted_with_balance`, `concurrent_price_edit`,
+/// `concurrent_stock_adjustment` (the last two added 2026-09-09 - two
+/// devices editing the same product's price/stock while both offline,
+/// detected by SyncService right before the later push, see
+/// SyncEvent.baseUpdatedAt) - a plain string
 /// (not a Dart enum) to match every other `type`/`reason`-style field in
 /// this app (see `Sale.paymentType`, `ReturnRecord.reason`), and because
 /// it's written unchanged straight into the `risk_log` table's own `type`

@@ -8,6 +8,7 @@ import '../../core/sync/event_queue.dart';
 import '../models/product.dart';
 import '../models/sale.dart';
 import '../models/sale_item.dart';
+import '../models/stock_event.dart';
 import '../models/store_config.dart';
 import '../models/sync_event.dart';
 import 'catalogue_browse_repository.dart';
@@ -147,9 +148,37 @@ class ProductRepository {
       entityUuid: product.uuid,
       operation: isNew ? 'create' : 'update',
       payload: _toPayload(product),
+      // The state this device knew about right before this edit - null for
+      // a brand-new product (nothing to compare against) or a product
+      // that's never been edited since creation (falls back to createdAt,
+      // its only known "last state" timestamp). See SyncEvent.baseUpdatedAt.
+      baseUpdatedAt: isNew
+          ? null
+          : (existing.updatedAt ?? existing.createdAt).toUtc().toIso8601String(),
     );
 
-    if (existing != null) {
+    if (isNew) {
+      // A brand-new product can start with a non-zero stock (the owner
+      // typed an initial quantity) - record it as the product's baseline
+      // stock_event so the durable delta ledger is complete from day one,
+      // same as the backfill migration did for every product that already
+      // existed when stock_events was introduced.
+      if (product.stock != 0) {
+        await _recordStockEvent(
+          productUuid: product.uuid,
+          changeType: 'initial_stock',
+          quantityDelta: product.stock,
+        );
+      }
+    } else {
+      final stockDelta = product.stock - existing.stock;
+      if (stockDelta != 0) {
+        await _recordStockEvent(
+          productUuid: product.uuid,
+          changeType: 'manual_adjustment',
+          quantityDelta: stockDelta,
+        );
+      }
       await _recordEditRiskEvents(before: existing, after: product);
     }
   }
@@ -251,6 +280,11 @@ class ProductRepository {
       operation: 'update',
       payload: _toPayload(product),
     );
+    await _recordStockEvent(
+      productUuid: product.uuid,
+      changeType: 'manual_adjustment',
+      quantityDelta: delta,
+    );
   }
 
   /// Deletes a product row outright.
@@ -302,6 +336,7 @@ class ProductRepository {
     required String entityUuid,
     required String operation,
     required Map<String, dynamic> payload,
+    String? baseUpdatedAt,
   }) async {
     final deviceId = (await _isar.storeConfigs.get(1))?.deviceId ?? '';
     final event = SyncEvent()
@@ -311,9 +346,93 @@ class ProductRepository {
       ..operation = operation
       ..payload = jsonEncode(payload)
       ..deviceId = deviceId
-      ..createdAt = DateTime.now();
+      ..createdAt = DateTime.now()
+      ..baseUpdatedAt = baseUpdatedAt;
     await _eventQueue.enqueue(event);
   }
+
+  /// Records a durable `stock_events` delta locally and enqueues it for
+  /// sync - see [StockEvent]'s doc comment for why every stock-changing
+  /// path does this (not just here: [SaleRepository]/[ReturnRepository]
+  /// call the same pattern directly). A no-op for a zero delta - nothing
+  /// changed, nothing to record.
+  ///
+  /// Must be called from within an already-open `isar.writeTxn()` - Isar
+  /// (3.1.0) throws `IsarError: Isar does not support nesting
+  /// transactions` if this opens its own while one is already active, which
+  /// is exactly how [SaleRepository.completeSale] and
+  /// [ReturnRepository.processReturn] call it (from inside their own single
+  /// all-effects transaction). Found 2026-09-08 - this bug made every sale
+  /// and return fail outright ("Could not make a sale") once those call
+  /// sites were added. [ProductRepository]'s own callers
+  /// ([save]/[adjustStock]) are outside any transaction at their call site,
+  /// so they go through [_recordStockEvent] instead, which opens one.
+  static Future<void> recordStockEvent({
+    required Isar isar,
+    required String productUuid,
+    required String changeType,
+    required int quantityDelta,
+    String? referenceId,
+  }) async {
+    if (quantityDelta == 0) return;
+    final deviceId = (await isar.storeConfigs.get(1))?.deviceId ?? '';
+    final now = DateTime.now();
+
+    final stockEvent = StockEvent()
+      ..uuid = const Uuid().v4()
+      ..productUuid = productUuid
+      ..deviceId = deviceId
+      ..changeType = changeType
+      ..quantityDelta = quantityDelta
+      ..referenceId = referenceId
+      ..createdAt = now;
+
+    final syncEvent = SyncEvent()
+      ..uuid = const Uuid().v4()
+      ..entityType = 'stock_event'
+      ..entityUuid = stockEvent.uuid
+      ..operation = 'create'
+      ..payload = jsonEncode(_stockEventPayload(stockEvent))
+      ..deviceId = deviceId
+      ..createdAt = now;
+
+    await isar.stockEvents.put(stockEvent);
+    await isar.syncEvents.put(syncEvent);
+  }
+
+  /// Wraps [recordStockEvent] in its own transaction, for callers (this
+  /// repository's own [save]/[adjustStock]) that aren't already inside one
+  /// at their call site.
+  Future<void> _recordStockEvent({
+    required String productUuid,
+    required String changeType,
+    required int quantityDelta,
+    String? referenceId,
+  }) {
+    return _isar.writeTxn(
+      () => recordStockEvent(
+        isar: _isar,
+        productUuid: productUuid,
+        changeType: changeType,
+        quantityDelta: quantityDelta,
+        referenceId: referenceId,
+      ),
+    );
+  }
+
+  static Map<String, dynamic> _stockEventPayload(StockEvent event) => {
+    // Supabase's primary key column for stock_events is `id`, not `uuid`
+    // (unlike every other synced table) - see the migration. Matching that
+    // exact key here is what makes SupabaseService.pushEvents' upsert
+    // target the right column.
+    'id': event.uuid,
+    'product_id': event.productUuid,
+    'device_id': event.deviceId,
+    'change_type': event.changeType,
+    'quantity_delta': event.quantityDelta,
+    'reference_id': event.referenceId,
+    'created_at': event.createdAt.toUtc().toIso8601String(),
+  };
 
   Map<String, dynamic> _toPayload(Product product) => {
     'uuid': product.uuid,

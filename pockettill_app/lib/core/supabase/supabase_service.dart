@@ -28,6 +28,7 @@ class SupabaseService {
     'store_profile': 'stores',
     'extra_income': 'extra_income',
     'risk_log': 'risk_log',
+    'stock_event': 'stock_events',
   };
 
   /// Initializes the Supabase client.
@@ -159,6 +160,10 @@ class SupabaseService {
 
   /// Marks a device as having just synced, creating its `devices` row on
   /// first sync (there is no separate device-registration step).
+  ///
+  /// Deliberately does not touch `device_name` here - login already stamps
+  /// it, and re-sending it on every sync would just be redundant traffic
+  /// for a value that never changes for a given physical device.
   static Future<void> updateLastSeen(String deviceId, String storeId) {
     return supabaseClient.from('devices').upsert({
       'id': deviceId,
@@ -167,28 +172,105 @@ class SupabaseService {
     });
   }
 
-  /// Whether a *different* device has since become this store's active
-  /// device - i.e. someone logged into this account elsewhere and this
-  /// device has been displaced.
-  ///
-  /// A `SECURITY DEFINER` RPC rather than a direct `stores` read so it also
-  /// answers for a device whose session has already been revoked (no valid
-  /// JWT left to satisfy RLS with). Best-effort: any failure returns false,
-  /// since wrongly reporting "you were displaced" would sign out a
-  /// legitimate user over what might just be a connectivity blip.
-  static Future<bool> isDisplacedByAnotherDevice({
+  /// Whether this exact (deviceId, storeId) pairing's `devices.verified_at`
+  /// has been cleared - i.e. the owner tapped "Log out this device" for it
+  /// in Settings > Active Devices. Same underlying check as
+  /// `AuthService._isDeviceVerified`, just inverted and named for what
+  /// [SyncService] uses it for. A direct table read (not an RPC) works
+  /// fine here since this device's own session still satisfies
+  /// `devices_store_all`'s RLS - unlike the old `active_device_id` scheme,
+  /// nothing here revokes the JWT itself, only the app-level check.
+  /// Best-effort: any failure returns false, since wrongly reporting "you
+  /// were revoked" would sign out a legitimate user over what might just be
+  /// a connectivity blip.
+  static Future<bool> isThisDeviceRevoked({
     required String storeId,
     required String deviceId,
   }) async {
     try {
-      final result = await supabaseClient.rpc(
-        'signed_out_by_new_device',
-        params: {'p_store_id': storeId, 'p_device_id': deviceId},
-      );
-      return result as bool? ?? false;
+      final row = await supabaseClient
+          .from('devices')
+          .select('verified_at')
+          .eq('id', deviceId)
+          .eq('store_id', storeId)
+          .maybeSingle();
+      return row != null && row['verified_at'] == null;
     } catch (_) {
       return false;
     }
+  }
+
+  /// Every `devices` row for [storeId] - backs Settings > Active Devices.
+  static Future<List<Map<String, dynamic>>> fetchStoreDevices(
+    String storeId,
+  ) {
+    return supabaseClient
+        .from('devices')
+        .select()
+        .eq('store_id', storeId)
+        .order('last_seen_at', ascending: false);
+  }
+
+  /// Clears `devices.verified_at` for one (deviceId, storeId) pairing - the
+  /// "Log out this device" action. That device's own next sync/app-open
+  /// notices via [isThisDeviceRevoked]/`AuthService.checkDeviceTrust` and
+  /// gets challenged with OTP again, same as a genuinely new device.
+  static Future<void> revokeDevice({
+    required String storeId,
+    required String deviceId,
+  }) {
+    return supabaseClient
+        .from('devices')
+        .update({'verified_at': null})
+        .eq('id', deviceId)
+        .eq('store_id', storeId);
+  }
+
+  /// `stock_events` rows for [storeId] recorded by a device other than
+  /// [excludingDeviceId], with `synced_at` after [since] - the reconnect
+  /// catch-up query [RealtimeStockSyncService] runs before re-subscribing,
+  /// so a gap while offline (or while a Realtime channel was down) doesn't
+  /// leave this device's stock silently behind. Own-device events are
+  /// excluded here for the same reason [RealtimeStockSyncService] filters
+  /// them out of the live channel too - this device already applied its
+  /// own deltas locally the moment it created them.
+  static Future<List<Map<String, dynamic>>> fetchMissedStockEvents({
+    required String storeId,
+    required String excludingDeviceId,
+    DateTime? since,
+  }) {
+    var query = supabaseClient
+        .from('stock_events')
+        .select()
+        .eq('store_id', storeId)
+        .neq('device_id', excludingDeviceId);
+    if (since != null) {
+      query = query.gt('synced_at', since.toUtc().toIso8601String());
+    }
+    return query.order('synced_at');
+  }
+
+  /// The most recent `stock_events.synced_at` across the whole store, or
+  /// null if it has none yet - used to seed
+  /// [StoreConfig.lastStockEventSyncedAt] the very first time
+  /// [RealtimeStockSyncService] runs on a device that already has real
+  /// local data (as opposed to a fresh restore), so its existing local
+  /// stock - already correct as of right now, from before stock_events
+  /// existed - isn't perturbed by retroactively re-applying old events
+  /// (e.g. double-counting the `initial_stock` migration backfill). Mirrors
+  /// [RestoreService]'s own same-purpose watermark seeding on a fresh
+  /// restore.
+  static Future<DateTime?> fetchLatestStockEventSyncedAt(
+    String storeId,
+  ) async {
+    final rows = await supabaseClient
+        .from('stock_events')
+        .select('synced_at')
+        .eq('store_id', storeId)
+        .order('synced_at', ascending: false)
+        .limit(1);
+    if (rows.isEmpty) return null;
+    return DateTime.parse(rows.first['synced_at'] as String).toLocal();
   }
 
   /// Fetches verified shared-catalogue products created after [since].

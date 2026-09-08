@@ -7,6 +7,7 @@ import '../../shared/models/credit_customer.dart';
 import '../../shared/repositories/repositories.dart';
 import '../../shared/theme/app_theme.dart';
 import '../../shared/utils/friendly_error.dart';
+import '../../shared/widgets/cash_suggestion_chips.dart';
 import '../../shared/widgets/customer_display.dart';
 import '../../shared/widgets/quick_stock_update_sheet.dart';
 import '../stock/stock_ui.dart';
@@ -50,6 +51,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
   final TextEditingController _customerSearchController =
       TextEditingController();
   final GlobalKey _customerSectionKey = GlobalKey();
+  final GlobalKey _cashSectionKey = GlobalKey();
 
   String _paymentMethod = 'cash';
   CreditCustomer? _selectedCustomer;
@@ -68,8 +70,26 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _cashFocusNode.requestFocus();
     });
+    _cashFocusNode.addListener(_onCashFocus);
     _customerSearchFocusNode.addListener(_onCustomerSearchFocus);
     _loadCustomers();
+  }
+
+  /// The cash suggestion chips sit right below the Cash Received field, so
+  /// once the keyboard is up (it auto-focuses on open) they'd otherwise be
+  /// hidden behind it. Scroll them into view above the keyboard, same
+  /// pattern as [_onCustomerSearchFocus] below.
+  void _onCashFocus() {
+    if (!_cashFocusNode.hasFocus) return;
+    Future.delayed(const Duration(milliseconds: 350), () {
+      final ctx = _cashSectionKey.currentContext;
+      if (!mounted || ctx == null) return;
+      Scrollable.ensureVisible(
+        ctx,
+        alignment: 0,
+        duration: const Duration(milliseconds: 200),
+      );
+    });
   }
 
   /// The customer list sits below the search field, so once the keyboard is
@@ -109,6 +129,11 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
   }
 
   double get _cashReceived => double.tryParse(_cashController.text.trim()) ?? 0;
+
+  void _setCashReceived(double amount) {
+    _cashController.text = amount.toStringAsFixed(2);
+    setState(() {});
+  }
 
   /// Whether adding this sale to the selected customer's balance would put
   /// them over their credit limit (always false if they have no limit set).
@@ -497,6 +522,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
     final insufficient = hasReceived && change < 0;
 
     return Column(
+      key: _cashSectionKey,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const Text('CASH PAYMENT', style: _sectionLabelStyle),
@@ -510,6 +536,12 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
             prefixText: 'R ',
           ),
           onChanged: (_) => setState(() {}),
+        ),
+        const SizedBox(height: 12),
+        CashSuggestionChips(
+          amountDue: widget.cartTotal,
+          currentAmount: received,
+          onAmountChanged: _setCashReceived,
         ),
         if (hasReceived) ...[
           const SizedBox(height: 12),

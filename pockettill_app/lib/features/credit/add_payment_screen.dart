@@ -8,6 +8,7 @@ import '../../shared/repositories/repositories.dart';
 import '../../shared/theme/app_theme.dart';
 import '../../shared/utils/credit_balance_display.dart';
 import '../../shared/utils/friendly_error.dart';
+import '../../shared/widgets/cash_suggestion_chips.dart';
 import '../../shared/widgets/customer_display.dart';
 import '../../shared/widgets/pockettill_app_bar.dart';
 import '../sales/payment_success_screen.dart';
@@ -33,6 +34,7 @@ class _AddPaymentScreenState extends ConsumerState<AddPaymentScreen> {
   final TextEditingController _amountToPayController = TextEditingController();
   final TextEditingController _cashReceivedController = TextEditingController();
   final FocusNode _cashFocusNode = FocusNode(debugLabel: 'cashReceived');
+  final GlobalKey _cashSectionKey = GlobalKey();
 
   String _paymentMethod = 'cash';
   bool _submitting = false;
@@ -45,6 +47,23 @@ class _AddPaymentScreenState extends ConsumerState<AddPaymentScreen> {
     _cashReceivedController.addListener(_onChanged);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _cashFocusNode.requestFocus();
+    });
+    _cashFocusNode.addListener(_onCashFocus);
+  }
+
+  /// The cash suggestion chips sit right below the Amount Received field, so
+  /// once the keyboard is up (it auto-focuses on open) they'd otherwise be
+  /// hidden behind it - scroll them into view above it instead.
+  void _onCashFocus() {
+    if (!_cashFocusNode.hasFocus) return;
+    Future.delayed(const Duration(milliseconds: 350), () {
+      final ctx = _cashSectionKey.currentContext;
+      if (!mounted || ctx == null) return;
+      Scrollable.ensureVisible(
+        ctx,
+        alignment: 0,
+        duration: const Duration(milliseconds: 200),
+      );
     });
   }
 
@@ -203,17 +222,32 @@ class _AddPaymentScreenState extends ConsumerState<AddPaymentScreen> {
                 ),
                 if (_paymentMethod == 'cash') ...[
                   const SizedBox(height: 16),
-                  TextField(
-                    controller: _cashReceivedController,
-                    focusNode: _cashFocusNode,
-                    keyboardType: const TextInputType.numberWithOptions(
-                      decimal: true,
-                    ),
-                    decoration: const InputDecoration(
-                      labelText: 'Amount Received',
-                      prefixText: 'R ',
-                      helperText: 'Cash handed by customer',
-                    ),
+                  Column(
+                    key: _cashSectionKey,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      TextField(
+                        controller: _cashReceivedController,
+                        focusNode: _cashFocusNode,
+                        keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true,
+                        ),
+                        decoration: const InputDecoration(
+                          labelText: 'Amount Received',
+                          prefixText: 'R ',
+                          helperText: 'Cash handed by customer',
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      CashSuggestionChips(
+                        amountDue: _amountToPay,
+                        currentAmount: _cashReceived,
+                        onAmountChanged: (amount) {
+                          _cashReceivedController.text = amount
+                              .toStringAsFixed(2);
+                        },
+                      ),
+                    ],
                   ),
                   if (_cashReceived > _amountToPay) ...[
                     const SizedBox(height: 12),

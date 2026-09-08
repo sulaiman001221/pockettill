@@ -12,10 +12,12 @@ import '../../shared/models/return_item.dart';
 import '../../shared/models/return_record.dart';
 import '../../shared/models/sale.dart';
 import '../../shared/models/sale_item.dart';
+import '../../shared/models/stock_event.dart';
 import '../../shared/models/store_config.dart';
 import '../../shared/models/sync_event.dart';
 import '../../shared/repositories/store_config_repository.dart';
 import '../database/isar_service.dart';
+import '../hardware/hardware_detector.dart';
 import '../supabase/supabase_service.dart';
 import '../sync/event_queue.dart';
 import '../sync/restore_service.dart';
@@ -218,6 +220,7 @@ class AuthService {
     await SupabaseService.supabaseClient.from('devices').upsert({
       'id': deviceId,
       'store_id': store['uuid'],
+      'device_name': HardwareDetector.deviceName(),
       'verified_at': DateTime.now().toUtc().toIso8601String(),
       'last_seen_at': DateTime.now().toUtc().toIso8601String(),
     });
@@ -241,6 +244,7 @@ class AuthService {
         await IsarService.db.extraIncomes.clear();
         await IsarService.db.riskLogs.clear();
         await IsarService.db.syncEvents.clear();
+        await IsarService.db.stockEvents.clear();
       });
     }
 
@@ -405,6 +409,7 @@ class AuthService {
     await SupabaseService.supabaseClient.from('devices').upsert({
       'id': deviceId,
       'store_id': store['uuid'],
+      'device_name': HardwareDetector.deviceName(),
       'verified_at': DateTime.now().toUtc().toIso8601String(),
       'last_seen_at': DateTime.now().toUtc().toIso8601String(),
     });
@@ -551,34 +556,22 @@ class AuthService {
     await SupabaseService.supabaseClient.from('devices').upsert({
       'id': deviceId,
       'store_id': store['uuid'],
+      'device_name': HardwareDetector.deviceName(),
       'last_seen_at': DateTime.now().toUtc().toIso8601String(),
     });
 
-    // This device is now the store's single active device - stamped before
-    // the revoke below so `signed_out_by_new_device` has something to
-    // compare against the moment the other device's refresh fails.
-    await SupabaseService.supabaseClient
-        .from('stores')
-        .update({'active_device_id': deviceId})
-        .eq('uuid', store['uuid']);
-
-    // A `signOut(scope: SignOutScope.others)` call used to sit here to kick
-    // out every other session on login - removed after confirming (via a
-    // direct RLS simulation against Supabase) that it was degrading this
-    // client's own just-established session to unauthenticated, causing
-    // every request right after login - including the call above - to be
-    // rejected by RLS. Re-added now that the installed gotrue-dart's own
-    // `_signOut` was checked directly (package:gotrue 2.26.0) and only
-    // removes the *local* session when `scope != SignOutScope.others` -
-    // with `others`, this client's own session is left untouched, so the
-    // failure mode that caused the original removal no longer applies.
-    // Best-effort: a failure here must not block this device's own login.
-    try {
-      await SupabaseService.supabaseClient.auth.signOut(
-        scope: SignOutScope.others,
-      );
-    } catch (_) {}
-
+    // Forced single-active-device logout removed 2026-09-09 - it didn't
+    // actually prevent conflicting writes (two devices could still both be
+    // logged in and working *offline* simultaneously, neither yet revoked),
+    // and now that stock is event-sourced (see stock_events/
+    // RealtimeStockSyncService) there's no correctness reason to kick any
+    // other device out on a fresh login. Device trust itself is untouched -
+    // `devices.verified_at` (checked above via `_isDeviceVerified`) still
+    // gates a genuinely new device behind OTP; only the "and then revoke
+    // everyone else" step is gone. `stores.active_device_id` is left in
+    // place, just unused, rather than dropping the column for no functional
+    // benefit. See Settings > Active Devices for the new, explicit,
+    // per-device "Log out this device" replacement.
     final isSwitchingStore =
         existingConfig != null && existingConfig.storeId != store['uuid'];
 
@@ -605,6 +598,7 @@ class AuthService {
         await IsarService.db.extraIncomes.clear();
         await IsarService.db.riskLogs.clear();
         await IsarService.db.syncEvents.clear();
+        await IsarService.db.stockEvents.clear();
       });
     }
 
@@ -756,21 +750,33 @@ class AuthService {
     }
   }
 
-  /// Whether this device's session was just invalidated because a
-  /// *different* device logged into this store more recently, as opposed to
-  /// a natural token expiry - the two are otherwise indistinguishable, since
-  /// both surface through gotrue-dart as the same
-  /// `SignOutReason.sessionExpired` (a revoked refresh token fails to
-  /// refresh exactly the same way an actually-expired one does). Used by
-  /// [ShellScreen] to decide which message to show after an involuntary
-  /// sign-out. Best-effort: returns false on any error (e.g. offline) rather
-  /// than throwing, since the caller's fallback (a generic "session
-  /// expired" message) is the safe default when this can't be confirmed.
+  /// Whether this device has been remotely logged out via Settings > Active
+  /// Devices, as opposed to a natural token expiry. Used by [ShellScreen]'s
+  /// auth-state listener to decide which message to show after an
+  /// involuntary sign-out - kept mostly for defensiveness now rather than
+  /// as the primary detection path.
+  ///
+  /// Since the forced single-active-device logout (and its
+  /// `auth.signOut(scope: .others)` call) was removed 2026-09-09, "Log out
+  /// this device" only clears `devices.verified_at` - it never revokes the
+  /// actual Supabase session/refresh token, deliberately (a true per-device
+  /// token revoke needs the GoTrue admin API, i.e. a new Edge Function -
+  /// out of scope for this change). That means a revoked device's token
+  /// technically stays valid/refreshable, so `onAuthStateChange` won't
+  /// actually fire a `sessionExpired` event for this reason anymore -
+  /// [SyncService.displacedByAnotherDevice] (checked every sync cycle via
+  /// [SupabaseService.isThisDeviceRevoked]) is the real, reliable detection
+  /// path now. This just covers the edge case of an actual token-level
+  /// event happening to fire for some other reason while this device also
+  /// happens to be revoked. Best-effort: returns false on any error (e.g.
+  /// offline) rather than throwing, since the caller's fallback (a generic
+  /// "session expired" message) is the safe default when this can't be
+  /// confirmed.
   static Future<bool> wasSignedOutByNewDevice({
     required String storeId,
     required String deviceId,
   }) {
-    return SupabaseService.isDisplacedByAnotherDevice(
+    return SupabaseService.isThisDeviceRevoked(
       storeId: storeId,
       deviceId: deviceId,
     );

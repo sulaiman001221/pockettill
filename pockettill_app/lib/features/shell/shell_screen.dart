@@ -26,7 +26,17 @@ import 'app_drawer.dart';
 /// next time the drawer opens. [ShellScreen] persists for the app's whole
 /// lifetime, so state lives here instead.
 class ShellScreen extends ConsumerStatefulWidget {
-  const ShellScreen({super.key});
+  const ShellScreen({super.key, this.showNewDeviceNotice = false});
+
+  /// True right after this device has just completed the new-device OTP
+  /// challenge (login_screen.dart/splash_screen.dart's `onVerified`) - shows
+  /// a one-time confirmation that this device is now trusted on the
+  /// account, the local (on-device) form of the spec's "owner gets
+  /// notification: New device added to your account". A true cross-device
+  /// push (alerting the owner on a *different* phone) would need a whole
+  /// new push-notification pipeline (FCM/APNs) this app doesn't have yet -
+  /// out of scope for this change, flagged rather than silently skipped.
+  final bool showNewDeviceNotice;
 
   @override
   ConsumerState<ShellScreen> createState() => _ShellScreenState();
@@ -63,6 +73,18 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
         .displacedByAnotherDevice
         .listen((_) => unawaited(_handleSignedOut(kickedByNewDevice: true)));
     unawaited(_checkFoundingStoreQualification());
+
+    if (widget.showNewDeviceNotice) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('New device added to your account'),
+            duration: Duration(seconds: 4),
+          ),
+        );
+      });
+    }
   }
 
   /// Silently checks (every time the app opens to here, logged in) whether
