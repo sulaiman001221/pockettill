@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
+import '../../core/sync/realtime_data_sync_service.dart';
 import '../../shared/models/risk_log.dart';
 import '../../shared/theme/app_theme.dart';
 import '../../shared/widgets/pockettill_app_bar.dart';
@@ -68,6 +69,13 @@ class RiskLogScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // Another device's risk_log entry should show up here without a manual
+    // pull-to-refresh - see RealtimeDataSyncService.
+    ref.listen(
+      riskLogChangedProvider,
+      (_, _) => ref.invalidate(filteredRiskLogProvider),
+    );
+
     final filter = ref.watch(riskLogFilterProvider);
     final entriesAsync = ref.watch(filteredRiskLogProvider);
     final entries = (entriesAsync.value ?? const [])
@@ -81,6 +89,7 @@ class RiskLogScreen extends ConsumerWidget {
         onRefresh: () => ref.refresh(filteredRiskLogProvider.future),
         child: CustomScrollView(
           slivers: [
+            const SliverToBoxAdapter(child: SizedBox(height: 16)),
             SliverToBoxAdapter(child: _buildFilterChips(context, ref, filter)),
             const SliverToBoxAdapter(child: SizedBox(height: 16)),
             if (entriesAsync.isLoading)

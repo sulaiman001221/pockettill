@@ -80,7 +80,11 @@ class RealtimeStockSyncService {
               _handleRemoteEvent(payload.newRecord, storeConfig.deviceId),
             ),
           )
-          .subscribe();
+          .subscribe((status, error) {
+            if (error != null) {
+              debugPrint('RealtimeStockSyncService: channel error=$error');
+            }
+          });
       _channel = channel;
     } catch (e) {
       debugPrint('RealtimeStockSyncService.start() failed: $e');

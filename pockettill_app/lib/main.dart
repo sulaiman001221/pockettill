@@ -15,6 +15,7 @@ import 'core/hardware/sunmi_printer_service.dart';
 import 'core/hardware/sunmi_scanner_service.dart';
 import 'core/supabase/supabase_service.dart';
 import 'core/sync/reachability_service.dart';
+import 'core/sync/realtime_data_sync_service.dart';
 import 'core/sync/realtime_stock_sync_service.dart';
 import 'core/sync/sync_service.dart';
 import 'shared/theme/system_ui.dart';
@@ -71,26 +72,53 @@ Future<void> main() async {
 
   final syncService = container.read(syncServiceProvider);
   final realtimeStockSync = container.read(realtimeStockSyncServiceProvider);
+  final realtimeDataSync = container.read(realtimeDataSyncServiceProvider);
+
+  Future<void> syncAndGoLive() async {
+    // Push this device's own pending changes first, then open the Realtime
+    // channels (each starts with its own catch-up pull of whatever other
+    // devices recorded while this one was offline/backgrounded) - pushing
+    // first means other devices' next catch-up already sees this device's
+    // latest, even though the ordering doesn't affect this device's own
+    // correctness (catch-up always excludes its own device_id/uuids
+    // regardless of push timing).
+    await syncService.sync();
+    await Future.wait([realtimeStockSync.start(), realtimeDataSync.start()]);
+  }
+
+  Future<void> goOffline() async {
+    // A dead channel doesn't deliver anything useful anyway - closing it
+    // here means the next reconnect always starts from a clean
+    // catch-up-then-subscribe, not a stale channel silently doing nothing.
+    await Future.wait([realtimeStockSync.stop(), realtimeDataSync.stop()]);
+  }
 
   reachabilityService.isReachable.listen((reachable) {
     if (reachable) {
-      // Push this device's own pending changes first, then open the
-      // Realtime channel (which itself starts with a catch-up pull of
-      // whatever other devices recorded while this one was offline) -
-      // pushing first means other devices' next catch-up already sees this
-      // device's latest, even though the ordering doesn't affect this
-      // device's own correctness (catch-up always excludes its own
-      // device_id regardless of push timing).
-      unawaited(
-        syncService.sync().then((_) => realtimeStockSync.start()),
-      );
+      unawaited(syncAndGoLive());
     } else {
-      // A dead channel doesn't deliver anything useful anyway - closing it
-      // here means the next reconnect always starts from a clean
-      // catch-up-then-subscribe, not a stale channel silently doing nothing.
-      unawaited(realtimeStockSync.stop());
+      unawaited(goOffline());
     }
   });
+
+  // Realtime channels only ever got (re)started above, on a network
+  // reachability *change* - a phone that's simply backgrounded and later
+  // resumed (screen locked, home button, switching to another app) never
+  // fires that listener at all, even though Android routinely lets a
+  // background app's sockets go stale or gets suspended outright. Found
+  // 2026-09-09 testing with two real devices: neither ever saw the other's
+  // activity, because whichever device wasn't actively in the foreground
+  // had a dead Realtime connection with nothing to notice and revive it.
+  // Forcing a full stop-then-restart on every resume - not just "resume if
+  // not already running" - guarantees a fresh, healthy channel plus a
+  // proper catch-up pull for anything missed while backgrounded, rather
+  // than trusting a connection that's been sitting unused.
+  WidgetsBinding.instance.addObserver(
+    _RealtimeLifecycleReactor(onResumed: () async {
+      await goOffline();
+      await syncAndGoLive();
+    }),
+  );
 
   runApp(
     UncontrolledProviderScope(
@@ -98,4 +126,21 @@ Future<void> main() async {
       child: const PocketTillApp(),
     ),
   );
+}
+
+/// Registered once for the app's lifetime (never removed - there's no
+/// natural "dispose" point at this level, and the process dying takes it
+/// with it) - see the comment where it's constructed in [main] for why
+/// this exists.
+class _RealtimeLifecycleReactor extends WidgetsBindingObserver {
+  _RealtimeLifecycleReactor({required this.onResumed});
+
+  final Future<void> Function() onResumed;
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      unawaited(onResumed());
+    }
+  }
 }

@@ -278,8 +278,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               const Text('Reset Password', style: AppTheme.mainTitle),
               const SizedBox(height: 12),
               const Text(
-                "Enter your phone number and we'll send a code over "
-                'WhatsApp to verify it\'s you.',
+                "Enter your phone number and we'll send a code via "
+                "SMS or WhatsApp to verify it's you.",
                 style: AppTheme.bodySubtitle,
               ),
               const SizedBox(height: 16),

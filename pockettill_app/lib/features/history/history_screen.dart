@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
+import '../../core/sync/realtime_data_sync_service.dart';
 import '../../shared/models/extra_income.dart';
 import '../../shared/models/return_record.dart';
 import '../../shared/models/sale.dart';
@@ -104,6 +105,13 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Another device's sale/return should show up here without a manual
+    // pull-to-refresh - see RealtimeDataSyncService.
+    ref.listen(salesDataChangedProvider, (_, _) {
+      ref.invalidate(filteredSalesProvider);
+      ref.invalidate(filteredReturnsProvider);
+    });
+
     final filter = ref.watch(historyFilterProvider);
     final customRange = ref.watch(historyCustomRangeProvider);
     final salesAsync = ref.watch(filteredSalesProvider);
@@ -151,6 +159,13 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
             ]),
             child: CustomScrollView(
               controller: _scrollController,
+              // RefreshIndicator needs the scrollable to register a drag
+              // even when content doesn't fill the viewport - the default
+              // clamping physics can otherwise make the pull gesture
+              // register unreliably, most noticeable on "Today" (the
+              // shortest list, easiest to have too little content to
+              // naturally overflow). Found 2026-09-10.
+              physics: const AlwaysScrollableScrollPhysics(),
               slivers: [
             SliverToBoxAdapter(
               child: Padding(
