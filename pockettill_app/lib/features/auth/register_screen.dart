@@ -44,13 +44,13 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   bool _agreedToTerms = false;
 
   late final _termsTapRecognizer = TapGestureRecognizer()
-    ..onTap = () => Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const TermsOfServiceScreen()),
-    );
+    ..onTap = () => Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const TermsOfServiceScreen()));
   late final _privacyTapRecognizer = TapGestureRecognizer()
-    ..onTap = () => Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const PrivacyPolicyScreen()),
-    );
+    ..onTap = () => Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const PrivacyPolicyScreen()));
 
   @override
   void initState() {
@@ -65,10 +65,13 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   void _onChanged() {
     if (!mounted) return;
     setState(() {
-      _storeNameTouched = _storeNameTouched || _storeNameController.text.isNotEmpty;
-      _ownerNameTouched = _ownerNameTouched || _ownerNameController.text.isNotEmpty;
+      _storeNameTouched =
+          _storeNameTouched || _storeNameController.text.isNotEmpty;
+      _ownerNameTouched =
+          _ownerNameTouched || _ownerNameController.text.isNotEmpty;
       _phoneTouched = _phoneTouched || _phoneController.text.isNotEmpty;
-      _passwordTouched = _passwordTouched || _passwordController.text.isNotEmpty;
+      _passwordTouched =
+          _passwordTouched || _passwordController.text.isNotEmpty;
       _confirmPasswordTouched =
           _confirmPasswordTouched || _confirmPasswordController.text.isNotEmpty;
     });
@@ -130,7 +133,8 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     }
     return friendlyErrorMessage(
       error,
-      fallback: 'Could not create your account. Please try again or '
+      fallback:
+          'Could not create your account. Please try again or '
           'contact support.',
     );
   }
@@ -384,34 +388,40 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
       decoration: TextDecoration.underline,
     );
     return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
+        // Checkbox's default tap target is a much bigger invisible box than
+        // the visible square (48x48, per Material spec) - Row aligns that
+        // whole box, not just what's drawn, so without shrinking it down to
+        // its actual visible size first, "center" still looks off (the
+        // checkbox reads as sitting lower than the text it's meant to line
+        // up with). shrinkWrap + compact density make the checkbox's layout
+        // bounds match what's actually drawn.
         Checkbox(
           value: _agreedToTerms,
-          onChanged: (value) =>
-              setState(() => _agreedToTerms = value ?? false),
+          onChanged: (value) => setState(() => _agreedToTerms = value ?? false),
+          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          visualDensity: VisualDensity.compact,
         ),
+        const SizedBox(width: 4),
         Expanded(
-          child: Padding(
-            padding: const EdgeInsets.only(top: 12),
-            child: RichText(
-              text: TextSpan(
-                style: const TextStyle(fontSize: 13, color: AppTheme.textPrimary),
-                children: [
-                  const TextSpan(text: 'I agree to the '),
-                  TextSpan(
-                    text: 'Terms of Service',
-                    style: linkStyle,
-                    recognizer: _termsTapRecognizer,
-                  ),
-                  const TextSpan(text: ' and '),
-                  TextSpan(
-                    text: 'Privacy Policy',
-                    style: linkStyle,
-                    recognizer: _privacyTapRecognizer,
-                  ),
-                ],
-              ),
+          child: RichText(
+            text: TextSpan(
+              style: const TextStyle(fontSize: 13, color: AppTheme.textPrimary),
+              children: [
+                const TextSpan(text: 'I agree to the '),
+                TextSpan(
+                  text: 'Terms of Service',
+                  style: linkStyle,
+                  recognizer: _termsTapRecognizer,
+                ),
+                const TextSpan(text: ' and '),
+                TextSpan(
+                  text: 'Privacy Policy',
+                  style: linkStyle,
+                  recognizer: _privacyTapRecognizer,
+                ),
+              ],
             ),
           ),
         ),

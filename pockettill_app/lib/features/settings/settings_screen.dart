@@ -22,6 +22,7 @@ import '../../shared/utils/contact_support.dart';
 import '../../shared/utils/sync_status.dart';
 import '../../shared/widgets/confirmation_dialog.dart';
 import '../../shared/widgets/pockettill_app_bar.dart';
+import 'account_deletion_screen.dart';
 import 'active_devices_screen.dart';
 import 'privacy_policy_screen.dart';
 import 'terms_of_service_screen.dart';
@@ -1124,26 +1125,66 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           ),
         ],
       ),
-      child: InkWell(
-        onTap: _confirmLogout,
-        borderRadius: BorderRadius.circular(16),
-        child: const Padding(
-          padding: EdgeInsets.all(16),
-          child: Row(
-            children: [
-              Icon(Icons.logout, color: AppTheme.logoutRed),
-              SizedBox(width: 12),
-              Text(
-                'Logout',
-                style: TextStyle(
-                  color: AppTheme.logoutRed,
-                  fontWeight: FontWeight.w600,
-                  fontSize: 14,
-                ),
+      child: Column(
+        children: [
+          InkWell(
+            onTap: _confirmLogout,
+            borderRadius: const BorderRadius.vertical(
+              top: Radius.circular(16),
+            ),
+            child: const Padding(
+              padding: EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  Icon(Icons.logout, color: AppTheme.logoutRed),
+                  SizedBox(width: 12),
+                  Text(
+                    'Logout',
+                    style: TextStyle(
+                      color: AppTheme.logoutRed,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 14,
+                    ),
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
-        ),
+          Divider(
+            color: AppTheme.logoutRed.withValues(alpha: 0.2),
+            height: 1,
+            indent: 16,
+            endIndent: 16,
+          ),
+          InkWell(
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const AccountDeletionScreen()),
+            ),
+            borderRadius: const BorderRadius.vertical(
+              bottom: Radius.circular(16),
+            ),
+            child: const Padding(
+              padding: EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.delete_forever_outlined,
+                    color: AppTheme.logoutRed,
+                  ),
+                  SizedBox(width: 12),
+                  Text(
+                    'Delete Account',
+                    style: TextStyle(
+                      color: AppTheme.logoutRed,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 14,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

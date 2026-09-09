@@ -21,7 +21,7 @@ class TermsOfServiceScreen extends StatelessWidget {
         title: 'PocketTill Terms of Use',
         effectiveDate:
             'PocketTill (Pty) Ltd — Effective Date: 15 August 2026 | '
-            'Last Updated: 15 August 2026',
+            'Last Updated: 9 September 2026',
         intro: [
           'Welcome to PocketTill. These Terms of Use ("Terms") govern your '
               'access to and use of the PocketTill application, website, '
@@ -173,7 +173,54 @@ class TermsOfServiceScreen extends StatelessWidget {
               'analytics and services.',
             ),
           ]),
-          LegalSection('7. Acceptable Use', [
+          LegalSection('7. User-Uploaded Images', [
+            LegalParagraph(
+              'By uploading images to PocketTill, you confirm that:',
+            ),
+            LegalBullets([
+              'You own the image or have the legal right to use and '
+                  'upload it.',
+              'The image does not infringe on any copyright, trademark, '
+                  'or intellectual property rights of any third party.',
+              'You accept full legal responsibility for any images you '
+                  'upload. PocketTill and its operators accept no '
+                  'liability for copyright infringement resulting from '
+                  'user-uploaded content.',
+              'PocketTill reserves the right to remove any image that is '
+                  'reported as infringing or that we reasonably believe '
+                  'violates third-party rights, without notice.',
+              'By uploading an image, you grant PocketTill a '
+                  'non-exclusive licence to use, display, and enhance '
+                  'that image within the PocketTill platform for the '
+                  'purpose of improving the product catalogue.',
+            ]),
+          ]),
+          LegalSection('8. PocketTill Catalogue Images', [
+            LegalParagraph(
+              'All images in the PocketTill verified product catalogue '
+              'that were not uploaded by users are the intellectual '
+              'property of PocketTill.',
+            ),
+            LegalParagraph(
+              'These images were created or photographed by PocketTill '
+              'and are protected by copyright.',
+            ),
+            LegalParagraph('You may not:'),
+            LegalBullets([
+              'Download, copy, or extract PocketTill catalogue images for '
+                  'use outside the PocketTill application.',
+              'Use PocketTill catalogue images in any other application, '
+                  'website, or publication without express written '
+                  'permission from PocketTill.',
+              'Claim ownership of any PocketTill catalogue image.',
+            ]),
+            LegalParagraph(
+              'Catalogue images are licensed to you solely for display '
+              'within the PocketTill application for the purpose of '
+              'identifying products in your store.',
+            ),
+          ]),
+          LegalSection('9. Acceptable Use', [
             LegalParagraph('You agree not to:'),
             LegalBullets([
               'Use PocketTill for unlawful purposes',
@@ -192,7 +239,7 @@ class TermsOfServiceScreen extends StatelessWidget {
                   'its users or its systems',
             ]),
           ]),
-          LegalSection('8. Accuracy of Information', [
+          LegalSection('10. Accuracy of Information', [
             LegalParagraph(
               'PocketTill provides tools for recording and analysing '
               'business information. You are responsible for reviewing '
@@ -210,7 +257,7 @@ class TermsOfServiceScreen extends StatelessWidget {
               'professional accounting, tax, legal or financial advice.',
             ),
           ]),
-          LegalSection('9. Availability of the Service', [
+          LegalSection('11. Availability of the Service', [
             LegalParagraph(
               'We aim to keep PocketTill available and reliable, but we '
               'do not guarantee that the Service will always be available '
@@ -229,7 +276,7 @@ class TermsOfServiceScreen extends StatelessWidget {
               'systems.',
             ),
           ]),
-          LegalSection('10. Third-Party Services', [
+          LegalSection('12. Third-Party Services', [
             LegalParagraph(
               'PocketTill may rely on third-party providers to operate '
               'certain parts of the Service, including infrastructure, '
@@ -246,7 +293,7 @@ class TermsOfServiceScreen extends StatelessWidget {
               'services.',
             ),
           ]),
-          LegalSection('11. Data and Privacy', [
+          LegalSection('13. Data and Privacy', [
             LegalParagraph(
               'Your use of PocketTill is also governed by our Privacy '
               'Policy. The Privacy Policy explains what information we '
@@ -254,7 +301,7 @@ class TermsOfServiceScreen extends StatelessWidget {
               'it and the rights available to data subjects.',
             ),
           ]),
-          LegalSection('12. Aggregated and Anonymised Information', [
+          LegalSection('14. Aggregated and Anonymised Information', [
             LegalParagraph(
               'PocketTill may analyse information generated through the '
               'Service to understand general trends and improve its '
@@ -280,7 +327,7 @@ class TermsOfServiceScreen extends StatelessWidget {
               'doing so.',
             ),
           ]),
-          LegalSection('13. Intellectual Property', [
+          LegalSection('15. Intellectual Property', [
             LegalParagraph(
               'PocketTill and its software, branding, designs, logos, '
               'interfaces, content and technology are owned by or '
@@ -292,7 +339,7 @@ class TermsOfServiceScreen extends StatelessWidget {
               'intellectual property to you.',
             ),
           ]),
-          LegalSection('14. Feedback', [
+          LegalSection('16. Feedback', [
             LegalParagraph(
               'If you provide suggestions, ideas or feedback regarding '
               'PocketTill, you agree that PocketTill may use that '
@@ -301,7 +348,7 @@ class TermsOfServiceScreen extends StatelessWidget {
               'your confidential personal or business information.',
             ),
           ]),
-          LegalSection('15. Suspension and Termination', [
+          LegalSection('17. Suspension and Termination', [
             LegalParagraph('You may stop using PocketTill at any time.'),
             LegalParagraph(
               'PocketTill may suspend or terminate an account where '
@@ -317,7 +364,7 @@ class TermsOfServiceScreen extends StatelessWidget {
               'required for security, legal or operational reasons.',
             ),
           ]),
-          LegalSection('16. Data After Account Termination', [
+          LegalSection('18. Data After Account Termination', [
             LegalParagraph(
               'When an account is closed, PocketTill may retain certain '
               'information for as long as reasonably necessary to comply '
@@ -331,7 +378,7 @@ class TermsOfServiceScreen extends StatelessWidget {
               'practices and applicable law.',
             ),
           ]),
-          LegalSection('17. Disclaimers', [
+          LegalSection('19. Disclaimers', [
             LegalParagraph(
               'PocketTill is provided as a software service to assist '
               'with shop management.',
@@ -349,7 +396,7 @@ class TermsOfServiceScreen extends StatelessWidget {
               'under South African law.',
             ),
           ]),
-          LegalSection('18. Limitation of Liability', [
+          LegalSection('20. Limitation of Liability', [
             LegalParagraph(
               'To the maximum extent permitted by law, PocketTill will '
               'not be responsible for indirect, incidental, special or '
@@ -362,7 +409,7 @@ class TermsOfServiceScreen extends StatelessWidget {
               'limitation is prohibited by applicable law.',
             ),
           ]),
-          LegalSection('19. Changes to These Terms', [
+          LegalSection('21. Changes to These Terms', [
             LegalParagraph(
               'We may update these Terms from time to time. When we make '
               'material changes, we will take reasonable steps to notify '
@@ -375,7 +422,7 @@ class TermsOfServiceScreen extends StatelessWidget {
               'Terms, to the extent permitted by law.',
             ),
           ]),
-          LegalSection('20. Governing Law', [
+          LegalSection('22. Governing Law', [
             LegalParagraph(
               'These Terms are governed by the laws of the Republic of '
               'South Africa. Any dispute relating to these Terms will be '
@@ -383,7 +430,7 @@ class TermsOfServiceScreen extends StatelessWidget {
               'mechanisms of South Africa.',
             ),
           ]),
-          LegalSection('21. Contact', [
+          LegalSection('23. Contact', [
             LegalParagraph('PocketTill (Pty) Ltd'),
             LegalParagraph('Website: https://pockettill.co.za'),
             LegalParagraph('Email: hello@pockettill.co.za'),

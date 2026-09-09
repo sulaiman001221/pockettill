@@ -558,6 +558,17 @@ class AuthService {
       'store_id': store['uuid'],
       'device_name': HardwareDetector.deviceName(),
       'last_seen_at': DateTime.now().toUtc().toIso8601String(),
+      // REVIEWER_TEST_ACCOUNT - login() bypasses the OTP challenge
+      // entirely for this phone (see isReviewerAccount there), so it never
+      // goes through completeNewDeviceLogin - the only other place that
+      // sets verified_at. Omitting it here left this upsert's very first
+      // insert for a reviewer device with verified_at permanently null,
+      // which SyncService's per-cycle isThisDeviceRevoked check (added
+      // 2026-09-09) reads as "this device was revoked" - kicking the
+      // reviewer out mid-session with the "signed out from another device"
+      // banner on every single use. Found 2026-09-09.
+      if (formattedPhone == _reviewerTestPhone)
+        'verified_at': DateTime.now().toUtc().toIso8601String(),
     });
 
     // Forced single-active-device logout removed 2026-09-09 - it didn't

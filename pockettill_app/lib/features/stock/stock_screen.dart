@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/sync/realtime_data_sync_service.dart';
 import '../../core/sync/realtime_stock_sync_service.dart';
 import '../../core/sync/sync_service.dart';
 import '../../shared/models/product.dart';
@@ -307,6 +308,10 @@ class _StockScreenState extends ConsumerState<StockScreen> {
     // themselves. Silent, same as _syncImagesEagerly - the underlying
     // Product read is local/instant, no loading spinner needed for it.
     ref.listen(stockChangedProvider, (_, _) => _loadProducts());
+    // Another device creating or editing a product (not just its stock,
+    // already covered above) should show up here too without a manual
+    // refresh - see RealtimeDataSyncService.
+    ref.listen(productsChangedProvider, (_, _) => _loadProducts());
 
     return GestureDetector(
       // Tapping anywhere outside the search field dismisses its focus -

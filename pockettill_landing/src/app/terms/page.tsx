@@ -142,7 +142,43 @@ const blocks: LegalBlock[] = [
     text: "PocketTill may also use aggregated information from the product catalogue to improve its product database, analytics and services.",
   },
 
-  { type: "heading", text: "7. Acceptable Use" },
+  { type: "heading", text: "7. User-Uploaded Images" },
+  { type: "p", text: "By uploading images to PocketTill, you confirm that:" },
+  {
+    type: "list",
+    items: [
+      "You own the image or have the legal right to use and upload it;",
+      "The image does not infringe on any copyright, trademark, or intellectual property rights of any third party;",
+      "You accept full legal responsibility for any images you upload. PocketTill and its operators accept no liability for copyright infringement resulting from user-uploaded content;",
+      "PocketTill reserves the right to remove any image that is reported as infringing or that we reasonably believe violates third-party rights, without notice; and",
+      "By uploading an image, you grant PocketTill a non-exclusive licence to use, display, and enhance that image within the PocketTill platform for the purpose of improving the product catalogue.",
+    ],
+  },
+
+  { type: "heading", text: "8. PocketTill Catalogue Images" },
+  {
+    type: "p",
+    text: "All images in the PocketTill verified product catalogue that were not uploaded by users are the intellectual property of PocketTill.",
+  },
+  {
+    type: "p",
+    text: "These images were created or photographed by PocketTill and are protected by copyright.",
+  },
+  { type: "p", text: "You may not:" },
+  {
+    type: "list",
+    items: [
+      "Download, copy, or extract PocketTill catalogue images for use outside the PocketTill application;",
+      "Use PocketTill catalogue images in any other application, website, or publication without express written permission from PocketTill; or",
+      "Claim ownership of any PocketTill catalogue image.",
+    ],
+  },
+  {
+    type: "p",
+    text: "Catalogue images are licensed to you solely for display within the PocketTill application for the purpose of identifying products in your store.",
+  },
+
+  { type: "heading", text: "9. Acceptable Use" },
   { type: "p", text: "You agree not to:" },
   {
     type: "list",
@@ -158,7 +194,7 @@ const blocks: LegalBlock[] = [
     ],
   },
 
-  { type: "heading", text: "8. Accuracy of Information" },
+  { type: "heading", text: "10. Accuracy of Information" },
   {
     type: "p",
     text: "PocketTill provides tools for recording and analysing business information. You are responsible for reviewing the information you enter and ensuring that your business records are accurate.",
@@ -172,7 +208,7 @@ const blocks: LegalBlock[] = [
     text: "PocketTill should not be treated as a substitute for professional accounting, tax, legal or financial advice.",
   },
 
-  { type: "heading", text: "9. Availability of the Service" },
+  { type: "heading", text: "11. Availability of the Service" },
   {
     type: "p",
     text: "We aim to keep PocketTill available and reliable, but we do not guarantee that the Service will always be available without interruption.",
@@ -186,7 +222,7 @@ const blocks: LegalBlock[] = [
     text: "We may temporarily restrict access where reasonably necessary to protect PocketTill, its users or our systems.",
   },
 
-  { type: "heading", text: "10. Third-Party Services" },
+  { type: "heading", text: "12. Third-Party Services" },
   {
     type: "p",
     text: "PocketTill may rely on third-party providers to operate certain parts of the Service, including infrastructure, authentication, communications, hosting, analytics or other technical services.",
@@ -200,13 +236,13 @@ const blocks: LegalBlock[] = [
     text: "PocketTill will take reasonable steps to use appropriate providers and protect information processed through such services.",
   },
 
-  { type: "heading", text: "11. Data and Privacy" },
+  { type: "heading", text: "13. Data and Privacy" },
   {
     type: "p",
     text: "Your use of PocketTill is also governed by our Privacy Policy. The Privacy Policy explains what information we collect, why we collect it, how we use it, how we protect it and the rights available to data subjects.",
   },
 
-  { type: "heading", text: "12. Aggregated and Anonymised Information" },
+  { type: "heading", text: "14. Aggregated and Anonymised Information" },
   {
     type: "p",
     text: "PocketTill may analyse information generated through the Service to understand general trends and improve its products and services.",
@@ -224,7 +260,7 @@ const blocks: LegalBlock[] = [
     text: "If PocketTill proposes to use personal information for a new purpose that is not compatible with the purpose for which the information was originally collected, PocketTill will take any steps required by applicable law before doing so.",
   },
 
-  { type: "heading", text: "13. Intellectual Property" },
+  { type: "heading", text: "15. Intellectual Property" },
   {
     type: "p",
     text: "PocketTill and its software, branding, designs, logos, interfaces, content and technology are owned by or licensed to PocketTill and are protected by applicable intellectual property laws.",
@@ -234,13 +270,13 @@ const blocks: LegalBlock[] = [
     text: "These Terms do not transfer ownership of PocketTill's intellectual property to you.",
   },
 
-  { type: "heading", text: "14. Feedback" },
+  { type: "heading", text: "16. Feedback" },
   {
     type: "p",
     text: "If you provide suggestions, ideas or feedback regarding PocketTill, you agree that PocketTill may use that feedback to improve the Service without owing you compensation, provided that doing so does not disclose your confidential personal or business information.",
   },
 
-  { type: "heading", text: "15. Suspension and Termination" },
+  { type: "heading", text: "17. Suspension and Termination" },
   { type: "p", text: "You may stop using PocketTill at any time." },
   {
     type: "p",
@@ -251,7 +287,7 @@ const blocks: LegalBlock[] = [
     text: "Where reasonably possible, PocketTill will provide notice before terminating an account unless immediate action is required for security, legal or operational reasons.",
   },
 
-  { type: "heading", text: "16. Data After Account Termination" },
+  { type: "heading", text: "18. Data After Account Termination" },
   {
     type: "p",
     text: "When an account is closed, PocketTill may retain certain information for as long as reasonably necessary to comply with legal obligations, resolve disputes, prevent fraud or abuse, maintain security, or fulfil other legitimate purposes permitted by applicable law.",
@@ -261,7 +297,7 @@ const blocks: LegalBlock[] = [
     text: "Information that is no longer required will be deleted, destroyed or anonymised in accordance with our retention practices and applicable law.",
   },
 
-  { type: "heading", text: "17. Disclaimers" },
+  { type: "heading", text: "19. Disclaimers" },
   {
     type: "p",
     text: "PocketTill is provided as a software service to assist with shop management.",
@@ -275,7 +311,7 @@ const blocks: LegalBlock[] = [
     text: "Nothing in these Terms excludes or limits any right or protection that cannot lawfully be excluded or limited under South African law.",
   },
 
-  { type: "heading", text: "18. Limitation of Liability" },
+  { type: "heading", text: "20. Limitation of Liability" },
   {
     type: "p",
     text: "To the maximum extent permitted by law, PocketTill will not be responsible for indirect, incidental, special or consequential losses arising from the use of the Service, including loss of profits, business interruption or loss of anticipated business opportunities.",
@@ -285,7 +321,7 @@ const blocks: LegalBlock[] = [
     text: "Nothing in these Terms limits liability where such limitation is prohibited by applicable law.",
   },
 
-  { type: "heading", text: "19. Changes to These Terms" },
+  { type: "heading", text: "21. Changes to These Terms" },
   {
     type: "p",
     text: "We may update these Terms from time to time. When we make material changes, we will take reasonable steps to notify users, such as displaying a notice within the Service or updating the date shown at the beginning of these Terms.",
@@ -295,13 +331,13 @@ const blocks: LegalBlock[] = [
     text: "Your continued use of PocketTill after updated Terms become effective constitutes acceptance of the updated Terms, to the extent permitted by law.",
   },
 
-  { type: "heading", text: "20. Governing Law" },
+  { type: "heading", text: "22. Governing Law" },
   {
     type: "p",
     text: "These Terms are governed by the laws of the Republic of South Africa. Any dispute relating to these Terms will be subject to the applicable courts and dispute-resolution mechanisms of South Africa.",
   },
 
-  { type: "heading", text: "21. Contact" },
+  { type: "heading", text: "23. Contact" },
   { type: "p", text: "PocketTill (Pty) Ltd" },
   { type: "p", text: "Website: https://pockettill.co.za" },
   { type: "p", text: "Email: hello@pockettill.co.za" },
@@ -314,7 +350,7 @@ export default function TermsPage() {
       <LegalDocument
         title="Terms of Use"
         effectiveDate="15 August 2026"
-        lastUpdated="15 August 2026"
+        lastUpdated="9 September 2026"
         blocks={blocks}
       />
       <Footer />

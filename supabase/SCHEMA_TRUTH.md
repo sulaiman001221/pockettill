@@ -275,6 +275,17 @@ store-scoped table (`stock_events_store_all`). Added to the
 `supabase_realtime` publication so `RealtimeStockSyncService` can subscribe
 to inserts live.
 
+**Realtime publication, 2026-09-09**: for the first day of multi-device
+sync, `stock_events` was the *only* table added to `supabase_realtime` -
+two-device testing then showed Sales History/Risk Log/new-or-edited
+products never reached a second already-populated device at all (not
+"slow" - `RestoreService` only pulls a store's history once, on an empty
+local cache, so there was genuinely no path for it). `sales`, `sale_items`,
+`returns`, `return_items`, `risk_log`, and `products` were added to the
+publication the same day, backed by `RealtimeDataSyncService` (the sibling
+of `RealtimeStockSyncService` - same idempotent-by-uuid apply pattern, plus
+its own reconnect catch-up watermark, `StoreConfig.lastRealtimeDataSyncedAt`).
+
 One-time backfill (2026-09-09): every pre-existing product with
 `stock > 0` got a single `initial_stock` event (`device_id = 'migration'`)
 equal to its stock at that time, bringing existing data into the
