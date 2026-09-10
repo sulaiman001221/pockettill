@@ -17,38 +17,43 @@ const SaleSchema = CollectionSchema(
   name: r'Sale',
   id: 2760258395233294300,
   properties: {
-    r'createdAt': PropertySchema(
+    r'cashReceived': PropertySchema(
       id: 0,
+      name: r'cashReceived',
+      type: IsarType.double,
+    ),
+    r'createdAt': PropertySchema(
+      id: 1,
       name: r'createdAt',
       type: IsarType.dateTime,
     ),
     r'customerId': PropertySchema(
-      id: 1,
+      id: 2,
       name: r'customerId',
       type: IsarType.string,
     ),
     r'deviceId': PropertySchema(
-      id: 2,
+      id: 3,
       name: r'deviceId',
       type: IsarType.string,
     ),
     r'paymentType': PropertySchema(
-      id: 3,
+      id: 4,
       name: r'paymentType',
       type: IsarType.string,
     ),
     r'synced': PropertySchema(
-      id: 4,
+      id: 5,
       name: r'synced',
       type: IsarType.bool,
     ),
     r'total': PropertySchema(
-      id: 5,
+      id: 6,
       name: r'total',
       type: IsarType.double,
     ),
     r'uuid': PropertySchema(
-      id: 6,
+      id: 7,
       name: r'uuid',
       type: IsarType.string,
     )
@@ -91,13 +96,14 @@ void _saleSerialize(
   List<int> offsets,
   Map<Type, List<int>> allOffsets,
 ) {
-  writer.writeDateTime(offsets[0], object.createdAt);
-  writer.writeString(offsets[1], object.customerId);
-  writer.writeString(offsets[2], object.deviceId);
-  writer.writeString(offsets[3], object.paymentType);
-  writer.writeBool(offsets[4], object.synced);
-  writer.writeDouble(offsets[5], object.total);
-  writer.writeString(offsets[6], object.uuid);
+  writer.writeDouble(offsets[0], object.cashReceived);
+  writer.writeDateTime(offsets[1], object.createdAt);
+  writer.writeString(offsets[2], object.customerId);
+  writer.writeString(offsets[3], object.deviceId);
+  writer.writeString(offsets[4], object.paymentType);
+  writer.writeBool(offsets[5], object.synced);
+  writer.writeDouble(offsets[6], object.total);
+  writer.writeString(offsets[7], object.uuid);
 }
 
 Sale _saleDeserialize(
@@ -107,14 +113,15 @@ Sale _saleDeserialize(
   Map<Type, List<int>> allOffsets,
 ) {
   final object = Sale();
-  object.createdAt = reader.readDateTime(offsets[0]);
-  object.customerId = reader.readStringOrNull(offsets[1]);
-  object.deviceId = reader.readString(offsets[2]);
+  object.cashReceived = reader.readDoubleOrNull(offsets[0]);
+  object.createdAt = reader.readDateTime(offsets[1]);
+  object.customerId = reader.readStringOrNull(offsets[2]);
+  object.deviceId = reader.readString(offsets[3]);
   object.id = id;
-  object.paymentType = reader.readString(offsets[3]);
-  object.synced = reader.readBool(offsets[4]);
-  object.total = reader.readDouble(offsets[5]);
-  object.uuid = reader.readString(offsets[6]);
+  object.paymentType = reader.readString(offsets[4]);
+  object.synced = reader.readBool(offsets[5]);
+  object.total = reader.readDouble(offsets[6]);
+  object.uuid = reader.readString(offsets[7]);
   return object;
 }
 
@@ -126,18 +133,20 @@ P _saleDeserializeProp<P>(
 ) {
   switch (propertyId) {
     case 0:
-      return (reader.readDateTime(offset)) as P;
+      return (reader.readDoubleOrNull(offset)) as P;
     case 1:
-      return (reader.readStringOrNull(offset)) as P;
+      return (reader.readDateTime(offset)) as P;
     case 2:
-      return (reader.readString(offset)) as P;
+      return (reader.readStringOrNull(offset)) as P;
     case 3:
       return (reader.readString(offset)) as P;
     case 4:
-      return (reader.readBool(offset)) as P;
+      return (reader.readString(offset)) as P;
     case 5:
-      return (reader.readDouble(offset)) as P;
+      return (reader.readBool(offset)) as P;
     case 6:
+      return (reader.readDouble(offset)) as P;
+    case 7:
       return (reader.readString(offset)) as P;
     default:
       throw IsarError('Unknown property with id $propertyId');
@@ -232,6 +241,84 @@ extension SaleQueryWhere on QueryBuilder<Sale, Sale, QWhereClause> {
 }
 
 extension SaleQueryFilter on QueryBuilder<Sale, Sale, QFilterCondition> {
+  QueryBuilder<Sale, Sale, QAfterFilterCondition> cashReceivedIsNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(const FilterCondition.isNull(
+        property: r'cashReceived',
+      ));
+    });
+  }
+
+  QueryBuilder<Sale, Sale, QAfterFilterCondition> cashReceivedIsNotNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(const FilterCondition.isNotNull(
+        property: r'cashReceived',
+      ));
+    });
+  }
+
+  QueryBuilder<Sale, Sale, QAfterFilterCondition> cashReceivedEqualTo(
+    double? value, {
+    double epsilon = Query.epsilon,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'cashReceived',
+        value: value,
+        epsilon: epsilon,
+      ));
+    });
+  }
+
+  QueryBuilder<Sale, Sale, QAfterFilterCondition> cashReceivedGreaterThan(
+    double? value, {
+    bool include = false,
+    double epsilon = Query.epsilon,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'cashReceived',
+        value: value,
+        epsilon: epsilon,
+      ));
+    });
+  }
+
+  QueryBuilder<Sale, Sale, QAfterFilterCondition> cashReceivedLessThan(
+    double? value, {
+    bool include = false,
+    double epsilon = Query.epsilon,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'cashReceived',
+        value: value,
+        epsilon: epsilon,
+      ));
+    });
+  }
+
+  QueryBuilder<Sale, Sale, QAfterFilterCondition> cashReceivedBetween(
+    double? lower,
+    double? upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    double epsilon = Query.epsilon,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'cashReceived',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+        epsilon: epsilon,
+      ));
+    });
+  }
+
   QueryBuilder<Sale, Sale, QAfterFilterCondition> createdAtEqualTo(
       DateTime value) {
     return QueryBuilder.apply(this, (query) {
@@ -947,6 +1034,18 @@ extension SaleQueryObject on QueryBuilder<Sale, Sale, QFilterCondition> {}
 extension SaleQueryLinks on QueryBuilder<Sale, Sale, QFilterCondition> {}
 
 extension SaleQuerySortBy on QueryBuilder<Sale, Sale, QSortBy> {
+  QueryBuilder<Sale, Sale, QAfterSortBy> sortByCashReceived() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'cashReceived', Sort.asc);
+    });
+  }
+
+  QueryBuilder<Sale, Sale, QAfterSortBy> sortByCashReceivedDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'cashReceived', Sort.desc);
+    });
+  }
+
   QueryBuilder<Sale, Sale, QAfterSortBy> sortByCreatedAt() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'createdAt', Sort.asc);
@@ -1033,6 +1132,18 @@ extension SaleQuerySortBy on QueryBuilder<Sale, Sale, QSortBy> {
 }
 
 extension SaleQuerySortThenBy on QueryBuilder<Sale, Sale, QSortThenBy> {
+  QueryBuilder<Sale, Sale, QAfterSortBy> thenByCashReceived() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'cashReceived', Sort.asc);
+    });
+  }
+
+  QueryBuilder<Sale, Sale, QAfterSortBy> thenByCashReceivedDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'cashReceived', Sort.desc);
+    });
+  }
+
   QueryBuilder<Sale, Sale, QAfterSortBy> thenByCreatedAt() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'createdAt', Sort.asc);
@@ -1131,6 +1242,12 @@ extension SaleQuerySortThenBy on QueryBuilder<Sale, Sale, QSortThenBy> {
 }
 
 extension SaleQueryWhereDistinct on QueryBuilder<Sale, Sale, QDistinct> {
+  QueryBuilder<Sale, Sale, QDistinct> distinctByCashReceived() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'cashReceived');
+    });
+  }
+
   QueryBuilder<Sale, Sale, QDistinct> distinctByCreatedAt() {
     return QueryBuilder.apply(this, (query) {
       return query.addDistinctBy(r'createdAt');
@@ -1182,6 +1299,12 @@ extension SaleQueryProperty on QueryBuilder<Sale, Sale, QQueryProperty> {
   QueryBuilder<Sale, int, QQueryOperations> idProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'id');
+    });
+  }
+
+  QueryBuilder<Sale, double?, QQueryOperations> cashReceivedProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'cashReceived');
     });
   }
 

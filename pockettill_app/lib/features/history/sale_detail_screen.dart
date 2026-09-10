@@ -331,6 +331,18 @@ class _DetailsCard extends StatelessWidget {
             const SizedBox(height: 12),
             _detailRow('Customer', customerName!),
           ],
+          if (sale.paymentType == 'cash' && sale.cashReceived != null) ...[
+            const SizedBox(height: 12),
+            _detailRow(
+              'Cash Received',
+              'R${sale.cashReceived!.toStringAsFixed(2)}',
+            ),
+            const SizedBox(height: 12),
+            _detailRow(
+              'Change',
+              'R${(sale.cashReceived! - sale.total).toStringAsFixed(2)}',
+            ),
+          ],
           const SizedBox(height: 12),
           _detailRow('Items Count', '$itemCount items'),
           const SizedBox(height: 12),

@@ -167,6 +167,7 @@ class CreditRepository {
     required String customerUuid,
     required double amount,
     String? note,
+    double? cashReceived,
   }) async {
     final now = DateTime.now();
     late final CreditTransaction transaction;
@@ -200,6 +201,7 @@ class CreditRepository {
         ..note = note
         ..balanceBefore = balanceBefore
         ..balanceAfter = customer.balance
+        ..cashReceived = cashReceived
         ..createdAt = now;
       await _isar.creditTransactions.put(transaction);
     });
@@ -492,6 +494,7 @@ class CreditRepository {
     'note': transaction.note,
     'balance_before': transaction.balanceBefore,
     'balance_after': transaction.balanceAfter,
+    'cash_received': transaction.cashReceived,
     'created_at': transaction.createdAt.toUtc().toIso8601String(),
   };
 }

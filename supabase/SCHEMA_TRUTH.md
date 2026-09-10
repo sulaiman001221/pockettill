@@ -103,6 +103,7 @@ checks.
 | total | numeric | |
 | payment_type | text | `cash` \| `card` \| `credit` |
 | customer_id | text | nullable |
+| cash_received | numeric | nullable — added 2026-09-10. Only set for `payment_type = 'cash'`; the physical amount handed over, so Sale Detail can show change (`cash_received - total`). Lets a store owner reconcile a cash discrepancy across two devices after the fact. |
 | created_at | timestamptz | |
 | store_id | uuid | FK `stores(uuid)`, nullable, **populated on every row** |
 
@@ -142,6 +143,7 @@ PK: `(sale_uuid, product_uuid)`.
 | note | text | nullable — repayment method (`Cash`/`Card`) or return reason label |
 | balance_before | numeric | nullable |
 | balance_after | numeric | nullable |
+| cash_received | numeric | nullable — added 2026-09-10, same reasoning as `sales.cash_received`. Only set for a cash repayment (`note = 'Cash'`). |
 | created_at | timestamptz | |
 | store_id | uuid | FK `stores(uuid)`, nullable, **populated on every row** |
 

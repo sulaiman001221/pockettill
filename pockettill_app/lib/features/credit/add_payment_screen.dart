@@ -113,6 +113,7 @@ class _AddPaymentScreenState extends ConsumerState<AddPaymentScreen> {
             customerUuid: widget.customer.uuid,
             amount: _amountToPay,
             note: _paymentMethod == 'cash' ? 'Cash' : 'Card',
+            cashReceived: _paymentMethod == 'cash' ? _cashReceived : null,
           );
 
       if (!mounted) return;
