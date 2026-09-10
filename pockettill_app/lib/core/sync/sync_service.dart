@@ -16,7 +16,18 @@ import 'event_queue.dart';
 import 'image_sync_service.dart';
 
 /// Priority order [SyncEvent]s are pushed in - highest priority first.
+///
+/// `product` must come before `stock_event`: `stock_events.product_id` has
+/// a foreign-key constraint against `products`, so a brand-new product's
+/// `initial_stock` event (queued alongside its own `product` create event)
+/// would otherwise try to insert before the product it references exists
+/// remotely. That single failure aborts the whole push loop for *every*
+/// entity type after it - not a transient error, a permanent deadlock,
+/// since the same product event never gets a turn to push and fix it.
+/// Found 2026-09-10 - a real device stuck retrying this exact failure for
+/// hours, blocked from syncing (or even logging out) at all.
 const List<String> _entityTypePriority = [
+  'product',
   'credit_tx',
   'sale',
   'sale_item',
@@ -24,7 +35,6 @@ const List<String> _entityTypePriority = [
   'extra_income',
   'return',
   'return_item',
-  'product',
   'credit_customer',
   'store_profile',
   'risk_log',
@@ -143,13 +153,31 @@ class SyncService {
             await _detectProductConflicts(events, storeId);
           }
 
-          for (var offset = 0; offset < events.length; offset += _batchSize) {
-            final batch = events.skip(offset).take(_batchSize).toList();
-            await SupabaseService.pushEvents(
-              batch.map((event) => _toEventMap(event, storeId)).toList(),
-            );
-            await _eventQueue.markPushed(
-              batch.map((event) => event.uuid).toList(),
+          try {
+            for (
+              var offset = 0;
+              offset < events.length;
+              offset += _batchSize
+            ) {
+              final batch = events.skip(offset).take(_batchSize).toList();
+              await SupabaseService.pushEvents(
+                batch.map((event) => _toEventMap(event, storeId)).toList(),
+              );
+              await _eventQueue.markPushed(
+                batch.map((event) => event.uuid).toList(),
+              );
+            }
+          } catch (e, st) {
+            // One entity type failing to push (a genuine data problem, or
+            // just a transient error) must not block every other type
+            // queued after it, or the heartbeat/catalogue-pull/revoked
+            // check below - that's exactly what turned one bad
+            // stock_event into a total, permanent sync deadlock (see the
+            // entity-order comment above). Its events stay pending and
+            // retry on the next cycle; every other type still gets its
+            // turn this cycle.
+            debugPrint(
+              'SyncService.sync(): push failed for $entityType: $e\n$st',
             );
           }
         }

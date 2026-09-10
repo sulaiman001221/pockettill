@@ -77,6 +77,7 @@ class SaleRepository {
     required String paymentType,
     String? customerId,
     required String deviceId,
+    double? cashReceived,
   }) async {
     if (paymentType == 'credit' && customerId == null) {
       throw ArgumentError('customerId is required for credit sales.');
@@ -97,6 +98,7 @@ class SaleRepository {
       ..deviceId = deviceId
       ..total = total
       ..paymentType = paymentType
+      ..cashReceived = cashReceived
       ..customerId = customerId
       ..createdAt = now;
 
@@ -392,6 +394,7 @@ class SaleRepository {
     'total': sale.total,
     'payment_type': sale.paymentType,
     'customer_id': sale.customerId,
+    'cash_received': sale.cashReceived,
     'created_at': sale.createdAt.toUtc().toIso8601String(),
   };
 

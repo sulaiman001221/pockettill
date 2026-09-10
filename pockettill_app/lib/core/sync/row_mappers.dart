@@ -60,6 +60,7 @@ Sale saleFromRow(Map<String, dynamic> row) => Sale()
   ..total = (row['total'] as num).toDouble()
   ..paymentType = row['payment_type'] as String
   ..customerId = row['customer_id'] as String?
+  ..cashReceived = (row['cash_received'] as num?)?.toDouble()
   ..synced = true
   ..createdAt = parseLocal(row['created_at'] as String);
 
@@ -95,6 +96,7 @@ CreditTransaction creditTransactionFromRow(Map<String, dynamic> row) =>
       ..note = row['note'] as String?
       ..balanceBefore = (row['balance_before'] as num?)?.toDouble()
       ..balanceAfter = (row['balance_after'] as num?)?.toDouble()
+      ..cashReceived = (row['cash_received'] as num?)?.toDouble()
       ..synced = true
       ..createdAt = parseLocal(row['created_at'] as String);
 

@@ -472,6 +472,11 @@ class _RepaymentDetailsCard extends StatelessWidget {
         : true;
     final noteLabel = _isManualCreditOrWriteoff ? 'Note' : 'Payment Method';
     final noteValue = _isManualCreditOrWriteoff ? (note ?? '') : (note ?? 'Cash');
+    // note defaults to 'Cash' when null (see noteValue above) for every
+    // pre-cashReceived-field repayment, but cashReceived itself is only
+    // ever non-null for an actual cash repayment, so gating on it directly
+    // is simpler and can't disagree with noteValue.
+    final cashReceived = transaction.cashReceived;
 
     return Container(
       width: double.infinity,
@@ -498,6 +503,15 @@ class _RepaymentDetailsCard extends StatelessWidget {
           if (showNoteRow) ...[
             const SizedBox(height: 12),
             _detailRow(noteLabel, noteValue),
+          ],
+          if (cashReceived != null) ...[
+            const SizedBox(height: 12),
+            _detailRow('Cash Received', 'R${cashReceived.toStringAsFixed(2)}'),
+            const SizedBox(height: 12),
+            _detailRow(
+              'Change',
+              'R${(cashReceived - transaction.amount).toStringAsFixed(2)}',
+            ),
           ],
         ],
       ),

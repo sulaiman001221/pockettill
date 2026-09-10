@@ -162,10 +162,18 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
     } catch (_) {
       _clearCode();
       if (mounted) {
-        final source = _channel == OtpChannel.whatsapp ? 'WhatsApp' : 'SMS';
+        // Deliberately not naming _channel specifically (WhatsApp vs SMS) -
+        // Twilio can silently fall back to the other channel on delivery,
+        // so the app's own record of which channel it *requested* isn't
+        // reliable proof of where the code actually landed. Naming the
+        // wrong one here is actively misleading, not just imprecise.
+        // Found 2026-09-10.
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Invalid or expired code. Check your $source and try again.'),
+          const SnackBar(
+            content: Text(
+              'Invalid or expired code. Check your SMS or WhatsApp and '
+              'try again.',
+            ),
             backgroundColor: AppTheme.logoutRed,
           ),
         );

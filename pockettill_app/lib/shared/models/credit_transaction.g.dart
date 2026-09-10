@@ -32,38 +32,43 @@ const CreditTransactionSchema = CollectionSchema(
       name: r'balanceBefore',
       type: IsarType.double,
     ),
-    r'createdAt': PropertySchema(
+    r'cashReceived': PropertySchema(
       id: 3,
+      name: r'cashReceived',
+      type: IsarType.double,
+    ),
+    r'createdAt': PropertySchema(
+      id: 4,
       name: r'createdAt',
       type: IsarType.dateTime,
     ),
     r'customerId': PropertySchema(
-      id: 4,
+      id: 5,
       name: r'customerId',
       type: IsarType.string,
     ),
     r'note': PropertySchema(
-      id: 5,
+      id: 6,
       name: r'note',
       type: IsarType.string,
     ),
     r'saleUuid': PropertySchema(
-      id: 6,
+      id: 7,
       name: r'saleUuid',
       type: IsarType.string,
     ),
     r'synced': PropertySchema(
-      id: 7,
+      id: 8,
       name: r'synced',
       type: IsarType.bool,
     ),
     r'type': PropertySchema(
-      id: 8,
+      id: 9,
       name: r'type',
       type: IsarType.string,
     ),
     r'uuid': PropertySchema(
-      id: 9,
+      id: 10,
       name: r'uuid',
       type: IsarType.string,
     )
@@ -115,13 +120,14 @@ void _creditTransactionSerialize(
   writer.writeDouble(offsets[0], object.amount);
   writer.writeDouble(offsets[1], object.balanceAfter);
   writer.writeDouble(offsets[2], object.balanceBefore);
-  writer.writeDateTime(offsets[3], object.createdAt);
-  writer.writeString(offsets[4], object.customerId);
-  writer.writeString(offsets[5], object.note);
-  writer.writeString(offsets[6], object.saleUuid);
-  writer.writeBool(offsets[7], object.synced);
-  writer.writeString(offsets[8], object.type);
-  writer.writeString(offsets[9], object.uuid);
+  writer.writeDouble(offsets[3], object.cashReceived);
+  writer.writeDateTime(offsets[4], object.createdAt);
+  writer.writeString(offsets[5], object.customerId);
+  writer.writeString(offsets[6], object.note);
+  writer.writeString(offsets[7], object.saleUuid);
+  writer.writeBool(offsets[8], object.synced);
+  writer.writeString(offsets[9], object.type);
+  writer.writeString(offsets[10], object.uuid);
 }
 
 CreditTransaction _creditTransactionDeserialize(
@@ -134,14 +140,15 @@ CreditTransaction _creditTransactionDeserialize(
   object.amount = reader.readDouble(offsets[0]);
   object.balanceAfter = reader.readDoubleOrNull(offsets[1]);
   object.balanceBefore = reader.readDoubleOrNull(offsets[2]);
-  object.createdAt = reader.readDateTime(offsets[3]);
-  object.customerId = reader.readString(offsets[4]);
+  object.cashReceived = reader.readDoubleOrNull(offsets[3]);
+  object.createdAt = reader.readDateTime(offsets[4]);
+  object.customerId = reader.readString(offsets[5]);
   object.id = id;
-  object.note = reader.readStringOrNull(offsets[5]);
-  object.saleUuid = reader.readStringOrNull(offsets[6]);
-  object.synced = reader.readBool(offsets[7]);
-  object.type = reader.readString(offsets[8]);
-  object.uuid = reader.readString(offsets[9]);
+  object.note = reader.readStringOrNull(offsets[6]);
+  object.saleUuid = reader.readStringOrNull(offsets[7]);
+  object.synced = reader.readBool(offsets[8]);
+  object.type = reader.readString(offsets[9]);
+  object.uuid = reader.readString(offsets[10]);
   return object;
 }
 
@@ -159,18 +166,20 @@ P _creditTransactionDeserializeProp<P>(
     case 2:
       return (reader.readDoubleOrNull(offset)) as P;
     case 3:
-      return (reader.readDateTime(offset)) as P;
+      return (reader.readDoubleOrNull(offset)) as P;
     case 4:
-      return (reader.readString(offset)) as P;
+      return (reader.readDateTime(offset)) as P;
     case 5:
-      return (reader.readStringOrNull(offset)) as P;
+      return (reader.readString(offset)) as P;
     case 6:
       return (reader.readStringOrNull(offset)) as P;
     case 7:
-      return (reader.readBool(offset)) as P;
+      return (reader.readStringOrNull(offset)) as P;
     case 8:
-      return (reader.readString(offset)) as P;
+      return (reader.readBool(offset)) as P;
     case 9:
+      return (reader.readString(offset)) as P;
+    case 10:
       return (reader.readString(offset)) as P;
     default:
       throw IsarError('Unknown property with id $propertyId');
@@ -498,6 +507,90 @@ extension CreditTransactionQueryFilter
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.between(
         property: r'balanceBefore',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+        epsilon: epsilon,
+      ));
+    });
+  }
+
+  QueryBuilder<CreditTransaction, CreditTransaction, QAfterFilterCondition>
+      cashReceivedIsNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(const FilterCondition.isNull(
+        property: r'cashReceived',
+      ));
+    });
+  }
+
+  QueryBuilder<CreditTransaction, CreditTransaction, QAfterFilterCondition>
+      cashReceivedIsNotNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(const FilterCondition.isNotNull(
+        property: r'cashReceived',
+      ));
+    });
+  }
+
+  QueryBuilder<CreditTransaction, CreditTransaction, QAfterFilterCondition>
+      cashReceivedEqualTo(
+    double? value, {
+    double epsilon = Query.epsilon,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'cashReceived',
+        value: value,
+        epsilon: epsilon,
+      ));
+    });
+  }
+
+  QueryBuilder<CreditTransaction, CreditTransaction, QAfterFilterCondition>
+      cashReceivedGreaterThan(
+    double? value, {
+    bool include = false,
+    double epsilon = Query.epsilon,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'cashReceived',
+        value: value,
+        epsilon: epsilon,
+      ));
+    });
+  }
+
+  QueryBuilder<CreditTransaction, CreditTransaction, QAfterFilterCondition>
+      cashReceivedLessThan(
+    double? value, {
+    bool include = false,
+    double epsilon = Query.epsilon,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'cashReceived',
+        value: value,
+        epsilon: epsilon,
+      ));
+    });
+  }
+
+  QueryBuilder<CreditTransaction, CreditTransaction, QAfterFilterCondition>
+      cashReceivedBetween(
+    double? lower,
+    double? upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    double epsilon = Query.epsilon,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'cashReceived',
         lower: lower,
         includeLower: includeLower,
         upper: upper,
@@ -1397,6 +1490,20 @@ extension CreditTransactionQuerySortBy
   }
 
   QueryBuilder<CreditTransaction, CreditTransaction, QAfterSortBy>
+      sortByCashReceived() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'cashReceived', Sort.asc);
+    });
+  }
+
+  QueryBuilder<CreditTransaction, CreditTransaction, QAfterSortBy>
+      sortByCashReceivedDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'cashReceived', Sort.desc);
+    });
+  }
+
+  QueryBuilder<CreditTransaction, CreditTransaction, QAfterSortBy>
       sortByCreatedAt() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'createdAt', Sort.asc);
@@ -1540,6 +1647,20 @@ extension CreditTransactionQuerySortThenBy
   }
 
   QueryBuilder<CreditTransaction, CreditTransaction, QAfterSortBy>
+      thenByCashReceived() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'cashReceived', Sort.asc);
+    });
+  }
+
+  QueryBuilder<CreditTransaction, CreditTransaction, QAfterSortBy>
+      thenByCashReceivedDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'cashReceived', Sort.desc);
+    });
+  }
+
+  QueryBuilder<CreditTransaction, CreditTransaction, QAfterSortBy>
       thenByCreatedAt() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'createdAt', Sort.asc);
@@ -1675,6 +1796,13 @@ extension CreditTransactionQueryWhereDistinct
   }
 
   QueryBuilder<CreditTransaction, CreditTransaction, QDistinct>
+      distinctByCashReceived() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'cashReceived');
+    });
+  }
+
+  QueryBuilder<CreditTransaction, CreditTransaction, QDistinct>
       distinctByCreatedAt() {
     return QueryBuilder.apply(this, (query) {
       return query.addDistinctBy(r'createdAt');
@@ -1749,6 +1877,13 @@ extension CreditTransactionQueryProperty
       balanceBeforeProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'balanceBefore');
+    });
+  }
+
+  QueryBuilder<CreditTransaction, double?, QQueryOperations>
+      cashReceivedProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'cashReceived');
     });
   }
 

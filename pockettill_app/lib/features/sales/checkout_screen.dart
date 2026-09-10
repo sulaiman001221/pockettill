@@ -289,6 +289,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                 ? _selectedCustomer!.uuid
                 : null,
             deviceId: storeConfig?.deviceId ?? '',
+            cashReceived: _paymentMethod == 'cash' ? _cashReceived : null,
           );
 
       final lowStockProducts = await _lowStockAfterSale();

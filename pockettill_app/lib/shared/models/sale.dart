@@ -11,6 +11,11 @@ class Sale {
   late double total;
   late String paymentType; // cash | credit | card
   String? customerId; // populated if credit sale
+  // Only set for a cash sale - the physical amount handed over, so change
+  // (cashReceived - total) can be shown later on Sale Detail. Two devices
+  // recording sales offline have no other way to reconcile a cash
+  // discrepancy after the fact without this - see SaleDetailScreen.
+  double? cashReceived;
   bool synced = false;
   late DateTime createdAt;
 }
