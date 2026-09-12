@@ -2,7 +2,9 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
+import '../../shared/models/extra_income.dart';
 import '../../shared/models/sale.dart';
+import '../../shared/repositories/extra_income_repository.dart';
 import '../../shared/repositories/product_repository.dart';
 import '../../shared/repositories/sale_repository.dart';
 
@@ -147,14 +149,17 @@ class AnalyticsNotifier extends StateNotifier<AnalyticsState> {
   AnalyticsNotifier({
     required SaleRepository saleRepository,
     required ProductRepository productRepository,
+    required ExtraIncomeRepository extraIncomeRepository,
   }) : _saleRepository = saleRepository,
        _productRepository = productRepository,
+       _extraIncomeRepository = extraIncomeRepository,
        super(const AnalyticsState()) {
     loadAll();
   }
 
   final SaleRepository _saleRepository;
   final ProductRepository _productRepository;
+  final ExtraIncomeRepository _extraIncomeRepository;
 
   /// Loads every section in parallel. Called once on startup and by
   /// pull-to-refresh.
@@ -178,6 +183,9 @@ class AnalyticsNotifier extends StateNotifier<AnalyticsState> {
       List<Sale> current;
       List<Sale> previous;
 
+      List<ExtraIncome> currentExtra;
+      List<ExtraIncome> previousExtra;
+
       switch (period) {
         case AnalyticsPeriod.daily:
           // "Daily" is a Sun-Sat calendar-week bar chart, not today's hours -
@@ -189,15 +197,31 @@ class AnalyticsNotifier extends StateNotifier<AnalyticsState> {
           ).subtract(Duration(days: now.weekday % 7));
           final saturday = sunday.add(const Duration(days: 6));
           current = await _saleRepository.getDateRange(sunday, saturday);
+          currentExtra = await _extraIncomeRepository.getDateRange(
+            sunday,
+            saturday,
+          );
           final prevSunday = sunday.subtract(const Duration(days: 7));
           final prevSaturday = prevSunday.add(const Duration(days: 6));
           previous = await _saleRepository.getDateRange(prevSunday, prevSaturday);
+          previousExtra = await _extraIncomeRepository.getDateRange(
+            prevSunday,
+            prevSaturday,
+          );
         case AnalyticsPeriod.monthly:
           // "Monthly" is the current year broken down Jan-Dec, compared
           // against last year's full total.
           final firstOfYear = DateTime(now.year, 1, 1);
           current = await _saleRepository.getDateRange(firstOfYear, now);
+          currentExtra = await _extraIncomeRepository.getDateRange(
+            firstOfYear,
+            now,
+          );
           previous = await _saleRepository.getDateRange(
+            DateTime(now.year - 1, 1, 1),
+            DateTime(now.year - 1, 12, 31),
+          );
+          previousExtra = await _extraIncomeRepository.getDateRange(
             DateTime(now.year - 1, 1, 1),
             DateTime(now.year - 1, 12, 31),
           );
@@ -208,7 +232,15 @@ class AnalyticsNotifier extends StateNotifier<AnalyticsState> {
             DateTime(startYear, 1, 1),
             now,
           );
+          currentExtra = await _extraIncomeRepository.getDateRange(
+            DateTime(startYear, 1, 1),
+            now,
+          );
           previous = await _saleRepository.getDateRange(
+            DateTime(startYear - 5, 1, 1),
+            DateTime(startYear - 1, 12, 31),
+          );
+          previousExtra = await _extraIncomeRepository.getDateRange(
             DateTime(startYear - 5, 1, 1),
             DateTime(startYear - 1, 12, 31),
           );
@@ -229,12 +261,29 @@ class AnalyticsNotifier extends StateNotifier<AnalyticsState> {
             creditAmount += sale.total;
         }
       }
-      final previousTotal = previous.fold<double>(0, (sum, s) => sum + s.total);
+      // Extra income counts toward total revenue/income (it's cash the
+      // business took in, same as a sale) but isn't a sale itself - it has
+      // no payment method, so it only ever affects the headline total and
+      // the chart trend, never the cash/card/credit split or any
+      // per-sale metric (avgSaleValue, transaction counts) below.
+      final currentExtraTotal = currentExtra.fold<double>(
+        0,
+        (sum, e) => sum + e.amount,
+      );
+      final previousExtraTotal = previousExtra.fold<double>(
+        0,
+        (sum, e) => sum + e.amount,
+      );
+      currentTotal += currentExtraTotal;
+      final previousTotal =
+          previous.fold<double>(0, (sum, s) => sum + s.total) +
+          previousExtraTotal;
 
       final input = _ChartComputeInput(
         period: period,
         current: [
           for (final s in current) _SalePoint(s.createdAt.millisecondsSinceEpoch, s.total),
+          for (final e in currentExtra) _SalePoint(e.createdAt.millisecondsSinceEpoch, e.amount),
         ],
         referenceMillis: now.millisecondsSinceEpoch,
       );
@@ -274,20 +323,38 @@ class AnalyticsNotifier extends StateNotifier<AnalyticsState> {
         today.subtract(const Duration(days: 7)),
       );
 
+      // Extra income counts toward "best day"/total revenue (it's real
+      // income for that day) but deliberately never touches avgSaleValue/
+      // totalTransactions/basketChangePercent below - those are
+      // specifically about sale basket size, and extra income isn't a sale.
+      final weekExtraIncome = await _extraIncomeRepository.getDateRange(
+        today.subtract(const Duration(days: 6)),
+        today,
+      );
+      final extraByDay = <DateTime, double>{};
+      for (final entry in weekExtraIncome) {
+        final day = DateTime(
+          entry.createdAt.year,
+          entry.createdAt.month,
+          entry.createdAt.day,
+        );
+        extraByDay[day] = (extraByDay[day] ?? 0) + entry.amount;
+      }
+
       String? bestDayLabel;
       var bestDayAmount = 0.0;
       for (final day in weeklySales) {
-        final total = day['total'] as double;
+        final date = day['date'] as DateTime;
+        final total = (day['total'] as double) + (extraByDay[date] ?? 0);
         if (total > bestDayAmount) {
           bestDayAmount = total;
-          bestDayLabel = DateFormat('EEEE').format(day['date'] as DateTime);
+          bestDayLabel = DateFormat('EEEE').format(date);
         }
       }
 
-      final totalRevenue = weeklySales.fold<double>(
-        0,
-        (sum, d) => sum + (d['total'] as double),
-      );
+      final totalRevenue =
+          weeklySales.fold<double>(0, (sum, d) => sum + (d['total'] as double)) +
+          weekExtraIncome.fold<double>(0, (sum, e) => sum + e.amount);
       final totalTrans = weeklySales.fold<int>(
         0,
         (sum, d) => sum + (d['transactionCount'] as int),

@@ -120,6 +120,20 @@ Future<void> main() async {
     }),
   );
 
+  // Every trigger above is edge-based (a reachability *change*, an app
+  // *resume*) - a device that's simply been sitting online and in the
+  // foreground the whole time, making sales continuously, never hits any
+  // of them again after the first one. Found 2026-09-12: a real store
+  // reported sync "takes some time" to pick up a change with no obvious
+  // reason - there was nothing wrong, just nothing periodically prompting
+  // it either. A plain push (no Realtime restart - that would be
+  // wasteful/disruptive to do every 30s) closes that gap; sync() is
+  // already a safe no-op if one's already running or nothing's pending.
+  Timer.periodic(
+    const Duration(seconds: 30),
+    (_) => unawaited(syncService.sync()),
+  );
+
   runApp(
     UncontrolledProviderScope(
       container: container,

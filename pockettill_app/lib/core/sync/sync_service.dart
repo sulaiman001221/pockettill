@@ -238,7 +238,23 @@ class SyncService {
   /// doesn't change what happens to the data (the push below still
   /// proceeds and still wins), it just logs to risk_log when it detects
   /// that this device's edit and another device's edit to the *same*
-  /// product genuinely raced.
+  /// product's *metadata* (name, price, category) genuinely raced.
+  ///
+  /// Deliberately never compares stock: stock is event-sourced (see
+  /// stock_events in SCHEMA_TRUTH.md) - two devices selling the same
+  /// product offline is the normal, expected case the whole delta model
+  /// exists to handle correctly, not a conflict. The old version of this
+  /// check compared the payload's `stock` against the remote column and
+  /// logged "concurrent stock edit" for completely ordinary, unrelated
+  /// sales on two devices (the remote `stock` column is never live-updated
+  /// by a sale in the first place, so it almost always differed from
+  /// whatever this device's own running total happened to be, regardless
+  /// of whether anything actually conflicted) - a real, repeatedly-firing
+  /// false positive found 2026-09-12 on a real two-device store. Only a
+  /// genuine metadata edit (a manual product edit, the one path that
+  /// pushes a `product` event at all) can reach this method, so removing
+  /// stock from the comparison doesn't lose real conflict detection - it
+  /// was never a valid signal for one.
   ///
   /// A single batched read, not one query per event: for every pending
   /// [events] with a [SyncEvent.baseUpdatedAt] (i.e. an edit to an
@@ -263,7 +279,7 @@ class SyncService {
       final uuids = withBase.map((e) => e.entityUuid).toSet().toList();
       final rows = await SupabaseService.supabaseClient
           .from('products')
-          .select('uuid, updated_at, price, stock, name')
+          .select('uuid, updated_at, price, name, category')
           .inFilter('uuid', uuids)
           .eq('store_id', storeId);
       final remoteByUuid = {
@@ -285,8 +301,6 @@ class SyncService {
             payload['name'] as String? ?? remote['name'] as String? ?? 'Product';
         final localPrice = (payload['price'] as num?)?.toDouble();
         final remotePrice = (remote['price'] as num?)?.toDouble();
-        final localStock = payload['stock'] as int?;
-        final remoteStock = remote['stock'] as int?;
 
         if (localPrice != null &&
             remotePrice != null &&
@@ -298,15 +312,33 @@ class SyncService {
             afterValue: 'R${localPrice.toStringAsFixed(2)}',
             entityName: name,
           );
-        } else if (localStock != null &&
-            remoteStock != null &&
-            localStock != remoteStock) {
+          continue;
+        }
+
+        final localName = payload['name'] as String?;
+        final localCategory = payload['category'] as String?;
+        final remoteName = remote['name'] as String?;
+        final remoteCategory = remote['category'] as String?;
+        final nameChanged = localName != null && localName != remoteName;
+        final categoryChanged =
+            localCategory != remoteCategory && (localCategory != null || remoteCategory != null);
+
+        if (nameChanged) {
           await riskLog.record(
-            type: 'concurrent_stock_adjustment',
+            type: 'concurrent_product_edit',
             description:
-                'Stock adjusted on two devices at the same time for $name',
-            beforeValue: '$remoteStock',
-            afterValue: '$localStock',
+                'Details edited on two devices at the same time for $name',
+            beforeValue: remoteName ?? '',
+            afterValue: localName,
+            entityName: name,
+          );
+        } else if (categoryChanged) {
+          await riskLog.record(
+            type: 'concurrent_product_edit',
+            description:
+                'Details edited on two devices at the same time for $name',
+            beforeValue: remoteCategory ?? '',
+            afterValue: localCategory ?? '',
             entityName: name,
           );
         }

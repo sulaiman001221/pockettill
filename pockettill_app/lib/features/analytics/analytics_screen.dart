@@ -2,6 +2,7 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/sync/realtime_data_sync_service.dart';
 import '../../shared/theme/app_theme.dart';
 import '../../shared/widgets/pockettill_app_bar.dart';
 import 'analytics_notifier.dart';
@@ -32,6 +33,10 @@ class AnalyticsScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(analyticsNotifierProvider);
     final notifier = ref.read(analyticsNotifierProvider.notifier);
+
+    // Another device's sale/return/extra-income entry changes these totals
+    // - refresh without a manual pull-to-refresh, same as History.
+    ref.listen(salesDataChangedProvider, (_, _) => notifier.loadAll());
 
     return Scaffold(
       appBar: const CustomAppBar(

@@ -227,7 +227,7 @@ pre-existing gap, not introduced by this entry.
 | column | type | notes |
 |---|---|---|
 | uuid | uuid PK | `gen_random_uuid()` |
-| type | text | `manual_stock_reduction` \| `product_deleted` \| `price_changed` \| `manual_credit` \| `credit_writeoff` \| `customer_deleted_with_balance` (added 2026-08-21) |
+| type | text | `manual_stock_reduction` \| `product_deleted` \| `price_changed` \| `manual_credit` \| `credit_writeoff` \| `customer_deleted_with_balance` (added 2026-08-21) \| `concurrent_price_edit` \| `concurrent_product_edit` (added 2026-09-12, replaces `concurrent_stock_adjustment` - see `stock_events` below for why stock was dropped from conflict detection entirely) |
 | description | text | |
 | before_value | text | nullable — freeform display string, not necessarily a raw number |
 | after_value | text | nullable |
@@ -288,10 +288,35 @@ publication the same day, backed by `RealtimeDataSyncService` (the sibling
 of `RealtimeStockSyncService` - same idempotent-by-uuid apply pattern, plus
 its own reconnect catch-up watermark, `StoreConfig.lastRealtimeDataSyncedAt`).
 
+**Extended 2026-09-12**: `extra_income`, `stores`, `credit_customers`, and
+`credit_transactions` were still missing - two-device testing showed extra
+income, Settings profile edits, and the entire credit-customers section
+never reached a second device either. `stores` is filtered by its own
+`uuid` column rather than `store_id` (it has none - the row's primary key
+*is* the store id). `credit_customers` also needs an insert/update/delete
+subscription (unlike every insert-only table above) - the app really does
+hard-delete a customer row (`CreditRepository.deleteCustomer`), and
+Postgres only guarantees a delete payload's `oldRecord` carries the
+primary key, not the full row.
+
 One-time backfill (2026-09-09): every pre-existing product with
 `stock > 0` got a single `initial_stock` event (`device_id = 'migration'`)
 equal to its stock at that time, bringing existing data into the
 event-sourcing model without loss.
+
+**`initial_stock` never mutates the running total, 2026-09-12**: found on a
+real two-device store that a brand-new product showed a different quantity
+on each device, offset by exactly its own `initial_stock` amount.
+`products` and `stock_events` are two independent Realtime channels with
+no guaranteed ordering - if the new product's own row (which already
+carries its starting `stock` baked in) happens to arrive before its
+`initial_stock` event, applying that event's delta on top double-counts
+it. `RealtimeStockSyncService._applyRemoteEvent` now treats
+`change_type = 'initial_stock'` as a no-op for the stock mutation
+unconditionally (still recorded for the durable ledger/`RestoreService`'s
+sum-from-scratch), regardless of whether the product already exists
+locally - safe in either arrival order, since a product's starting stock
+is always already reflected the moment it's first created on any device.
 
 ### `rejected_catalogue_barcodes`
 Added 2026-09-07. Denylist backing pockettill_datamaster's `rejectProduct`

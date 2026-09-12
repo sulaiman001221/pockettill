@@ -105,11 +105,12 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // Another device's sale/return should show up here without a manual
-    // pull-to-refresh - see RealtimeDataSyncService.
+    // Another device's sale/return/extra-income entry should show up here
+    // without a manual pull-to-refresh - see RealtimeDataSyncService.
     ref.listen(salesDataChangedProvider, (_, _) {
       ref.invalidate(filteredSalesProvider);
       ref.invalidate(filteredReturnsProvider);
+      ref.invalidate(filteredExtraIncomeProvider);
     });
 
     final filter = ref.watch(historyFilterProvider);

@@ -11,6 +11,7 @@ import '../../core/auth/auth_service.dart';
 import '../../core/hardware/hardware_detector.dart';
 import '../../core/storage/image_cache_service.dart';
 import '../../core/supabase/supabase_service.dart';
+import '../../core/sync/realtime_data_sync_service.dart';
 import '../../core/sync/sync_service.dart';
 import '../../core/sync/sync_status_provider.dart';
 import '../../shared/models/store_config.dart';
@@ -470,6 +471,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Another device's Settings edit (store name, owner name/phone,
+    // address) should show up here without a manual refresh - see
+    // RealtimeDataSyncService.
+    ref.listen(storeProfileChangedProvider, (_, _) => _load());
+
     return Scaffold(
       appBar: const CustomAppBar(showMenuIcon: false, title: 'Settings'),
       backgroundColor: AppTheme.background,

@@ -136,18 +136,18 @@ class AppDrawer extends ConsumerWidget {
                           onTap: onGoHome,
                         ),
                         _MenuItem(
-                          icon: Icons.inventory_2_outlined,
-                          label: 'Stock',
-                          isActive: activeRoute == 'stock',
-                          onTap: () =>
-                              onNavigate('stock', const StockScreen()),
-                        ),
-                        _MenuItem(
                           icon: Icons.receipt_long_outlined,
                           label: 'Sales History',
                           isActive: activeRoute == 'history',
                           onTap: () =>
                               onNavigate('history', const HistoryScreen()),
+                        ),
+                        _MenuItem(
+                          icon: Icons.inventory_2_outlined,
+                          label: 'Stock',
+                          isActive: activeRoute == 'stock',
+                          onTap: () =>
+                              onNavigate('stock', const StockScreen()),
                         ),
                         _MenuItem(
                           icon: Icons.people_outlined,

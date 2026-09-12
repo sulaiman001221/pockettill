@@ -5,6 +5,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:isar/isar.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../shared/models/credit_customer.dart';
+import '../../shared/models/credit_transaction.dart';
+import '../../shared/models/extra_income.dart';
 import '../../shared/models/product.dart';
 import '../../shared/models/return_item.dart';
 import '../../shared/models/return_record.dart';
@@ -13,6 +16,7 @@ import '../../shared/models/sale.dart';
 import '../../shared/models/sale_item.dart';
 import '../../shared/models/store_config.dart';
 import '../database/isar_service.dart';
+import '../storage/image_cache_service.dart';
 import '../supabase/supabase_service.dart';
 import 'row_mappers.dart';
 
@@ -52,9 +56,14 @@ class RealtimeDataSyncService {
       StreamController<void>.broadcast();
   final StreamController<void> _productsChangedController =
       StreamController<void>.broadcast();
+  final StreamController<void> _storeProfileChangedController =
+      StreamController<void>.broadcast();
+  final StreamController<void> _creditChangedController =
+      StreamController<void>.broadcast();
 
-  /// Emits whenever a remote sale/return has been applied locally - watched
-  /// by Sales History to refresh without a manual pull-to-refresh.
+  /// Emits whenever a remote sale/return/extra-income entry has been
+  /// applied locally - watched by Sales History to refresh without a
+  /// manual pull-to-refresh.
   Stream<void> get salesChanged => _salesChangedController.stream;
 
   /// Emits whenever a remote risk_log entry has been applied locally -
@@ -66,6 +75,17 @@ class RealtimeDataSyncService {
   /// see [_applyRemoteProductUpdate]) - watched by Stock alongside the
   /// existing stock-quantity signal.
   Stream<void> get productsChanged => _productsChangedController.stream;
+
+  /// Emits whenever another device's Settings edit (store name, owner
+  /// name/phone, address) has been applied locally - watched by the
+  /// Settings screen.
+  Stream<void> get storeProfileChanged => _storeProfileChangedController.stream;
+
+  /// Emits whenever a remote credit_customer or credit_transaction change
+  /// (new/edited/deleted customer, a repayment or credit adjustment) has
+  /// been applied locally - watched by the Customers list and Customer
+  /// Detail.
+  Stream<void> get creditChanged => _creditChangedController.stream;
 
   /// Runs the catch-up pull, then opens every Realtime channel. A no-op if
   /// already subscribed, if there's no logged-in store, or if either step
@@ -121,6 +141,39 @@ class RealtimeDataSyncService {
           storeId: storeId,
           apply: _applyRemoteProductUpdate,
         ),
+        _subscribeInsert(
+          table: 'extra_income',
+          storeId: storeId,
+          apply: _applyRemoteExtraIncome,
+        ),
+        // stores has no store_id column - the row's own primary key *is*
+        // the store id, so this filters on that column instead.
+        _subscribeUpdate(
+          table: 'stores',
+          storeId: storeId,
+          filterColumn: 'uuid',
+          apply: _applyRemoteStoreProfile,
+        ),
+        _subscribeInsert(
+          table: 'credit_customers',
+          storeId: storeId,
+          apply: _applyRemoteCreditCustomerInsert,
+        ),
+        _subscribeUpdate(
+          table: 'credit_customers',
+          storeId: storeId,
+          apply: _applyRemoteCreditCustomerUpdate,
+        ),
+        _subscribeDelete(
+          table: 'credit_customers',
+          storeId: storeId,
+          apply: _applyRemoteCreditCustomerDelete,
+        ),
+        _subscribeInsert(
+          table: 'credit_transactions',
+          storeId: storeId,
+          apply: _applyRemoteCreditTransaction,
+        ),
       ]);
     } catch (e) {
       debugPrint('RealtimeDataSyncService.start() failed: $e');
@@ -141,6 +194,7 @@ class RealtimeDataSyncService {
     required String table,
     required String storeId,
     required Future<void> Function(Map<String, dynamic> row) apply,
+    String filterColumn = 'store_id',
   }) {
     final channel = SupabaseService.supabaseClient.channel(
       '$table:$storeId:insert',
@@ -152,7 +206,7 @@ class RealtimeDataSyncService {
           table: table,
           filter: PostgresChangeFilter(
             type: PostgresChangeFilterType.eq,
-            column: 'store_id',
+            column: filterColumn,
             value: storeId,
           ),
           callback: (payload) {
@@ -180,6 +234,7 @@ class RealtimeDataSyncService {
     required String table,
     required String storeId,
     required Future<void> Function(Map<String, dynamic> row) apply,
+    String filterColumn = 'store_id',
   }) {
     final channel = SupabaseService.supabaseClient.channel(
       '$table:$storeId:update',
@@ -191,7 +246,7 @@ class RealtimeDataSyncService {
           table: table,
           filter: PostgresChangeFilter(
             type: PostgresChangeFilterType.eq,
-            column: 'store_id',
+            column: filterColumn,
             value: storeId,
           ),
           callback: (payload) {
@@ -209,6 +264,45 @@ class RealtimeDataSyncService {
           if (error != null) {
             debugPrint(
               'RealtimeDataSyncService: $table update channel error=$error',
+            );
+          }
+        });
+    return channel;
+  }
+
+  /// Unlike insert/update, a delete payload's `oldRecord` only reliably
+  /// carries the row's primary key (Postgres' default REPLICA IDENTITY) -
+  /// not `store_id`, so this can't filter server-side by store the same
+  /// way. Filters client-side per row instead; the volume of deletes on
+  /// any of these tables is low enough that this is a non-issue.
+  RealtimeChannel _subscribeDelete({
+    required String table,
+    required String storeId,
+    required Future<void> Function(Map<String, dynamic> oldRow) apply,
+  }) {
+    final channel = SupabaseService.supabaseClient.channel(
+      '$table:$storeId:delete',
+    );
+    channel
+        .onPostgresChanges(
+          event: PostgresChangeEvent.delete,
+          schema: 'public',
+          table: table,
+          callback: (payload) {
+            unawaited(
+              apply(payload.oldRecord).catchError((e, st) {
+                debugPrint(
+                  'RealtimeDataSyncService: apply delete on $table failed: '
+                  '$e\n$st',
+                );
+              }),
+            );
+          },
+        )
+        .subscribe((status, error) {
+          if (error != null) {
+            debugPrint(
+              'RealtimeDataSyncService: $table delete channel error=$error',
             );
           }
         });
@@ -276,6 +370,35 @@ class RealtimeDataSyncService {
       final riskLog = await _fetchSince('risk_log', storeId, sinceIso);
       for (final row in riskLog) {
         await _applyRemoteRiskLog(row);
+      }
+      final extraIncome = await _fetchSince('extra_income', storeId, sinceIso);
+      for (final row in extraIncome) {
+        await _applyRemoteExtraIncome(row);
+      }
+      final creditCustomers = await _fetchSince(
+        'credit_customers',
+        storeId,
+        sinceIso,
+      );
+      for (final row in creditCustomers) {
+        await _applyRemoteCreditCustomerUpdate(row);
+      }
+      final creditTransactions = await _fetchSince(
+        'credit_transactions',
+        storeId,
+        sinceIso,
+      );
+      for (final row in creditTransactions) {
+        await _applyRemoteCreditTransaction(row);
+      }
+      // stores has just the one row for this store - no date range to
+      // catch up over, just re-fetch and apply its current state.
+      final storeRows = await SupabaseService.supabaseClient
+          .from('stores')
+          .select()
+          .eq('uuid', storeId);
+      if (storeRows.isNotEmpty) {
+        await _applyRemoteStoreProfile(storeRows.first);
       }
 
       await _updateWatermark(DateTime.now());
@@ -361,6 +484,21 @@ class RealtimeDataSyncService {
     _riskLogChangedController.add(null);
   }
 
+  Future<void> _applyRemoteExtraIncome(Map<String, dynamic> row) async {
+    final uuid = row['uuid'] as String;
+    final existing = await _isar.extraIncomes
+        .filter()
+        .uuidEqualTo(uuid)
+        .findFirst();
+    if (existing != null) return;
+    await _isar.writeTxn(() async {
+      await _isar.extraIncomes.put(extraIncomeFromRow(row));
+    });
+    // Reuses the Sales History refresh signal - extra income shows up
+    // there alongside sales/returns, not on a screen of its own.
+    _salesChangedController.add(null);
+  }
+
   /// A product this device has never seen before, created by another
   /// device. Trusts the row's own `stock` column directly (rather than
   /// leaving it at 0 for RealtimeStockSyncService to build up) - safe
@@ -383,7 +521,7 @@ class RealtimeDataSyncService {
     _productsChangedController.add(null);
   }
 
-  /// An existing product edited (price/name/category/etc.) on another
+  /// An existing product edited (price/name/category/image/etc.) on another
   /// device. Deliberately leaves [Product.stock] untouched - the remote
   /// row's own `stock` column isn't kept live-updated by a sale/return/
   /// adjustment (see stock_events' doc comment in SCHEMA_TRUTH.md), so
@@ -401,15 +539,139 @@ class RealtimeDataSyncService {
       return;
     }
 
+    final newImageUrl = row['image_url'] as String?;
+    // A cached file keyed by the OLD imageUrl is now wrong the moment the
+    // image actually changes (replaced with a different photo) or is
+    // removed (imageUrl now null) - mirrors ProductRepository.save()'s own
+    // cache-invalidation for a *local* edit. Missing here meant a remote
+    // image replace/removal never showed up on this device at all: the
+    // display widget prefers cachedImagePath over imageUrl whenever the
+    // cached file still exists on disk (see CachedProductImage), so a
+    // stale file kept winning indefinitely. Found 2026-09-12.
+    final imageChanged = existing.imageUrl != newImageUrl;
+    if (imageChanged) {
+      await ImageCacheService.deleteCachedFile(existing.barcode);
+    }
+
     final updated = productFromRow(row)
       ..id = existing.id
       ..stock = existing.stock
-      ..cachedImagePath = existing.cachedImagePath
-      ..catalogueSyncedImageUrl = existing.catalogueSyncedImageUrl;
+      ..cachedImagePath = imageChanged ? null : existing.cachedImagePath
+      ..catalogueSyncedImageUrl = imageChanged
+          ? null
+          : existing.catalogueSyncedImageUrl;
     await _isar.writeTxn(() async {
       await _isar.products.put(updated);
     });
     _productsChangedController.add(null);
+  }
+
+  /// Another device's Settings edit (store name, owner name/phone,
+  /// address, or the Product Images toggles) - only touches the specific
+  /// profile fields `_enqueueStoreProfileSync` actually pushes, never this
+  /// device's own local-only state (deviceId, sound prefs, sync
+  /// timestamps, login state).
+  Future<void> _applyRemoteStoreProfile(Map<String, dynamic> row) async {
+    final config = await _isar.storeConfigs.get(1);
+    if (config == null) return;
+
+    config
+      ..storeName = row['name'] as String? ?? config.storeName
+      ..ownerName = row['owner_name'] as String? ?? config.ownerName
+      ..ownerPhone = row['owner_phone'] as String? ?? config.ownerPhone
+      ..address = row['address'] as String?
+      ..useCatalogueImages =
+          row['use_catalogue_images'] as bool? ?? config.useCatalogueImages
+      ..imagesWifiOnly =
+          row['images_wifi_only'] as bool? ?? config.imagesWifiOnly;
+    await _isar.writeTxn(() async {
+      await _isar.storeConfigs.put(config);
+    });
+    _storeProfileChangedController.add(null);
+  }
+
+  Future<void> _applyRemoteCreditCustomerInsert(
+    Map<String, dynamic> row,
+  ) async {
+    final uuid = row['uuid'] as String;
+    final existing = await _isar.creditCustomers
+        .filter()
+        .uuidEqualTo(uuid)
+        .findFirst();
+    if (existing != null) return;
+    await _isar.writeTxn(() async {
+      await _isar.creditCustomers.put(creditCustomerFromRow(row));
+    });
+    _creditChangedController.add(null);
+  }
+
+  /// An existing customer's balance, credit limit, or details changed on
+  /// another device - a repayment, manual credit adjustment, or a details
+  /// edit. Also handles a customer this device hasn't seen at all yet
+  /// (same as a fresh insert), which is exactly what a first-run catch-up
+  /// hits for every existing customer.
+  Future<void> _applyRemoteCreditCustomerUpdate(
+    Map<String, dynamic> row,
+  ) async {
+    final uuid = row['uuid'] as String;
+    final existing = await _isar.creditCustomers
+        .filter()
+        .uuidEqualTo(uuid)
+        .findFirst();
+    if (existing == null) {
+      await _applyRemoteCreditCustomerInsert(row);
+      return;
+    }
+
+    final updated = creditCustomerFromRow(row)..id = existing.id;
+    await _isar.writeTxn(() async {
+      await _isar.creditCustomers.put(updated);
+    });
+    _creditChangedController.add(null);
+  }
+
+  /// A customer deleted on another device. Postgres only guarantees a
+  /// delete payload's `oldRecord` carries the primary key (`uuid`) - not
+  /// the full row - so this can't reuse a row-mapper the way insert/update
+  /// do. Mirrors CreditRepository.deleteCustomer's own local cleanup
+  /// (customer + every transaction of theirs), just without re-enqueuing a
+  /// sync event for a delete this device didn't initiate.
+  Future<void> _applyRemoteCreditCustomerDelete(
+    Map<String, dynamic> oldRow,
+  ) async {
+    final uuid = oldRow['uuid'] as String?;
+    if (uuid == null) return;
+    final existing = await _isar.creditCustomers
+        .filter()
+        .uuidEqualTo(uuid)
+        .findFirst();
+    if (existing == null) return;
+
+    await _isar.writeTxn(() async {
+      final txIds = await _isar.creditTransactions
+          .filter()
+          .customerIdEqualTo(uuid)
+          .idProperty()
+          .findAll();
+      if (txIds.isNotEmpty) {
+        await _isar.creditTransactions.deleteAll(txIds);
+      }
+      await _isar.creditCustomers.delete(existing.id);
+    });
+    _creditChangedController.add(null);
+  }
+
+  Future<void> _applyRemoteCreditTransaction(Map<String, dynamic> row) async {
+    final uuid = row['uuid'] as String;
+    final existing = await _isar.creditTransactions
+        .filter()
+        .uuidEqualTo(uuid)
+        .findFirst();
+    if (existing != null) return;
+    await _isar.writeTxn(() async {
+      await _isar.creditTransactions.put(creditTransactionFromRow(row));
+    });
+    _creditChangedController.add(null);
   }
 
   Future<void> _updateWatermark(DateTime at) async {
@@ -427,6 +689,8 @@ class RealtimeDataSyncService {
     await _salesChangedController.close();
     await _riskLogChangedController.close();
     await _productsChangedController.close();
+    await _storeProfileChangedController.close();
+    await _creditChangedController.close();
   }
 }
 
@@ -453,4 +717,17 @@ final riskLogChangedProvider = StreamProvider<void>((ref) {
 /// product.
 final productsChangedProvider = StreamProvider<void>((ref) {
   return ref.watch(realtimeDataSyncServiceProvider).productsChanged;
+});
+
+/// Watched by the Settings screen to refresh when another device edits the
+/// store profile.
+final storeProfileChangedProvider = StreamProvider<void>((ref) {
+  return ref.watch(realtimeDataSyncServiceProvider).storeProfileChanged;
+});
+
+/// Watched by the Customers list and Customer Detail to refresh when
+/// another device adds/edits/deletes a customer or records a credit
+/// transaction.
+final creditChangedProvider = StreamProvider<void>((ref) {
+  return ref.watch(realtimeDataSyncServiceProvider).creditChanged;
 });
