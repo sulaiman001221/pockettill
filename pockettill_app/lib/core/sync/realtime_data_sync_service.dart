@@ -571,19 +571,50 @@ class RealtimeDataSyncService {
   /// profile fields `_enqueueStoreProfileSync` actually pushes, never this
   /// device's own local-only state (deviceId, sound prefs, sync
   /// timestamps, login state).
+  ///
+  /// `stores` gets updated for reasons Settings doesn't care about too -
+  /// `check_founding_store_qualification` stamps `qualification_checked_at`
+  /// on every call, for instance - and every one of those still fires this
+  /// device's own `stores:update` Realtime subscription (filtered by store
+  /// id only, so a device sees its own writes echoed back same as any other
+  /// device's). Unconditionally firing [_storeProfileChangedController] on
+  /// every such row change created a genuine infinite loop: Settings opens
+  /// -> calls that RPC -> RPC writes the row -> this device's own channel
+  /// echoes it -> signal fires -> Settings' listener reloads -> calls the
+  /// RPC again - bounded only by round-trip latency, which read as
+  /// "refreshing every second". Found 2026-09-12. Comparing against the
+  /// fields actually applied below (and skipping the write/signal
+  /// entirely when none of them changed) breaks the loop at its root
+  /// instead of just changing what Settings does in response to it.
   Future<void> _applyRemoteStoreProfile(Map<String, dynamic> row) async {
     final config = await _isar.storeConfigs.get(1);
     if (config == null) return;
 
+    final newStoreName = row['name'] as String? ?? config.storeName;
+    final newOwnerName = row['owner_name'] as String? ?? config.ownerName;
+    final newOwnerPhone = row['owner_phone'] as String? ?? config.ownerPhone;
+    final newAddress = row['address'] as String?;
+    final newUseCatalogueImages =
+        row['use_catalogue_images'] as bool? ?? config.useCatalogueImages;
+    final newImagesWifiOnly =
+        row['images_wifi_only'] as bool? ?? config.imagesWifiOnly;
+
+    final unchanged =
+        config.storeName == newStoreName &&
+        config.ownerName == newOwnerName &&
+        config.ownerPhone == newOwnerPhone &&
+        config.address == newAddress &&
+        config.useCatalogueImages == newUseCatalogueImages &&
+        config.imagesWifiOnly == newImagesWifiOnly;
+    if (unchanged) return;
+
     config
-      ..storeName = row['name'] as String? ?? config.storeName
-      ..ownerName = row['owner_name'] as String? ?? config.ownerName
-      ..ownerPhone = row['owner_phone'] as String? ?? config.ownerPhone
-      ..address = row['address'] as String?
-      ..useCatalogueImages =
-          row['use_catalogue_images'] as bool? ?? config.useCatalogueImages
-      ..imagesWifiOnly =
-          row['images_wifi_only'] as bool? ?? config.imagesWifiOnly;
+      ..storeName = newStoreName
+      ..ownerName = newOwnerName
+      ..ownerPhone = newOwnerPhone
+      ..address = newAddress
+      ..useCatalogueImages = newUseCatalogueImages
+      ..imagesWifiOnly = newImagesWifiOnly;
     await _isar.writeTxn(() async {
       await _isar.storeConfigs.put(config);
     });

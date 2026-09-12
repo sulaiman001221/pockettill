@@ -293,8 +293,12 @@ class ProductRepository {
   /// purely private inventory data now (the shared, admin-moderated
   /// catalogue lives entirely in `catalogue_products`, a structurally
   /// separate table stores can't write to at all - see
-  /// SupabaseService.fetchCatalogueProduct), so nothing else can ever
-  /// depend on this exact row.
+  /// SupabaseService.fetchCatalogueProduct). Its own `stock_events` rows
+  /// (virtually every product has at least an `initial_stock` one) cascade
+  /// away with it remotely - see the FK note in SCHEMA_TRUTH.md - so this
+  /// doesn't need to clean those up itself. That FK used to be plain `NO
+  /// ACTION`, which meant almost every product delete permanently violated
+  /// it and retried forever with no way to succeed; fixed 2026-09-12.
   Future<void> delete(String productUuid) async {
     final product = await getByUuid(productUuid);
     if (product == null) return;

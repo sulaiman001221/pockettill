@@ -264,7 +264,7 @@ Primary key is `id`, not `uuid` (unlike every other synced table) -
 |---|---|---|
 | id | uuid PK | `gen_random_uuid()` |
 | store_id | uuid | FK `stores(uuid)` |
-| product_id | uuid | FK `products(uuid)` |
+| product_id | uuid | FK `products(uuid)`, **`ON DELETE CASCADE`** - added 2026-09-12. Was plain `NO ACTION`, which meant `ProductRepository.delete()`'s own doc comment ("nothing else can ever depend on this exact row") was false in practice: virtually every product gets at least an `initial_stock` event the moment it's created, so almost any product delete permanently violated this FK. The pending `product` delete sync event then retried forever on a fixed interval with no way to ever succeed, silently (after the per-entity-type try/catch added the same day - see `SyncService.sync()`), which is exactly what left a real device unable to log out ("unsynced changes") despite everything else having synced. Cascading a product's own private stock-event history away with it when the product itself is deleted is safe - it's not read by anything after the product's gone (revenue/analytics live in `sales`/`sale_items`, untouched). |
 | device_id | text | which device recorded this delta |
 | change_type | text | `sale` \| `restock` \| `manual_adjustment` \| `return` \| `initial_stock` |
 | quantity_delta | integer | negative for reductions, positive for additions |
