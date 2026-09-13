@@ -294,6 +294,7 @@ _RiskTypeInfo _infoForType(String type) {
         AppTheme.syncAmber,
       );
     case 'concurrent_stock_adjustment': // historical only, no longer logged
+    case 'concurrent_stock_edit':
       return const _RiskTypeInfo(
         Icons.sync_problem,
         'Concurrent Stock Edit',

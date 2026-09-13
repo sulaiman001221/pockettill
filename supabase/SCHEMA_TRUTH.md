@@ -126,7 +126,7 @@ PK: `(sale_uuid, product_uuid)`.
 | uuid | uuid PK | |
 | name | text | |
 | phone | text | nullable |
-| balance | numeric | default 0 — running total owed by the customer |
+| balance | numeric | default 0 — running total owed by the customer, mutated independently by whichever device performs an action (see `CreditRepository`). **Not safe to trust blindly across devices** - two devices both applying their own delta to what they each locally believe this to be is a real race (found 2026-09-13: a second manual-credit add in a row on one device updated the other's transaction history but not this column's displayed value). The Flutter app's `RealtimeDataSyncService._recomputeCreditBalance` treats this column as a best-effort snapshot only, and after every credit-related Realtime event recomputes and overwrites the *local* value from a fresh pull of this customer's full `credit_transactions` history instead - the transactions themselves, being insert-only and idempotent by uuid, are the actual source of truth. This column itself is not restructured (still written directly by every `CreditRepository` balance-changing method) - only how a *receiving* device treats it changed. |
 | credit_limit | numeric | nullable |
 | created_at | timestamptz | |
 | last_activity_at | timestamptz | nullable |
@@ -227,7 +227,7 @@ pre-existing gap, not introduced by this entry.
 | column | type | notes |
 |---|---|---|
 | uuid | uuid PK | `gen_random_uuid()` |
-| type | text | `manual_stock_reduction` \| `product_deleted` \| `price_changed` \| `manual_credit` \| `credit_writeoff` \| `customer_deleted_with_balance` (added 2026-08-21) \| `concurrent_price_edit` \| `concurrent_product_edit` (added 2026-09-12, replaces `concurrent_stock_adjustment` - see `stock_events` below for why stock was dropped from conflict detection entirely) |
+| type | text | `manual_stock_reduction` \| `product_deleted` \| `price_changed` \| `manual_credit` \| `credit_writeoff` \| `customer_deleted_with_balance` (added 2026-08-21) \| `concurrent_price_edit` \| `concurrent_product_edit` (added 2026-09-12, replaces `concurrent_stock_adjustment` - see `stock_events` below for why stock was dropped from conflict detection entirely) \| `concurrent_stock_edit` (added 2026-09-13 - a *manual* stock-quantity edit through the product form conflicting is a different case from the ordinary concurrent-sales case `concurrent_stock_adjustment` used to false-positive on; see `SyncService._resolveProductConflicts`) |
 | description | text | |
 | before_value | text | nullable — freeform display string, not necessarily a raw number |
 | after_value | text | nullable |
@@ -298,6 +298,31 @@ subscription (unlike every insert-only table above) - the app really does
 hard-delete a customer row (`CreditRepository.deleteCustomer`), and
 Postgres only guarantees a delete payload's `oldRecord` carries the
 primary key, not the full row.
+
+**Extended 2026-09-13**: two-device testing found a `credit_customers` delete
+never reached a second device, even though both the app's subscription code
+and the publication membership were already correct. Root cause: Realtime
+needs a DELETE's full old row (not just the primary key, which is all a
+table's *default* `REPLICA IDENTITY` includes) to evaluate a table's own RLS
+policy against a given subscriber - `credit_customers_store_all`/
+`products_store_all` both key off `store_id`, which a default-identity
+delete payload never carries, so Realtime silently never delivered the
+event to any RLS-scoped client at all. Fixed by `alter table ... replica
+identity full` on both `credit_customers` and `products` (the latter ahead
+of adding its own delete subscription the same day, for the identical
+reason). Every other table above with an insert/update-only subscription
+was never affected by this - only a DELETE payload is ever this limited.
+
+Also added 2026-09-13: `products` now has a delete subscription (mirroring
+`credit_customers`'), and the Flutter app runs a full products
+reconciliation (`RealtimeDataSyncService._reconcileProducts`) every time it
+starts its Realtime channels - comparing every product uuid this store has
+here against what's known locally and pulling down anything missing,
+regardless of the regular catch-up watermark. That watermark-based catch-up
+only ever looks forward from a point in time (and doesn't look backward at
+all on its very first run - see its own comment below), so a device that
+missed a product before ever having working sync has no other path to
+catch up on it.
 
 One-time backfill (2026-09-09): every pre-existing product with
 `stock > 0` got a single `initial_stock` event (`device_id = 'migration'`)

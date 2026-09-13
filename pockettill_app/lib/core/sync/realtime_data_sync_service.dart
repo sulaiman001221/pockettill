@@ -14,7 +14,9 @@ import '../../shared/models/return_record.dart';
 import '../../shared/models/risk_log.dart';
 import '../../shared/models/sale.dart';
 import '../../shared/models/sale_item.dart';
+import '../../shared/models/stock_event.dart';
 import '../../shared/models/store_config.dart';
+import '../../shared/repositories/credit_repository.dart';
 import '../database/isar_service.dart';
 import '../storage/image_cache_service.dart';
 import '../supabase/supabase_service.dart';
@@ -60,6 +62,10 @@ class RealtimeDataSyncService {
       StreamController<void>.broadcast();
   final StreamController<void> _creditChangedController =
       StreamController<void>.broadcast();
+  final StreamController<String> _productDeletedController =
+      StreamController<String>.broadcast();
+  final StreamController<String> _customerDeletedController =
+      StreamController<String>.broadcast();
 
   /// Emits whenever a remote sale/return/extra-income entry has been
   /// applied locally - watched by Sales History to refresh without a
@@ -87,6 +93,17 @@ class RealtimeDataSyncService {
   /// Detail.
   Stream<void> get creditChanged => _creditChangedController.stream;
 
+  /// Emits the uuid of a product deleted on another device, once removed
+  /// locally - watched by a currently-open product edit screen so it can
+  /// navigate back with an explanatory message instead of continuing to
+  /// edit a row that no longer exists.
+  Stream<String> get productDeleted => _productDeletedController.stream;
+
+  /// Emits the uuid of a credit customer deleted on another device, once
+  /// removed locally - watched by a currently-open Customer Detail screen
+  /// for the same reason as [productDeleted].
+  Stream<String> get customerDeleted => _customerDeletedController.stream;
+
   /// Runs the catch-up pull, then opens every Realtime channel. A no-op if
   /// already subscribed, if there's no logged-in store, or if either step
   /// fails - this is best-effort background infrastructure, never
@@ -104,6 +121,7 @@ class RealtimeDataSyncService {
       final storeId = storeConfig.storeId;
 
       await _catchUp(storeConfig);
+      await _reconcileProducts(storeId);
 
       _channels.addAll([
         _subscribeInsert(
@@ -140,6 +158,14 @@ class RealtimeDataSyncService {
           table: 'products',
           storeId: storeId,
           apply: _applyRemoteProductUpdate,
+        ),
+        // products' delete payload only reliably carries its primary key
+        // (uuid), not store_id - see REPLICA IDENTITY FULL note in
+        // SCHEMA_TRUTH.md, needed for Realtime to deliver this at all.
+        _subscribeDelete(
+          table: 'products',
+          storeId: storeId,
+          apply: _applyRemoteProductDelete,
         ),
         _subscribeInsert(
           table: 'extra_income',
@@ -307,6 +333,46 @@ class RealtimeDataSyncService {
           }
         });
     return channel;
+  }
+
+  /// Full reconciliation for `products` - compares every product uuid this
+  /// store has in Supabase against what's known locally and pulls down
+  /// anything missing, regardless of [_catchUp]'s watermark. The
+  /// watermark-based catch-up only ever looks forward from a point in time
+  /// (and, on its very first run on a device, doesn't look backward at
+  /// all - see its own comment), so a device that missed products entirely
+  /// before multi-device sync existed, or before this device's watermark
+  /// was ever established, has no other path to ever catch up on them.
+  /// Runs every time [start] runs (every app startup while online), not
+  /// just once - cheap (a single uuid-only query for the common case of
+  /// nothing missing) and self-correcting if it's ever missed a gap
+  /// before. Found 2026-09-13 on a real two-device store: one device stuck
+  /// at 20 products, the other correctly at 25.
+  Future<void> _reconcileProducts(String storeId) async {
+    try {
+      final remoteRows = await SupabaseService.supabaseClient
+          .from('products')
+          .select('uuid')
+          .eq('store_id', storeId);
+      final remoteUuids = remoteRows.map((row) => row['uuid'] as String).toSet();
+
+      final localProducts = await _isar.products.where().findAll();
+      final localUuids = localProducts.map((p) => p.uuid).toSet();
+
+      final missing = remoteUuids.difference(localUuids);
+      if (missing.isEmpty) return;
+
+      final missingRows = await SupabaseService.supabaseClient
+          .from('products')
+          .select()
+          .eq('store_id', storeId)
+          .inFilter('uuid', missing.toList());
+      for (final row in missingRows) {
+        await _applyRemoteNewProduct(row);
+      }
+    } catch (e) {
+      debugPrint('RealtimeDataSyncService: product reconciliation failed: $e');
+    }
   }
 
   Future<void> _catchUp(StoreConfig storeConfig) async {
@@ -566,6 +632,34 @@ class RealtimeDataSyncService {
     _productsChangedController.add(null);
   }
 
+  /// A product deleted on another device. Postgres only guarantees a
+  /// delete payload's `oldRecord` carries the primary key (`uuid`) - not
+  /// the full row - mirrors [_applyRemoteCreditCustomerDelete]. Also
+  /// removes its stock_events locally (already cascaded remotely, see
+  /// SCHEMA_TRUTH.md) so nothing on this device's own ledger still
+  /// references a product that no longer exists.
+  Future<void> _applyRemoteProductDelete(Map<String, dynamic> oldRow) async {
+    final uuid = oldRow['uuid'] as String?;
+    if (uuid == null) return;
+    final existing = await _isar.products.filter().uuidEqualTo(uuid).findFirst();
+    if (existing == null) return;
+
+    await _isar.writeTxn(() async {
+      final eventIds = await _isar.stockEvents
+          .filter()
+          .productUuidEqualTo(uuid)
+          .idProperty()
+          .findAll();
+      if (eventIds.isNotEmpty) {
+        await _isar.stockEvents.deleteAll(eventIds);
+      }
+      await _isar.products.delete(existing.id);
+    });
+    await ImageCacheService.deleteCachedFile(existing.barcode);
+    _productsChangedController.add(null);
+    _productDeletedController.add(uuid);
+  }
+
   /// Another device's Settings edit (store name, owner name/phone,
   /// address, or the Product Images toggles) - only touches the specific
   /// profile fields `_enqueueStoreProfileSync` actually pushes, never this
@@ -633,14 +727,17 @@ class RealtimeDataSyncService {
     await _isar.writeTxn(() async {
       await _isar.creditCustomers.put(creditCustomerFromRow(row));
     });
+    await _recomputeCreditBalance(uuid, row['store_id'] as String);
     _creditChangedController.add(null);
   }
 
-  /// An existing customer's balance, credit limit, or details changed on
-  /// another device - a repayment, manual credit adjustment, or a details
-  /// edit. Also handles a customer this device hasn't seen at all yet
-  /// (same as a fresh insert), which is exactly what a first-run catch-up
-  /// hits for every existing customer.
+  /// An existing customer's credit limit or details changed on another
+  /// device - or, per [_recomputeCreditBalance] below, a repayment/manual
+  /// credit adjustment (any credit-related change ends up here or in
+  /// [_applyRemoteCreditTransaction], both of which recompute). Also
+  /// handles a customer this device hasn't seen at all yet (same as a
+  /// fresh insert), which is exactly what a first-run catch-up hits for
+  /// every existing customer.
   Future<void> _applyRemoteCreditCustomerUpdate(
     Map<String, dynamic> row,
   ) async {
@@ -658,6 +755,7 @@ class RealtimeDataSyncService {
     await _isar.writeTxn(() async {
       await _isar.creditCustomers.put(updated);
     });
+    await _recomputeCreditBalance(uuid, row['store_id'] as String);
     _creditChangedController.add(null);
   }
 
@@ -690,19 +788,93 @@ class RealtimeDataSyncService {
       await _isar.creditCustomers.delete(existing.id);
     });
     _creditChangedController.add(null);
+    _customerDeletedController.add(uuid);
   }
 
   Future<void> _applyRemoteCreditTransaction(Map<String, dynamic> row) async {
+    final inserted = await _insertCreditTransactionIfMissing(row);
+    if (!inserted) return;
+    await _recomputeCreditBalance(
+      row['customer_id'] as String,
+      row['store_id'] as String,
+    );
+    _creditChangedController.add(null);
+  }
+
+  Future<bool> _insertCreditTransactionIfMissing(
+    Map<String, dynamic> row,
+  ) async {
     final uuid = row['uuid'] as String;
     final existing = await _isar.creditTransactions
         .filter()
         .uuidEqualTo(uuid)
         .findFirst();
-    if (existing != null) return;
+    if (existing != null) return false;
     await _isar.writeTxn(() async {
       await _isar.creditTransactions.put(creditTransactionFromRow(row));
     });
-    _creditChangedController.add(null);
+    return true;
+  }
+
+  /// Recomputes [customerUuid]'s outstanding balance directly from
+  /// Supabase's full transaction history for them - not just whatever this
+  /// device has caught up on locally, which could be incomplete (e.g. a
+  /// customer this device only just learned about via catch-up/Realtime,
+  /// before its own transaction history has necessarily arrived too) - and
+  /// persists it locally, backfilling any transaction this device was
+  /// missing along the way.
+  ///
+  /// `credit_customers.balance` is a running total mutated independently
+  /// by whichever device performs an action (see [CreditRepository]) - two
+  /// devices both applying their own delta to what they each locally
+  /// believe the balance to be is exactly the kind of unordered-channel
+  /// race `stock_events`/`initial_stock` already needed a structural fix
+  /// for (see SCHEMA_TRUTH.md). `credit_transactions`, unlike
+  /// `credit_customers.balance`, is insert-only and idempotent by uuid -
+  /// recomputing from Supabase's full copy of it after every credit-related
+  /// Realtime event (customer insert/update, or a new transaction) makes
+  /// this device's local balance self-correcting regardless of arrival
+  /// order, rather than trusting whatever snapshot happened to be baked
+  /// into the most recently-applied `credit_customers` row. Found
+  /// 2026-09-13: a second manual-credit add in a row updated transaction
+  /// history but not the displayed balance on the other device.
+  Future<void> _recomputeCreditBalance(
+    String customerUuid,
+    String storeId,
+  ) async {
+    try {
+      final rows = await SupabaseService.supabaseClient
+          .from('credit_transactions')
+          .select()
+          .eq('customer_id', customerUuid)
+          .eq('store_id', storeId);
+      for (final row in rows) {
+        await _insertCreditTransactionIfMissing(row);
+      }
+
+      final transactions = await _isar.creditTransactions
+          .filter()
+          .customerIdEqualTo(customerUuid)
+          .findAll();
+      final recomputed = transactions.fold<double>(
+        0,
+        (sum, tx) => sum + creditTransactionSignedDelta(tx),
+      );
+
+      final customer = await _isar.creditCustomers
+          .filter()
+          .uuidEqualTo(customerUuid)
+          .findFirst();
+      if (customer == null || customer.balance == recomputed) return;
+      customer.balance = recomputed;
+      await _isar.writeTxn(() async {
+        await _isar.creditCustomers.put(customer);
+      });
+    } catch (e) {
+      // Best-effort - the balance stays whatever it was until the next
+      // credit-related event triggers another recompute attempt.
+      debugPrint('RealtimeDataSyncService: credit balance recompute failed: $e');
+    }
   }
 
   Future<void> _updateWatermark(DateTime at) async {
@@ -722,6 +894,8 @@ class RealtimeDataSyncService {
     await _productsChangedController.close();
     await _storeProfileChangedController.close();
     await _creditChangedController.close();
+    await _productDeletedController.close();
+    await _customerDeletedController.close();
   }
 }
 
@@ -761,4 +935,16 @@ final storeProfileChangedProvider = StreamProvider<void>((ref) {
 /// transaction.
 final creditChangedProvider = StreamProvider<void>((ref) {
   return ref.watch(realtimeDataSyncServiceProvider).creditChanged;
+});
+
+/// Watched by a currently-open product edit screen to navigate back if the
+/// product it's editing is deleted on another device.
+final productDeletedProvider = StreamProvider<String>((ref) {
+  return ref.watch(realtimeDataSyncServiceProvider).productDeleted;
+});
+
+/// Watched by Customer Detail to navigate back if the customer it's
+/// showing is deleted on another device.
+final customerDeletedProvider = StreamProvider<String>((ref) {
+  return ref.watch(realtimeDataSyncServiceProvider).customerDeleted;
 });

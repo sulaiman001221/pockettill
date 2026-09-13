@@ -101,6 +101,25 @@ Future<void> main() async {
     }
   });
 
+  // `isReachable` is a plain broadcast stream - it only replays to whoever
+  // is *already* listening the moment reachability first resolves, it
+  // doesn't remember and replay that value to a listener attaching a
+  // moment later. `ReachabilityService.init()` above already kicks off its
+  // own first health-check ping (fire-and-forget, before this point), so
+  // there's a real race: if that ping resolves before the `.listen()` call
+  // above finishes attaching, this app never gets its first
+  // syncAndGoLive() call at all - stuck with no Realtime channels ever
+  // started until some *later* genuine connectivity change happens to
+  // occur. Found 2026-09-13 explaining "product updates don't sync until
+  // the app's storage is cleared" - a fresh process restart just gave the
+  // race another, differently-timed chance to go the other way, which
+  // read as "clearing fixed it" without anything about the fix being
+  // about cache at all. Calling this once, unconditionally, closes the
+  // gap regardless of which way that race goes - sync()/start() are both
+  // safe no-ops if genuinely offline (the next real reachable event
+  // retries them), and start() itself no-ops if channels are already up.
+  unawaited(syncAndGoLive());
+
   // Realtime channels only ever got (re)started above, on a network
   // reachability *change* - a phone that's simply backgrounded and later
   // resumed (screen locked, home button, switching to another app) never

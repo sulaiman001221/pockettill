@@ -20,6 +20,7 @@ RiskLogCategory categoryForRiskType(String type) {
     case 'price_changed':
     case 'concurrent_price_edit':
     case 'concurrent_product_edit':
+    case 'concurrent_stock_edit':
     case 'concurrent_stock_adjustment': // historical only, no longer logged
       return RiskLogCategory.stock;
     case 'manual_credit':

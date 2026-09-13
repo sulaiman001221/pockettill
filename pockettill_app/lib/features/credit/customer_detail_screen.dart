@@ -451,6 +451,18 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
     // customer, or editing their details, should show up here without a
     // manual refresh - see RealtimeDataSyncService.
     ref.listen(creditChangedProvider, (_, _) => _reloadSilently());
+    // If another device deletes the exact customer this screen is showing,
+    // there's nothing left to reload - leave instead of continuing to
+    // display (or letting the owner act on) a customer that no longer
+    // exists.
+    ref.listen(customerDeletedProvider, (_, next) {
+      final deletedUuid = next.valueOrNull;
+      if (deletedUuid != widget.customerUuid || !mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('This customer has been removed')),
+      );
+      Navigator.of(context).pop();
+    });
 
     final customer = _customer;
 

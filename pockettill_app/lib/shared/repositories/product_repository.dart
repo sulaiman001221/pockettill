@@ -147,7 +147,26 @@ class ProductRepository {
     await _enqueueEvent(
       entityUuid: product.uuid,
       operation: isNew ? 'create' : 'update',
-      payload: _toPayload(product),
+      // For an update, `_conflict_base` carries the exact field values this
+      // device saw right before making this edit - name/price/category/
+      // mass/stock, the same set the Edit Product form lets an owner
+      // change. Never part of the row actually pushed to Supabase (see
+      // SyncService._toEventMap, which strips it before every push); it's
+      // this device's own record of "what I started from", read back
+      // alongside baseUpdatedAt by SyncService's conflict resolution to
+      // know what to revert to if another device's edit raced this one.
+      payload: isNew
+          ? _toPayload(product)
+          : {
+              ..._toPayload(product),
+              '_conflict_base': {
+                'name': existing.name,
+                'price': existing.price,
+                'category': existing.category,
+                'mass': existing.mass,
+                'stock': existing.stock,
+              },
+            },
       // The state this device knew about right before this edit - null for
       // a brand-new product (nothing to compare against) or a product
       // that's never been edited since creation (falls back to createdAt,
