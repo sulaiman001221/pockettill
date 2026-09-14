@@ -78,9 +78,14 @@ class _CatalogueBrowseScreenState extends ConsumerState<CatalogueBrowseScreen> {
   }
 
   Future<void> _loadCategories() async {
-    final categories = await ref
-        .read(catalogueBrowseRepositoryProvider)
-        .fetchCategories();
+    final repo = ref.read(catalogueBrowseRepositoryProvider);
+    // Cache-first (see _loadCategoryProducts's doc comment) - the chip
+    // labels themselves shouldn't wait on the network any more than the
+    // products underneath them do.
+    final cached = await repo.getCachedCategories();
+    if (mounted && cached.isNotEmpty) setState(() => _categories = cached);
+
+    final categories = await repo.fetchCategories();
     if (!mounted) return;
     setState(() => _categories = categories);
   }
@@ -88,12 +93,31 @@ class _CatalogueBrowseScreenState extends ConsumerState<CatalogueBrowseScreen> {
   Future<void> _loadCategoryProducts(String category) async {
     setState(() {
       _selectedCategory = category;
-      _products = [];
       _offset = 0;
       _hasMore = true;
-      _loadingProducts = true;
     });
     final repo = ref.read(catalogueBrowseRepositoryProvider);
+
+    // Cache-first, then a silent network refresh: every category-chip tap
+    // used to block on a fresh network round-trip even when the exact same
+    // page had already been fetched (and cached) moments earlier - felt
+    // like the screen had hung whenever the connection was at all slow.
+    // Showing what's already known instantly, then quietly replacing it
+    // once the refresh resolves, is the same "stale-while-revalidate"
+    // pattern the rest of the app already uses for cross-device Realtime
+    // updates - this is just the single-device, same-session version of
+    // it. Found 2026-09-14.
+    final cached = category == _kAllCategory
+        ? await repo.getCachedAll()
+        : await repo.getCachedByCategory(category);
+    if (!mounted || _selectedCategory != category) return;
+    final hasCached = cached.isNotEmpty;
+    setState(() {
+      _products = cached;
+      _offset = cached.length;
+      _loadingProducts = !hasCached;
+    });
+
     final items = category == _kAllCategory
         ? await repo.fetchAll(offset: 0)
         : await repo.fetchByCategory(category, offset: 0);
