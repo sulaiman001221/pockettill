@@ -10,41 +10,6 @@ import '../models/store_config.dart';
 import '../models/sync_event.dart';
 import 'risk_log_repository.dart';
 
-/// The signed effect of [transaction] on its customer's outstanding
-/// balance - positive increases what they owe, negative decreases it.
-///
-/// Every type except `return` carries an unsigned `amount` with the sign
-/// implied by `type` itself (`purchase`/`manual_credit` always increase,
-/// `repayment`/`writeoff` always decrease). `return` is the one exception -
-/// see ReturnRepository.processReturn - its `amount` is already signed
-/// (an exchange for a pricier item increases the balance, a refund or
-/// store credit decreases it), so it's used as-is.
-///
-/// Used both by [CreditRepository]'s own local recompute and by
-/// RealtimeDataSyncService, which recalculates a customer's balance from
-/// this device's full transaction history after every credit-related
-/// Realtime event, rather than trusting whichever `credit_customers.balance`
-/// snapshot happened to be baked into the most recently-applied row - see
-/// that class for why a plain running total mutated independently by
-/// whichever device acts is unsafe across devices. Unknown/legacy types
-/// contribute nothing rather than throwing, so a recompute never crashes
-/// on data from an app version that added a type this doesn't know about
-/// yet.
-double creditTransactionSignedDelta(CreditTransaction transaction) {
-  switch (transaction.type) {
-    case 'purchase':
-    case 'manual_credit':
-      return transaction.amount;
-    case 'repayment':
-    case 'writeoff':
-      return -transaction.amount;
-    case 'return':
-      return transaction.amount;
-    default:
-      return 0;
-  }
-}
-
 /// Business logic for credit/tab customers and their transactions. Sits
 /// between the UI and Isar - screens never touch Isar directly.
 class CreditRepository {

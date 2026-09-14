@@ -50,8 +50,16 @@ class RealtimeStockSyncService {
   /// already subscribed, if there's no logged-in store, or if either step
   /// fails - this is best-effort background infrastructure, never
   /// something a caller should have to handle a thrown error from.
+  ///
+  /// [_channel] alone isn't enough to prevent two overlapping calls - see
+  /// the matching [_starting] guard on [RealtimeDataSyncService.start] for
+  /// the race this closes (main.dart's unconditional first call and the
+  /// reachability-triggered one landing close together).
+  bool _starting = false;
+
   Future<void> start() async {
-    if (_channel != null) return;
+    if (_channel != null || _starting) return;
+    _starting = true;
 
     try {
       final storeConfig = await _isar.storeConfigs.get(1);
@@ -88,6 +96,8 @@ class RealtimeStockSyncService {
       _channel = channel;
     } catch (e) {
       debugPrint('RealtimeStockSyncService.start() failed: $e');
+    } finally {
+      _starting = false;
     }
   }
 

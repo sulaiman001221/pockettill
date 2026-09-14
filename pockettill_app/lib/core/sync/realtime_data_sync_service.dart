@@ -16,7 +16,6 @@ import '../../shared/models/sale.dart';
 import '../../shared/models/sale_item.dart';
 import '../../shared/models/stock_event.dart';
 import '../../shared/models/store_config.dart';
-import '../../shared/repositories/credit_repository.dart';
 import '../database/isar_service.dart';
 import '../storage/image_cache_service.dart';
 import '../supabase/supabase_service.dart';
@@ -108,8 +107,22 @@ class RealtimeDataSyncService {
   /// already subscribed, if there's no logged-in store, or if either step
   /// fails - this is best-effort background infrastructure, never
   /// something a caller should have to handle a thrown error from.
+  ///
+  /// [_channels] alone isn't enough to prevent two overlapping calls: it
+  /// only gets populated at the very end, so two calls landing close
+  /// together (main.dart's unconditional first call and the
+  /// reachability-triggered one, found racing 2026-09-14) can both pass
+  /// that check before either finishes, run catch-up/reconciliation
+  /// concurrently, and each open their own full set of Realtime channels -
+  /// doubling every subscription and leaving `_channels` only tracking
+  /// whichever batch finished last, so [stop] could never fully close the
+  /// other. [_starting] closes that gap the same way [SyncService]'s own
+  /// `_isSyncing` flag does for [SyncService.sync].
+  bool _starting = false;
+
   Future<void> start() async {
-    if (_channels.isNotEmpty) return;
+    if (_channels.isNotEmpty || _starting) return;
+    _starting = true;
 
     try {
       final storeConfig = await _isar.storeConfigs.get(1);
@@ -203,6 +216,8 @@ class RealtimeDataSyncService {
       ]);
     } catch (e) {
       debugPrint('RealtimeDataSyncService.start() failed: $e');
+    } finally {
+      _starting = false;
     }
   }
 
@@ -727,17 +742,25 @@ class RealtimeDataSyncService {
     await _isar.writeTxn(() async {
       await _isar.creditCustomers.put(creditCustomerFromRow(row));
     });
-    await _recomputeCreditBalance(uuid, row['store_id'] as String);
     _creditChangedController.add(null);
   }
 
-  /// An existing customer's credit limit or details changed on another
-  /// device - or, per [_recomputeCreditBalance] below, a repayment/manual
-  /// credit adjustment (any credit-related change ends up here or in
-  /// [_applyRemoteCreditTransaction], both of which recompute). Also
-  /// handles a customer this device hasn't seen at all yet (same as a
-  /// fresh insert), which is exactly what a first-run catch-up hits for
-  /// every existing customer.
+  /// An existing customer's balance, credit limit, or details changed on
+  /// another device - a repayment, manual credit adjustment, or a details
+  /// edit. Also handles a customer this device hasn't seen at all yet
+  /// (same as a fresh insert), which is exactly what a first-run catch-up
+  /// hits for every existing customer.
+  ///
+  /// Trusts the row's own `balance` column directly - a 2026-09-13 attempt
+  /// to instead recompute it from this customer's full `credit_transactions`
+  /// history on every event was reverted the next day: real store data
+  /// already had a duplicate repayment in it (a double-submit, unrelated to
+  /// this code), and blind full-history recomputation has no way to tell a
+  /// duplicate from a real transaction - it just permanently baked the
+  /// error into the balance every time it ran, which is worse than a
+  /// running total that at least settles once and stays put. See git
+  /// history for the reverted version if this needs revisiting with an
+  /// actual de-duplication strategy.
   Future<void> _applyRemoteCreditCustomerUpdate(
     Map<String, dynamic> row,
   ) async {
@@ -755,7 +778,6 @@ class RealtimeDataSyncService {
     await _isar.writeTxn(() async {
       await _isar.creditCustomers.put(updated);
     });
-    await _recomputeCreditBalance(uuid, row['store_id'] as String);
     _creditChangedController.add(null);
   }
 
@@ -792,89 +814,16 @@ class RealtimeDataSyncService {
   }
 
   Future<void> _applyRemoteCreditTransaction(Map<String, dynamic> row) async {
-    final inserted = await _insertCreditTransactionIfMissing(row);
-    if (!inserted) return;
-    await _recomputeCreditBalance(
-      row['customer_id'] as String,
-      row['store_id'] as String,
-    );
-    _creditChangedController.add(null);
-  }
-
-  Future<bool> _insertCreditTransactionIfMissing(
-    Map<String, dynamic> row,
-  ) async {
     final uuid = row['uuid'] as String;
     final existing = await _isar.creditTransactions
         .filter()
         .uuidEqualTo(uuid)
         .findFirst();
-    if (existing != null) return false;
+    if (existing != null) return;
     await _isar.writeTxn(() async {
       await _isar.creditTransactions.put(creditTransactionFromRow(row));
     });
-    return true;
-  }
-
-  /// Recomputes [customerUuid]'s outstanding balance directly from
-  /// Supabase's full transaction history for them - not just whatever this
-  /// device has caught up on locally, which could be incomplete (e.g. a
-  /// customer this device only just learned about via catch-up/Realtime,
-  /// before its own transaction history has necessarily arrived too) - and
-  /// persists it locally, backfilling any transaction this device was
-  /// missing along the way.
-  ///
-  /// `credit_customers.balance` is a running total mutated independently
-  /// by whichever device performs an action (see [CreditRepository]) - two
-  /// devices both applying their own delta to what they each locally
-  /// believe the balance to be is exactly the kind of unordered-channel
-  /// race `stock_events`/`initial_stock` already needed a structural fix
-  /// for (see SCHEMA_TRUTH.md). `credit_transactions`, unlike
-  /// `credit_customers.balance`, is insert-only and idempotent by uuid -
-  /// recomputing from Supabase's full copy of it after every credit-related
-  /// Realtime event (customer insert/update, or a new transaction) makes
-  /// this device's local balance self-correcting regardless of arrival
-  /// order, rather than trusting whatever snapshot happened to be baked
-  /// into the most recently-applied `credit_customers` row. Found
-  /// 2026-09-13: a second manual-credit add in a row updated transaction
-  /// history but not the displayed balance on the other device.
-  Future<void> _recomputeCreditBalance(
-    String customerUuid,
-    String storeId,
-  ) async {
-    try {
-      final rows = await SupabaseService.supabaseClient
-          .from('credit_transactions')
-          .select()
-          .eq('customer_id', customerUuid)
-          .eq('store_id', storeId);
-      for (final row in rows) {
-        await _insertCreditTransactionIfMissing(row);
-      }
-
-      final transactions = await _isar.creditTransactions
-          .filter()
-          .customerIdEqualTo(customerUuid)
-          .findAll();
-      final recomputed = transactions.fold<double>(
-        0,
-        (sum, tx) => sum + creditTransactionSignedDelta(tx),
-      );
-
-      final customer = await _isar.creditCustomers
-          .filter()
-          .uuidEqualTo(customerUuid)
-          .findFirst();
-      if (customer == null || customer.balance == recomputed) return;
-      customer.balance = recomputed;
-      await _isar.writeTxn(() async {
-        await _isar.creditCustomers.put(customer);
-      });
-    } catch (e) {
-      // Best-effort - the balance stays whatever it was until the next
-      // credit-related event triggers another recompute attempt.
-      debugPrint('RealtimeDataSyncService: credit balance recompute failed: $e');
-    }
+    _creditChangedController.add(null);
   }
 
   Future<void> _updateWatermark(DateTime at) async {
