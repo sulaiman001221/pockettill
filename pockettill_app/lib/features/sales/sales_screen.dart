@@ -83,6 +83,18 @@ class _SalesScreenState extends ConsumerState<SalesScreen> {
   /// to match. The block's own content never changes size after that (no
   /// conditional text/wrapping in it), so a single measurement is enough -
   /// no need to re-measure on every rebuild.
+  ///
+  /// Only works because [_headerKey] is attached to the Column *inside* the
+  /// Align build() wraps it in, not to a Column placed directly inside the
+  /// delegate's own SizedBox(height: extent) - a tight constraint like that
+  /// forces whatever's directly inside it to report back that exact same
+  /// height, making a "measure and correct" step entirely self-referential
+  /// (it can only ever confirm the current guess, never actually see the
+  /// content's true size). Align always loosens the constraint for its own
+  /// child regardless of what it was itself given, which is what makes this
+  /// measurement real. Found 2026-09-14 missing this Align: the initial
+  /// guess of 260 never got corrected down to the real ~170, leaving a bare
+  /// gap under the search bar.
   void _measureHeader() {
     final box = _headerKey.currentContext?.findRenderObject() as RenderBox?;
     final height = box?.size.height;
@@ -371,24 +383,71 @@ class _SalesScreenState extends ConsumerState<SalesScreen> {
                       pinned: true,
                       delegate: _FixedHeaderDelegate(
                         extent: _headerExtent,
-                        child: Column(
-                          key: _headerKey,
-                          children: [
-                            _ScanProductCard(onTap: _onScanProductTap),
-                            CompositedTransformTarget(
-                              link: _searchBarLink,
-                              child: _SearchBar(
-                                controller: _searchController,
-                                focusNode: _searchFocusNode,
-                                onChanged: _onSearchChanged,
-                              ),
+                        // Align, not the Column directly: the delegate (and
+                        // the sliver framework above it) forces whatever it
+                        // returns into a *tight* height of exactly [extent]
+                        // - a Column placed straight inside that has no
+                        // choice but to report back that same [extent],
+                        // which made _measureHeader's "correction" entirely
+                        // self-referential (it can only ever confirm
+                        // whatever _headerExtent already was, never actually
+                        // measure the content). Align always loosens the
+                        // constraint it hands to its child regardless of
+                        // its own, which is what lets the inner Column
+                        // finally report its true natural height. Found
+                        // 2026-09-14 - the stale initial guess (260) being
+                        // taller than the real content (~170) left a bare
+                        // gap under the search bar that grew more obvious
+                        // the more the cart list scrolled under it.
+                        //
+                        // The outer Container's own solid background is
+                        // load-bearing, not decorative: a pinned sliver
+                        // header paints on top of whatever's scrolled
+                        // underneath it, but only wherever it actually
+                        // paints something itself - it has no implicit
+                        // opaque backdrop of its own. _ScanProductCard's
+                        // horizontal margins and the gap above _SearchBar
+                        // are genuinely transparent, so once [_headerExtent]
+                        // was corrected to match the real content (above)
+                        // and the cart list started sitting right behind
+                        // those gaps instead of far below them, scrolled
+                        // cart cards began showing straight through - found
+                        // 2026-09-14 immediately after that fix, once a cart
+                        // long enough to actually scroll under the header
+                        // was tested.
+                        child: Container(
+                          color: AppTheme.background,
+                          child: Align(
+                            alignment: Alignment.topCenter,
+                            child: Column(
+                              key: _headerKey,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                _ScanProductCard(onTap: _onScanProductTap),
+                                CompositedTransformTarget(
+                                  link: _searchBarLink,
+                                  child: _SearchBar(
+                                    controller: _searchController,
+                                    focusNode: _searchFocusNode,
+                                    onChanged: _onSearchChanged,
+                                  ),
+                                ),
+                                // A fixed gap, not the cart list's own
+                                // (scrollable) padding - otherwise it
+                                // scrolls away and the first cart card ends
+                                // up flush against the search bar, and both
+                                // are white. 20, not 12 - the
+                                // header-measurement fix above (2026-09-14)
+                                // made _headerExtent accurate for the first
+                                // time, which shrank what used to be an
+                                // oversized accidental gap down to just
+                                // this value; 12 alone then read as too
+                                // tight against the search bar once real
+                                // cart cards sat right under it.
+                                const SizedBox(height: 20),
+                              ],
                             ),
-                            // A fixed gap, not the cart list's own
-                            // (scrollable) padding - otherwise it scrolls
-                            // away and the first cart card ends up flush
-                            // against the search bar, and both are white.
-                            const SizedBox(height: 12),
-                          ],
+                          ),
                         ),
                       ),
                     ),

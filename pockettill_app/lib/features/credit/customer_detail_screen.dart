@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
+import '../../core/sync/realtime_data_sync_service.dart';
 import '../../shared/models/credit_customer.dart';
 import '../../shared/models/credit_transaction.dart';
 import '../../shared/models/sale.dart';
@@ -60,6 +61,16 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
 
   Future<void> _load() async {
     setState(() => _loading = true);
+    await _reloadSilently();
+    if (!mounted) return;
+    setState(() => _loading = false);
+  }
+
+  /// Same fetch as [_load], without ever setting [_loading] - for a remote
+  /// change arriving via Realtime while this screen is already open (e.g.
+  /// another device recording a repayment for this exact customer), where
+  /// a spinner flash would just be noise.
+  Future<void> _reloadSilently() async {
     final repo = ref.read(creditRepositoryProvider);
     final customer = await repo.getByUuid(widget.customerUuid);
     final transactions = customer == null
@@ -69,7 +80,6 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
     setState(() {
       _customer = customer;
       _transactions = transactions;
-      _loading = false;
     });
   }
 
@@ -437,6 +447,23 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Another device recording a repayment/adjustment for this exact
+    // customer, or editing their details, should show up here without a
+    // manual refresh - see RealtimeDataSyncService.
+    ref.listen(creditChangedProvider, (_, _) => _reloadSilently());
+    // If another device deletes the exact customer this screen is showing,
+    // there's nothing left to reload - leave instead of continuing to
+    // display (or letting the owner act on) a customer that no longer
+    // exists.
+    ref.listen(customerDeletedProvider, (_, next) {
+      final deletedUuid = next.valueOrNull;
+      if (deletedUuid != widget.customerUuid || !mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('This customer has been removed')),
+      );
+      Navigator.of(context).pop();
+    });
+
     final customer = _customer;
 
     return Scaffold(

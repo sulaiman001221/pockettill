@@ -75,18 +75,29 @@ class CatalogueBrowseRepository {
           )
           .toList();
     } catch (_) {
-      final cached = await _isar.cachedCatalogueProducts.where().findAll();
-      final counts = <String, int>{};
-      for (final item in cached) {
-        final category = item.category ?? _uncategorised;
-        counts[category] = (counts[category] ?? 0) + 1;
-      }
-      final result = counts.entries
-          .map((e) => CategoryCount(category: e.key, count: e.value))
-          .toList()
-        ..sort((a, b) => a.category.compareTo(b.category));
-      return result;
+      return _cachedCategoryCounts();
     }
+  }
+
+  /// Cache-only category counts - instant, no network round-trip - for an
+  /// immediate first paint before [fetchCategories] resolves. See
+  /// CatalogueBrowseScreen's cache-first loading, added 2026-09-14: every
+  /// category-chip tap was blocking on a fresh network fetch even when the
+  /// exact same data had already been fetched (and cached) moments earlier,
+  /// which felt like the screen had hung on a slow connection.
+  Future<List<CategoryCount>> getCachedCategories() => _cachedCategoryCounts();
+
+  Future<List<CategoryCount>> _cachedCategoryCounts() async {
+    final cached = await _isar.cachedCatalogueProducts.where().findAll();
+    final counts = <String, int>{};
+    for (final item in cached) {
+      final category = item.category ?? _uncategorised;
+      counts[category] = (counts[category] ?? 0) + 1;
+    }
+    return counts.entries
+        .map((e) => CategoryCount(category: e.key, count: e.value))
+        .toList()
+      ..sort((a, b) => a.category.compareTo(b.category));
   }
 
   /// A page of every catalogue product regardless of category, ordered by
@@ -107,9 +118,17 @@ class CatalogueBrowseRepository {
       return items;
     } catch (_) {
       if (offset > 0) return [];
-      final cached = await _isar.cachedCatalogueProducts.where().findAll();
-      return cached.map(CatalogueBrowseItem.fromCached).toList();
+      return _cachedAll();
     }
+  }
+
+  /// Cache-only browse of every product, instant and network-free - see
+  /// [getCachedCategories]'s doc comment for why this exists.
+  Future<List<CatalogueBrowseItem>> getCachedAll() => _cachedAll();
+
+  Future<List<CatalogueBrowseItem>> _cachedAll() async {
+    final cached = await _isar.cachedCatalogueProducts.where().sortByName().findAll();
+    return cached.map(CatalogueBrowseItem.fromCached).toList();
   }
 
   /// A page of products in [category] (pass `'Uncategorised'` for a null
@@ -139,17 +158,29 @@ class CatalogueBrowseRepository {
       return items;
     } catch (_) {
       if (offset > 0) return [];
-      final cached = category == _uncategorised
-          ? await _isar.cachedCatalogueProducts
-                .filter()
-                .categoryIsNull()
-                .findAll()
-          : await _isar.cachedCatalogueProducts
-                .filter()
-                .categoryEqualTo(category)
-                .findAll();
-      return cached.map(CatalogueBrowseItem.fromCached).toList();
+      return _cachedByCategory(category);
     }
+  }
+
+  /// Cache-only browse of [category] ('Uncategorised' for a null category),
+  /// instant and network-free - see [getCachedCategories]'s doc comment for
+  /// why this exists.
+  Future<List<CatalogueBrowseItem>> getCachedByCategory(String category) =>
+      _cachedByCategory(category);
+
+  Future<List<CatalogueBrowseItem>> _cachedByCategory(String category) async {
+    final cached = category == _uncategorised
+        ? await _isar.cachedCatalogueProducts
+              .filter()
+              .categoryIsNull()
+              .sortByName()
+              .findAll()
+        : await _isar.cachedCatalogueProducts
+              .filter()
+              .categoryEqualTo(category)
+              .sortByName()
+              .findAll();
+    return cached.map(CatalogueBrowseItem.fromCached).toList();
   }
 
   /// Searches by name (contains) or exact barcode match, up to [pageSize]

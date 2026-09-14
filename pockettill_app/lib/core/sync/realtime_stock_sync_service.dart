@@ -50,8 +50,16 @@ class RealtimeStockSyncService {
   /// already subscribed, if there's no logged-in store, or if either step
   /// fails - this is best-effort background infrastructure, never
   /// something a caller should have to handle a thrown error from.
+  ///
+  /// [_channel] alone isn't enough to prevent two overlapping calls - see
+  /// the matching [_starting] guard on [RealtimeDataSyncService.start] for
+  /// the race this closes (main.dart's unconditional first call and the
+  /// reachability-triggered one landing close together).
+  bool _starting = false;
+
   Future<void> start() async {
-    if (_channel != null) return;
+    if (_channel != null || _starting) return;
+    _starting = true;
 
     try {
       final storeConfig = await _isar.storeConfigs.get(1);
@@ -88,6 +96,8 @@ class RealtimeStockSyncService {
       _channel = channel;
     } catch (e) {
       debugPrint('RealtimeStockSyncService.start() failed: $e');
+    } finally {
+      _starting = false;
     }
   }
 
@@ -180,10 +190,25 @@ class RealtimeStockSyncService {
 
     final productUuid = row['product_id'] as String;
     final delta = row['quantity_delta'] as int;
+    final changeType = row['change_type'] as String;
     final product = await _productRepository.getByUuid(productUuid);
 
+    // initial_stock never mutates the running total, even when the product
+    // already exists locally - it's already reflected in whatever stock
+    // value the product had the moment it was first created on *any*
+    // device (this device's own creation sets it directly; another
+    // device's creation arrives with it already baked into the `products`
+    // insert row - see RealtimeDataSyncService._applyRemoteNewProduct).
+    // `products` and `stock_events` are two independent Realtime channels
+    // with no guaranteed ordering: if the product row happens to arrive
+    // before this event, applying the delta on top double-counts it.
+    // Found 2026-09-12 on a real two-device store - a brand-new product
+    // showed a different quantity on each device, offset by exactly its
+    // own initial_stock amount.
+    final skipMutation = changeType == 'initial_stock';
+
     await _isar.writeTxn(() async {
-      if (product != null) {
+      if (product != null && !skipMutation) {
         product.stock += delta;
         await _isar.products.put(product);
       }

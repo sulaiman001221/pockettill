@@ -147,7 +147,26 @@ class ProductRepository {
     await _enqueueEvent(
       entityUuid: product.uuid,
       operation: isNew ? 'create' : 'update',
-      payload: _toPayload(product),
+      // For an update, `_conflict_base` carries the exact field values this
+      // device saw right before making this edit - name/price/category/
+      // mass/stock, the same set the Edit Product form lets an owner
+      // change. Never part of the row actually pushed to Supabase (see
+      // SyncService._toEventMap, which strips it before every push); it's
+      // this device's own record of "what I started from", read back
+      // alongside baseUpdatedAt by SyncService's conflict resolution to
+      // know what to revert to if another device's edit raced this one.
+      payload: isNew
+          ? _toPayload(product)
+          : {
+              ..._toPayload(product),
+              '_conflict_base': {
+                'name': existing.name,
+                'price': existing.price,
+                'category': existing.category,
+                'mass': existing.mass,
+                'stock': existing.stock,
+              },
+            },
       // The state this device knew about right before this edit - null for
       // a brand-new product (nothing to compare against) or a product
       // that's never been edited since creation (falls back to createdAt,
@@ -293,8 +312,12 @@ class ProductRepository {
   /// purely private inventory data now (the shared, admin-moderated
   /// catalogue lives entirely in `catalogue_products`, a structurally
   /// separate table stores can't write to at all - see
-  /// SupabaseService.fetchCatalogueProduct), so nothing else can ever
-  /// depend on this exact row.
+  /// SupabaseService.fetchCatalogueProduct). Its own `stock_events` rows
+  /// (virtually every product has at least an `initial_stock` one) cascade
+  /// away with it remotely - see the FK note in SCHEMA_TRUTH.md - so this
+  /// doesn't need to clean those up itself. That FK used to be plain `NO
+  /// ACTION`, which meant almost every product delete permanently violated
+  /// it and retried forever with no way to succeed; fixed 2026-09-12.
   Future<void> delete(String productUuid) async {
     final product = await getByUuid(productUuid);
     if (product == null) return;
