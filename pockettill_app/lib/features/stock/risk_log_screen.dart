@@ -306,6 +306,12 @@ _RiskTypeInfo _infoForType(String type) {
         'Concurrent Product Edit',
         AppTheme.syncAmber,
       );
+    case 'concurrent_credit_edit':
+      return const _RiskTypeInfo(
+        Icons.sync_problem,
+        'Concurrent Customer Edit',
+        AppTheme.syncAmber,
+      );
     default:
       return const _RiskTypeInfo(
         Icons.warning_amber_outlined,

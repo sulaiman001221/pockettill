@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:disk_space_plus/disk_space_plus.dart';
+import 'package:flutter/painting.dart' show FileImage, PaintingBinding;
 import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
@@ -99,6 +100,14 @@ class ImageCacheService {
       final compressed = await _compress(response.bodyBytes);
       final file = await _fileFor(cacheKey);
       await file.writeAsBytes(compressed, flush: true);
+      // Image.file/FileImage cache decoded bytes keyed by this file's path,
+      // not its content - overwriting the same path with a replacement
+      // photo leaves Flutter's global ImageCache still holding the old
+      // decoded image until this is evicted, which is why a re-uploaded
+      // photo kept showing the pre-edit picture on Stock despite the disk
+      // file and Product.imageUrl both already being correct. Found
+      // 2026-09-19.
+      PaintingBinding.instance.imageCache.evict(FileImage(file));
       return file;
     } catch (_) {
       return null;
@@ -111,6 +120,7 @@ class ImageCacheService {
   /// place, so this is mainly for deletion).
   static Future<void> deleteCachedFile(String cacheKey) async {
     final file = await _fileFor(cacheKey);
+    PaintingBinding.instance.imageCache.evict(FileImage(file));
     if (await file.exists()) await file.delete();
   }
 
@@ -136,6 +146,7 @@ class ImageCacheService {
     await for (final entity in dir.list()) {
       if (entity is File) await entity.delete();
     }
+    PaintingBinding.instance.imageCache.clear();
   }
 
   /// Re-encodes at falling quality until [_maxBytes] is met or [_minQuality]

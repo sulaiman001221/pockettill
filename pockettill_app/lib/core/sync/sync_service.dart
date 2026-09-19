@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:isar/isar.dart';
 
+import '../../shared/models/credit_customer.dart';
 import '../../shared/models/product.dart';
 import '../../shared/models/store_config.dart';
 import '../../shared/models/sync_event.dart';
@@ -27,8 +28,17 @@ import 'image_sync_service.dart';
 /// since the same product event never gets a turn to push and fix it.
 /// Found 2026-09-10 - a real device stuck retrying this exact failure for
 /// hours, blocked from syncing (or even logging out) at all.
+///
+/// `credit_customer` must come before `credit_tx` for a related but
+/// distinct reason (no FK involved, unlike product/stock_event above):
+/// _resolveCreditCustomerConflicts needs to discard a manual_credit/
+/// writeoff transaction's own credit_tx event when the balance change it
+/// represents gets reverted for conflicting with another device's edit -
+/// which only works if that credit_tx event hasn't already been pushed to
+/// Supabase by the time the conflict is detected.
 const List<String> _entityTypePriority = [
   'product',
+  'credit_customer',
   'credit_tx',
   'sale',
   'sale_item',
@@ -36,7 +46,6 @@ const List<String> _entityTypePriority = [
   'extra_income',
   'return',
   'return_item',
-  'credit_customer',
   'store_profile',
   'risk_log',
 ];
@@ -158,13 +167,22 @@ class SyncService {
           if (typeEvents == null || typeEvents.isEmpty) continue;
 
           // Checked before pushing, not after: once this device's own
-          // upsert lands, the remote row's updated_at becomes *this*
-          // device's edit, so there'd be nothing left to compare against.
+          // write lands, the remote row becomes *this* device's edit, so
+          // there'd be nothing left to compare against.
           if (entityType == 'product') {
             handledEventUuids.addAll(
               await _resolveProductConflicts(
                 typeEvents,
                 eventsByType['stock_event'] ?? const [],
+                storeId,
+              ),
+            );
+          }
+          if (entityType == 'credit_customer') {
+            handledEventUuids.addAll(
+              await _resolveCreditCustomerConflicts(
+                typeEvents,
+                eventsByType['credit_tx'] ?? const [],
                 storeId,
               ),
             );
@@ -272,9 +290,8 @@ class SyncService {
   /// [ProductRepository.save] captures that starting point (name, price,
   /// category, mass, stock) as `payload['_conflict_base']` at the moment
   /// editing begins - never part of the row actually sent to Supabase (see
-  /// [_toEventMap], which strips it before every push, conflict or not),
-  /// just this device's own record of "what I started from", checked
-  /// alongside the existing [SyncEvent.baseUpdatedAt] timestamp.
+  /// [_toEventMap], which strips it before every push), just this device's
+  /// own record of "what I started from".
   ///
   /// Deliberately never triggered by a sale/return/quick-restock (see
   /// [ProductRepository.adjustStock]) - those never carry a
@@ -285,21 +302,26 @@ class SyncService {
   /// owner types a new absolute number, not an intentional "+N"/"-N" - can
   /// genuinely race the way name/price/category can.
   ///
-  /// A single batched read, not one query per event: for every pending
-  /// [productEvents] with a [SyncEvent.baseUpdatedAt], compares the remote
-  /// row's *current* updated_at against that baseline. If the remote value
-  /// has moved past it, some other device's edit must have reached the
-  /// server after this device's edit was made (this device can't have
-  /// caused that itself - it hasn't pushed since) - a genuine concurrent
-  /// edit, not just this device re-syncing its own earlier change.
+  /// Every tracked field is checked and applied by a single Postgres RPC
+  /// call (`apply_product_edit`) rather than this method reading the
+  /// remote row, deciding, and pushing separately - the previous version
+  /// did exactly that, and it had a real race: the read and the later
+  /// write were two separate round-trips, so two devices racing each
+  /// other could both read "no conflict yet" before either had actually
+  /// pushed, and both would go on to push their own value with the
+  /// conflict never detected at all. Found 2026-09-16 after two-device
+  /// testing produced zero concurrent_product_edit/concurrent_stock_edit
+  /// risk_log entries despite deliberately racing two devices repeatedly.
+  /// A single `UPDATE ... WHERE <matches expected>` (or the revert branch)
+  /// inside one transaction can't have that race - Postgres's own row lock
+  /// serializes concurrent calls, so whichever call runs second always
+  /// sees the first call's effect already applied.
   ///
-  /// Returns every [SyncEvent.uuid] (both `product` events for a reverted
-  /// product and its orphaned manual-adjustment `stock_event`, if any)
-  /// that must be excluded from the normal push loop this cycle - they've
-  /// already been either marked pushed (the revert took their place) or
-  /// discarded outright (never reaching Supabase at all), and pushing them
-  /// anyway would silently undo the revert with their original,
-  /// now-superseded values.
+  /// Returns every [SyncEvent.uuid] this method has already resolved one
+  /// way or another (applied cleanly via the RPC, or reverted) - excluded
+  /// from the caller's own push loop this cycle, since pushing them again
+  /// through the normal path would try to apply their original values a
+  /// second time, undoing whatever the RPC just did.
   Future<Set<String>> _resolveProductConflicts(
     List<SyncEvent> productEvents,
     List<SyncEvent> stockEvents,
@@ -310,61 +332,117 @@ class SyncService {
     if (riskLog == null) return handledEventUuids;
 
     // Multiple pending edits to the same product collapse to just the
-    // latest before ever reaching Supabase (see SupabaseService.pushEvents)
-    // - checking every one of them here would just re-detect the same
-    // conflict repeatedly against stale intermediate states. Events arrive
-    // oldest-first (EventQueue.getPending), so the last assignment per
-    // uuid below is the one that will actually get pushed.
+    // latest before ever reaching the RPC - checking every one of them
+    // would just re-resolve the same product repeatedly against stale
+    // intermediate states. Events arrive oldest-first
+    // (EventQueue.getPending), so the last assignment per uuid below is
+    // the one that reflects this device's actual current intent.
     final withBase = <String, SyncEvent>{};
     for (final event in productEvents) {
       if (event.baseUpdatedAt != null) withBase[event.entityUuid] = event;
     }
     if (withBase.isEmpty) return handledEventUuids;
 
-    try {
-      final uuids = withBase.keys.toList();
-      final rows = await SupabaseService.supabaseClient
-          .from('products')
-          .select('uuid, updated_at, name, price, category, mass, stock')
-          .inFilter('uuid', uuids)
-          .eq('store_id', storeId);
-      final remoteByUuid = {
-        for (final row in rows) row['uuid'] as String: row,
-      };
+    for (final entry in withBase.entries) {
+      final productUuid = entry.key;
+      final event = entry.value;
+      final payload = jsonDecode(event.payload) as Map<String, dynamic>;
+      final base = payload['_conflict_base'] as Map<String, dynamic>?;
 
-      for (final entry in withBase.entries) {
-        final productUuid = entry.key;
-        final event = entry.value;
-        final remote = remoteByUuid[productUuid];
-        final remoteUpdatedAt = remote?['updated_at'] as String?;
-        if (remote == null || remoteUpdatedAt == null) continue;
-        if (!DateTime.parse(
-          remoteUpdatedAt,
-        ).isAfter(DateTime.parse(event.baseUpdatedAt!))) {
-          continue;
+      // An event queued before this feature existed - nothing captured to
+      // check against, so leave it to the normal push path (plain
+      // last-write-wins) rather than guessing.
+      if (base == null) continue;
+
+      final thisProductEventUuids = productEvents
+          .where((e) => e.entityUuid == productUuid)
+          .map((e) => e.uuid)
+          .toList();
+
+      try {
+        final rows = await SupabaseService.supabaseClient.rpc(
+          'apply_product_edit',
+          params: {
+            'p_uuid': productUuid,
+            'p_store_id': storeId,
+            'p_expected_name': base['name'],
+            'p_expected_price': base['price'],
+            'p_expected_category': base['category'],
+            'p_expected_mass': base['mass'],
+            'p_expected_stock': base['stock'],
+            'p_new_name': payload['name'],
+            'p_new_price': payload['price'],
+            'p_new_category': payload['category'],
+            'p_new_mass': payload['mass'],
+            'p_new_stock': payload['stock'],
+          },
+        );
+        final result = (rows as List).first as Map<String, dynamic>;
+        final conflict = result['conflict'] as bool;
+        final finalName = result['final_name'] as String?;
+
+        // Either way, the RPC has already fully applied (or reverted) the
+        // row remotely - this device's own pending event(s) for it must
+        // never also go through the normal push path afterward, or
+        // they'd stomp the RPC's result with their original values.
+        await _eventQueue.markPushed(thisProductEventUuids);
+        handledEventUuids.addAll(thisProductEventUuids);
+
+        // The manual stock-quantity edit this same Edit Product save
+        // recorded (see ProductRepository.save) is a *separate* pending
+        // stock_event - the RPC already applied (or reverted) the
+        // absolute stock value directly, so this delta-shaped event must
+        // never additionally apply on top of that, conflict or not.
+        // Matched by product + change_type since stock_events has no
+        // link back to the product edit that caused it - safe because a
+        // manual form edit and its own stock delta are always enqueued
+        // together, one right after the other (see save), and a product
+        // isn't normally mid-edit on the same device twice before the
+        // first edit ever gets a chance to sync.
+        final orphanedStockEventUuids = <String>[
+          for (final stockSyncEvent in stockEvents)
+            if ((jsonDecode(stockSyncEvent.payload)
+                    as Map<String, dynamic>)['product_id'] ==
+                productUuid &&
+                (jsonDecode(stockSyncEvent.payload)
+                        as Map<String, dynamic>)['change_type'] ==
+                    'manual_adjustment')
+              stockSyncEvent.uuid,
+        ];
+        await _eventQueue.discard(orphanedStockEventUuids);
+        handledEventUuids.addAll(orphanedStockEventUuids);
+
+        // Local copy always follows the RPC's verdict - win or revert -
+        // so this device shows the true row instead of its own
+        // now-possibly-discarded edit until some other change happens to
+        // echo back over Realtime.
+        if (finalName != null) {
+          final localProduct = await _isar.products
+              .filter()
+              .uuidEqualTo(productUuid)
+              .findFirst();
+          if (localProduct != null) {
+            localProduct
+              ..name = finalName
+              ..price =
+                  (result['final_price'] as num?)?.toDouble() ??
+                  localProduct.price
+              ..category = result['final_category'] as String?
+              ..mass = result['final_mass'] as String?
+              ..stock =
+                  (result['final_stock'] as num?)?.toInt() ??
+                  localProduct.stock
+              ..updatedAt = DateTime.now();
+            await _isar.writeTxn(() async {
+              await _isar.products.put(localProduct);
+            });
+          }
         }
 
-        final payload = jsonDecode(event.payload) as Map<String, dynamic>;
-        final base = payload['_conflict_base'] as Map<String, dynamic>?;
-        final name =
-            payload['name'] as String? ?? remote['name'] as String? ?? 'Product';
+        if (!conflict) continue;
 
-        if (base == null) {
-          // An event queued before this feature existed - nothing captured
-          // to revert to, so fall back to the old log-only behaviour
-          // rather than silently doing nothing.
-          await riskLog.record(
-            type: 'concurrent_product_edit',
-            description:
-                'Details edited on two devices at the same time for $name',
-            beforeValue: remote['name'] as String? ?? '',
-            afterValue: payload['name'] as String?,
-            entityName: name,
-          );
-          continue;
-        }
-
-        final baseStock = base['stock'] as int;
+        final name = finalName ?? payload['name'] as String? ?? 'Product';
+        final baseStock = (base['stock'] as num).toInt();
         final stockConflicted =
             (payload['stock'] as num?)?.toInt() != baseStock;
         final metadataConflicted =
@@ -373,53 +451,6 @@ class SyncService {
                 (base['price'] as num?)?.toDouble() ||
             payload['category'] != base['category'] ||
             payload['mass'] != base['mass'];
-
-        if (!stockConflicted && !metadataConflicted) {
-          // baseUpdatedAt moved (e.g. an image sync touched the row), but
-          // nothing this method tracks actually raced - nothing to revert
-          // or log, and the normal push below still carries this device's
-          // edit through as usual.
-          continue;
-        }
-
-        // Revert every tracked field back to the shared starting point,
-        // remotely and on this device's own local copy - this device made
-        // the losing edit, so without a local correction too it would
-        // keep showing its own discarded values until some other device's
-        // change happened to echo back over Realtime.
-        final revertPayload = Map<String, dynamic>.from(remote)
-          ..['name'] = base['name']
-          ..['price'] = base['price']
-          ..['category'] = base['category']
-          ..['mass'] = base['mass']
-          ..['stock'] = baseStock
-          ..['store_id'] = storeId
-          ..['updated_at'] = DateTime.now().toUtc().toIso8601String();
-        await SupabaseService.pushEvents([
-          {
-            'entityType': 'product',
-            'operation': 'update',
-            'entityUuid': productUuid,
-            'payload': revertPayload,
-          },
-        ]);
-
-        final localProduct = await _isar.products
-            .filter()
-            .uuidEqualTo(productUuid)
-            .findFirst();
-        if (localProduct != null) {
-          localProduct
-            ..name = base['name'] as String
-            ..price = (base['price'] as num).toDouble()
-            ..category = base['category'] as String?
-            ..mass = base['mass'] as String?
-            ..stock = baseStock
-            ..updatedAt = DateTime.now();
-          await _isar.writeTxn(() async {
-            await _isar.products.put(localProduct);
-          });
-        }
 
         if (stockConflicted) {
           await riskLog.record(
@@ -438,53 +469,148 @@ class SyncService {
             description:
                 'Concurrent edit conflict on $name - changes from both '
                 'devices discarded. Original value restored.',
-            beforeValue: remote['name'] as String? ?? '',
-            afterValue: base['name'] as String?,
+            beforeValue: base['name'] as String? ?? '',
+            afterValue: payload['name'] as String?,
             entityName: name,
           );
         }
+      } catch (e, st) {
+        // Best-effort - a failed RPC call must never block the actual
+        // push; falling through leaves this event pending, so the normal
+        // push path (or a retry of this same check next cycle) still gets
+        // a turn at it.
+        debugPrint(
+          'SyncService._resolveProductConflicts: RPC failed for '
+          '$productUuid: $e\n$st',
+        );
+      }
+    }
+    return handledEventUuids;
+  }
 
-        // This device's own losing edit(s) must never reach Supabase with
-        // their original (now-superseded) values - the revert above
-        // already did. Every pending product event for this uuid, not
-        // just the latest, since none of them represent what's about to
-        // be true anymore. Also excluded from the caller's own push loop
-        // this cycle via the returned set below - markPushed alone isn't
-        // enough, since the in-memory list it's about to iterate over
-        // doesn't know these rows just changed underneath it.
-        final thisProductEventUuids = productEvents
-            .where((e) => e.entityUuid == productUuid)
-            .map((e) => e.uuid)
-            .toList();
-        await _eventQueue.markPushed(thisProductEventUuids);
-        handledEventUuids.addAll(thisProductEventUuids);
+  /// Same atomic-RPC conflict resolution as [_resolveProductConflicts], for
+  /// a credit customer's directly-editable fields (name, phone, credit
+  /// limit) and a manual balance change (a `manual_credit`/`writeoff`
+  /// adjustment with no purchase/repayment transaction backing it - see
+  /// [CreditRepository.addManualCredit]/[CreditRepository.writeOffBalance]).
+  /// A real purchase or repayment is event-sourced like a sale, always
+  /// applying regardless of what else happened - only these "manual edit"
+  /// operations, which [CreditRepository] marks with a `_conflict_base`
+  /// snapshot, go through this at all.
+  Future<Set<String>> _resolveCreditCustomerConflicts(
+    List<SyncEvent> customerEvents,
+    List<SyncEvent> txEvents,
+    String storeId,
+  ) async {
+    final handledEventUuids = <String>{};
+    final riskLog = _riskLog;
+    if (riskLog == null) return handledEventUuids;
 
-        // The manual stock-quantity edit this same Edit Product save
-        // recorded (see ProductRepository.save) is a *separate* pending
-        // stock_event - discarded outright, never pushed at all, rather
-        // than compensated for after the fact: unlike markPushed above,
-        // this event genuinely never reaches Supabase, so there's nothing
-        // there to undo. Matched by product + change_type since
-        // stock_events has no link back to the product edit that caused
-        // it - safe because a manual form edit and its own stock delta are
-        // always enqueued together, one right after the other (see save),
-        // and a product isn't normally mid-edit on the same device twice
-        // before the first edit ever gets a chance to sync.
-        final orphanedStockEventUuids = <String>[];
-        for (final stockSyncEvent in stockEvents) {
-          final stockPayload =
-              jsonDecode(stockSyncEvent.payload) as Map<String, dynamic>;
-          if (stockPayload['product_id'] == productUuid &&
-              stockPayload['change_type'] == 'manual_adjustment') {
-            orphanedStockEventUuids.add(stockSyncEvent.uuid);
+    final withBase = <String, SyncEvent>{};
+    for (final event in customerEvents) {
+      final payload = jsonDecode(event.payload) as Map<String, dynamic>;
+      if (payload['_conflict_base'] != null) {
+        withBase[event.entityUuid] = event;
+      }
+    }
+    if (withBase.isEmpty) return handledEventUuids;
+
+    for (final entry in withBase.entries) {
+      final customerUuid = entry.key;
+      final event = entry.value;
+      final payload = jsonDecode(event.payload) as Map<String, dynamic>;
+      final base = payload['_conflict_base'] as Map<String, dynamic>;
+
+      final thisCustomerEventUuids = customerEvents
+          .where((e) => e.entityUuid == customerUuid)
+          .map((e) => e.uuid)
+          .toList();
+
+      try {
+        final rows = await SupabaseService.supabaseClient.rpc(
+          'apply_credit_customer_edit',
+          params: {
+            'p_uuid': customerUuid,
+            'p_store_id': storeId,
+            'p_expected_name': base['name'],
+            'p_expected_phone': base['phone'],
+            'p_expected_balance': base['balance'],
+            'p_expected_credit_limit': base['credit_limit'],
+            'p_new_name': payload['name'],
+            'p_new_phone': payload['phone'],
+            'p_new_balance': payload['balance'],
+            'p_new_credit_limit': payload['credit_limit'],
+          },
+        );
+        final result = (rows as List).first as Map<String, dynamic>;
+        final conflict = result['conflict'] as bool;
+        final finalName = result['final_name'] as String?;
+
+        await _eventQueue.markPushed(thisCustomerEventUuids);
+        handledEventUuids.addAll(thisCustomerEventUuids);
+
+        // The manual_credit/writeoff transaction this same edit recorded
+        // (see CreditRepository.addManualCredit/writeOffBalance) is a
+        // separate pending credit_tx event - the RPC already applied (or
+        // reverted) the balance directly, so this transaction record must
+        // never additionally apply on top of that, conflict or not.
+        final orphanedTxUuids = <String>[
+          for (final txEvent in txEvents)
+            if ((jsonDecode(txEvent.payload)
+                    as Map<String, dynamic>)['customer_id'] ==
+                customerUuid &&
+                const {
+                  'manual_credit',
+                  'writeoff',
+                }.contains(
+                  (jsonDecode(txEvent.payload) as Map<String, dynamic>)['type'],
+                ))
+              txEvent.uuid,
+        ];
+        await _eventQueue.discard(orphanedTxUuids);
+        handledEventUuids.addAll(orphanedTxUuids);
+
+        if (finalName != null) {
+          final localCustomer = await _isar.creditCustomers
+              .filter()
+              .uuidEqualTo(customerUuid)
+              .findFirst();
+          if (localCustomer != null) {
+            localCustomer
+              ..name = finalName
+              ..phone = result['final_phone'] as String?
+              ..balance =
+                  (result['final_balance'] as num?)?.toDouble() ??
+                  localCustomer.balance
+              ..creditLimit = (result['final_credit_limit'] as num?)
+                  ?.toDouble()
+              ..lastActivityAt = DateTime.now();
+            await _isar.writeTxn(() async {
+              await _isar.creditCustomers.put(localCustomer);
+            });
           }
         }
-        await _eventQueue.discard(orphanedStockEventUuids);
-        handledEventUuids.addAll(orphanedStockEventUuids);
+
+        if (!conflict) continue;
+
+        final name = finalName ?? payload['name'] as String? ?? 'Customer';
+        await riskLog.record(
+          type: 'concurrent_credit_edit',
+          description:
+              'Concurrent edit conflict on $name - changes from both '
+              'devices discarded. Original value restored.',
+          beforeValue: base['balance'] != null
+              ? 'R${(base['balance'] as num).toStringAsFixed(2)}'
+              : (base['name'] as String? ?? ''),
+          afterValue: null,
+          entityName: name,
+        );
+      } catch (e, st) {
+        debugPrint(
+          'SyncService._resolveCreditCustomerConflicts: RPC failed for '
+          '$customerUuid: $e\n$st',
+        );
       }
-    } catch (_) {
-      // Best-effort - a failed conflict check must never block the actual
-      // push, and there's nothing a caller could usefully do about it.
     }
     return handledEventUuids;
   }

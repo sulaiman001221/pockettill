@@ -26,6 +26,7 @@ RiskLogCategory categoryForRiskType(String type) {
     case 'manual_credit':
     case 'credit_writeoff':
     case 'customer_deleted_with_balance':
+    case 'concurrent_credit_edit':
       return RiskLogCategory.credit;
     default:
       return RiskLogCategory.stock;

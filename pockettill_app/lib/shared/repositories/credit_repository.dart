@@ -94,7 +94,19 @@ class CreditRepository {
       entityType: 'credit_customer',
       entityUuid: customer.uuid,
       operation: isNew ? 'create' : 'update',
-      payload: _customerToPayload(customer),
+      // For an update, `_conflict_base` carries the exact field values
+      // this device saw right before making this edit - never part of the
+      // row actually sent to Supabase (see SyncService._toEventMap, which
+      // strips it before every push), just this device's own record of
+      // "what I started from", checked by SyncService's atomic
+      // apply_credit_customer_edit RPC to detect a genuine race against
+      // another device's own edit.
+      payload: isNew
+          ? _customerToPayload(customer)
+          : {
+              ..._customerToPayload(customer),
+              '_conflict_base': _customerConflictBase(existing),
+            },
     );
   }
 
@@ -239,6 +251,7 @@ class CreditRepository {
     final now = DateTime.now();
     late final CreditTransaction transaction;
     late final CreditCustomer customer;
+    late final Map<String, dynamic> base;
 
     await _isar.writeTxn(() async {
       final found = await _isar.creditCustomers
@@ -249,6 +262,13 @@ class CreditRepository {
         throw StateError('Credit customer $customerUuid not found.');
       }
       customer = found;
+      // Captured before mutating - this device's own "what I started
+      // from" for SyncService's atomic conflict check. No sale/repayment
+      // backs this the way addPurchase/recordRepayment's balance changes
+      // are backed by a real transaction, so unlike those, two devices
+      // both adding manual credit from the same starting balance is a
+      // genuine race, not two legitimate deltas that should both land.
+      base = _customerConflictBase(customer);
 
       final balanceBefore = customer.balance;
       customer.balance += amount;
@@ -279,7 +299,7 @@ class CreditRepository {
       entityType: 'credit_customer',
       entityUuid: customer.uuid,
       operation: 'update',
-      payload: _customerToPayload(customer),
+      payload: {..._customerToPayload(customer), '_conflict_base': base},
     );
 
     await _riskLog.record(
@@ -308,6 +328,7 @@ class CreditRepository {
     final now = DateTime.now();
     late final CreditTransaction transaction;
     late final CreditCustomer customer;
+    late final Map<String, dynamic> base;
 
     await _isar.writeTxn(() async {
       final found = await _isar.creditCustomers
@@ -323,6 +344,10 @@ class CreditRepository {
           'Write-off of $amount exceeds outstanding balance of ${customer.balance}.',
         );
       }
+      // See the matching comment in addManualCredit - no real transaction
+      // backs a write-off either, so this is captured for the same
+      // conflict-check reason.
+      base = _customerConflictBase(customer);
 
       final balanceBefore = customer.balance;
       customer.balance -= amount;
@@ -353,7 +378,7 @@ class CreditRepository {
       entityType: 'credit_customer',
       entityUuid: customer.uuid,
       operation: 'update',
-      payload: _customerToPayload(customer),
+      payload: {..._customerToPayload(customer), '_conflict_base': base},
     );
 
     await _riskLog.record(
@@ -371,6 +396,7 @@ class CreditRepository {
   Future<void> updateCreditLimit(String customerUuid, double? creditLimit) async {
     final customer = await getByUuid(customerUuid);
     if (customer == null) return;
+    final base = _customerConflictBase(customer);
 
     customer.creditLimit = creditLimit;
 
@@ -382,7 +408,7 @@ class CreditRepository {
       entityType: 'credit_customer',
       entityUuid: customer.uuid,
       operation: 'update',
-      payload: _customerToPayload(customer),
+      payload: {..._customerToPayload(customer), '_conflict_base': base},
     );
   }
 
@@ -474,6 +500,16 @@ class CreditRepository {
       ..createdAt = DateTime.now();
     await _eventQueue.enqueue(event);
   }
+
+  /// This device's snapshot of [customer]'s directly-editable fields right
+  /// before a manual edit - see the doc comment on `_conflict_base` in
+  /// [saveCustomer] for what this is for.
+  Map<String, dynamic> _customerConflictBase(CreditCustomer customer) => {
+    'name': customer.name,
+    'phone': customer.phone,
+    'balance': customer.balance,
+    'credit_limit': customer.creditLimit,
+  };
 
   Map<String, dynamic> _customerToPayload(CreditCustomer customer) => {
     'uuid': customer.uuid,
