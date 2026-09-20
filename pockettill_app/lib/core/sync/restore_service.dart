@@ -9,7 +9,6 @@ import '../../shared/models/return_record.dart';
 import '../../shared/models/risk_log.dart';
 import '../../shared/models/sale.dart';
 import '../../shared/models/sale_item.dart';
-import '../../shared/models/store_config.dart';
 import '../supabase/supabase_service.dart';
 import 'row_mappers.dart';
 
@@ -38,28 +37,9 @@ class RestoreService {
         await _isar.products.count() > 0 || await _isar.sales.count() > 0;
     if (hasLocalData) return;
 
+    // products.stock is the server's authoritative quantity (kept by the
+    // stock_events trigger), so a restored product just takes it as is.
     final products = await _fetchAll('products', storeId);
-    // The `products.stock` column pulled above is only as fresh as the last
-    // *manual* edit - a sale/return/manual adjustment updates it locally
-    // via a stock_event delta, never by pushing the whole product row (see
-    // ProductRepository.recordStockEvent). That means it can genuinely be
-    // stale here, on a fresh install/reinstall pulling from Supabase for
-    // the first time. stock_events is the actual authoritative ledger, so
-    // recompute each product's real stock as the sum of its events instead
-    // of trusting the column directly - the exact scenario
-    // get_product_stock() exists for.
-    final stockEventRows = await _fetchAll('stock_events', storeId);
-    final stockByProduct = <String, int>{};
-    DateTime? maxSyncedAt;
-    for (final row in stockEventRows) {
-      final productId = row['product_id'] as String;
-      stockByProduct[productId] =
-          (stockByProduct[productId] ?? 0) + (row['quantity_delta'] as int);
-      final syncedAt = parseLocal(row['synced_at'] as String);
-      if (maxSyncedAt == null || syncedAt.isAfter(maxSyncedAt)) {
-        maxSyncedAt = syncedAt;
-      }
-    }
 
     final sales = await _fetchAll('sales', storeId);
     final saleItems = await _fetchAll('sale_items', storeId);
@@ -83,9 +63,7 @@ class RestoreService {
 
     await _isar.writeTxn(() async {
       await _isar.products.putAll(
-        products
-            .map((row) => productFromRow(row, stockByProduct: stockByProduct))
-            .toList(),
+        products.map(productFromRow).toList(),
       );
       await _isar.sales.putAll(sales.map(saleFromRow).toList());
       await _isar.saleItems.putAll(saleItems.map(saleItemFromRow).toList());
@@ -105,18 +83,6 @@ class RestoreService {
         extraIncome.map(extraIncomeFromRow).toList(),
       );
       await _isar.riskLogs.putAll(riskLog.map(riskLogFromRow).toList());
-
-      // High-water mark for RealtimeStockSyncService's reconnect catch-up
-      // query - without this, the first catch-up after a fresh restore
-      // would treat every event just summed above as "missed" and
-      // needlessly re-fetch/re-apply all of them.
-      if (maxSyncedAt != null) {
-        final config = await _isar.storeConfigs.get(1);
-        if (config != null) {
-          config.lastStockEventSyncedAt = maxSyncedAt;
-          await _isar.storeConfigs.put(config);
-        }
-      }
     });
   }
 

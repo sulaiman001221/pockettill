@@ -61,6 +61,12 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
   // barcode re-lookup can never silently clobber a photo the owner already
   // took, only an explicit pick or removal can.
   String? _existingImageUrl;
+  // The product exactly as this screen opened it (edit mode only). Saving
+  // sends only what differs from this - never a field the person didn't
+  // touch, and the stock as a change from this quantity rather than an
+  // absolute number - so anything another device (or a sale) changed while
+  // the form was open isn't overwritten by saving it.
+  Product? _initialProduct;
   File? _pickedImageFile;
   bool _imageRemoved = false;
   bool _saving = false;
@@ -84,6 +90,19 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
       _priceController.text = existing.price.toStringAsFixed(2);
       _costController.text = existing.costPrice?.toStringAsFixed(2) ?? '';
       _stockController.text = '${existing.stock}';
+      _initialProduct = Product()
+        ..uuid = existing.uuid
+        ..barcode = existing.barcode
+        ..name = existing.name
+        ..mass = existing.mass
+        ..category = existing.category
+        ..unit = existing.unit
+        ..price = existing.price
+        ..costPrice = existing.costPrice
+        ..stock = existing.stock
+        ..lowStockThreshold = existing.lowStockThreshold
+        ..imageUrl = existing.imageUrl
+        ..createdAt = existing.createdAt;
       _lowStockController.text = '${existing.lowStockThreshold}';
       _existingImageUrl = existing.imageUrl;
       if (existing.category != null) {
@@ -440,7 +459,9 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
       return;
     }
 
-    await ref.read(productRepositoryProvider).save(product);
+    await ref
+        .read(productRepositoryProvider)
+        .save(product, initial: _initialProduct);
 
     if (!mounted) return;
     setState(() => _saving = false);

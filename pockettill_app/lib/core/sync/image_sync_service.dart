@@ -56,13 +56,14 @@ class ImageSyncService {
 
       // Step 1: pull in any admin-enhanced catalogue image this store
       // doesn't have yet (subject to the toggle) - this can change a
-      // product's imageUrl outright. Goes through the normal repository
-      // save, same path a manual edit takes, so it correctly enqueues a
-      // `product` sync event too (the store's `products.image_url` row
-      // should reflect its current displayed photo, not just the local
-      // cache) - and, since imageUrl changed, save() itself drops any
-      // stale cached file for it. The actual (re)download happens in step
-      // 2 below, uniformly for every product that needs it.
+      // product's imageUrl outright. Goes through updateImageUrl, which
+      // queues a single-column image update (the store's
+      // `products.image_url` should reflect its current displayed photo, not
+      // just the local cache) - deliberately not the product-edit path, so a
+      // background image change can never be mistaken for a person's edit
+      // and conflict with one. It also drops any stale cached file. The
+      // actual (re)download happens in step 2 below, uniformly for every
+      // product that needs it.
       final barcodes = products.map((p) => p.barcode).toSet().toList();
       final enhanced = await SupabaseService.fetchEnhancedCatalogueImages(barcodes);
       for (final product in products) {
@@ -77,15 +78,17 @@ class ImageSyncService {
             // (no point enqueuing a sync event for a row that hasn't
             // actually changed).
             if (product.catalogueSyncedImageUrl != catalogueUrl) {
-              product.catalogueSyncedImageUrl = catalogueUrl;
-              await _isar.writeTxn(() async {
-                await _isar.products.put(product);
-              });
+              await _productRepository.updateCatalogueSyncedImageUrl(
+                product.uuid,
+                catalogueUrl,
+              );
             }
           } else if (_shouldReplace(storeConfig, product)) {
-            product.imageUrl = catalogueUrl;
-            product.catalogueSyncedImageUrl = catalogueUrl;
-            await _productRepository.save(product);
+            await _productRepository.updateImageUrl(
+              product.uuid,
+              catalogueUrl,
+              catalogueSyncedImageUrl: catalogueUrl,
+            );
           }
           continue;
         }
@@ -103,9 +106,7 @@ class ImageSyncService {
         // case the block above already handled correctly).
         if (product.catalogueSyncedImageUrl != null &&
             product.imageUrl == product.catalogueSyncedImageUrl) {
-          product.imageUrl = null;
-          product.catalogueSyncedImageUrl = null;
-          await _productRepository.save(product);
+          await _productRepository.updateImageUrl(product.uuid, null);
         }
       }
 

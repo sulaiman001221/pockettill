@@ -40,4 +40,14 @@ class Product {
   bool synced = false;
   late DateTime createdAt;
   DateTime? updatedAt;
+
+  // Server-side edit counters, mirrored from `products.version` /
+  // `products.stock_version` - only ever advanced by the server. A manual
+  // edit carries the [stockVersion] it started from so the server can tell
+  // whether another person's manual stock edit landed first.
+  int serverVersion = 0;
+  int stockVersion = 0;
+  // The server's `updated_at` for the row this device last applied - lets a
+  // pull ignore an older copy arriving after a newer one.
+  DateTime? serverUpdatedAt;
 }

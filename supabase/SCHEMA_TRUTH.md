@@ -64,10 +64,12 @@ migration (it had briefly been made nullable to support an interim
 | unit | text | nullable |
 | price | numeric | |
 | cost_price | numeric | nullable |
-| stock | integer | |
+| stock | integer | default 0 - **server-owned, only ever changed by the `stock_events` trigger** (see "Triggers" below). Any client write to this column is silently ignored; on insert it is forced to 0 and the `initial_stock` event brings it up. Devices mirror it (plus their own unsent changes). |
 | low_stock_threshold | integer | default 5 |
 | created_at | timestamptz | |
 | updated_at | timestamptz | nullable |
+| version | integer | not null, default 0 - added 2026-09-20. Bumped only by `apply_product_edit` when a manual edit is applied. Mirrored on devices (`Product.serverVersion`). |
+| stock_version | integer | not null, default 0 - added 2026-09-20. Bumped only when a manual stock-quantity edit is applied; a manual stock edit carrying an older value than this lost a race with another manual stock edit and is rejected. Sales/returns/restocks never touch it. |
 | store_id | uuid | FK `stores(uuid)`, **NOT NULL** |
 | image_url | text | nullable — added 2026-09-04. An Open Food Facts pull or the owner's own upload (Supabase Storage `product-images/{store_id}/{product_id}.jpg`, public-read). Owner upload always wins if both exist. |
 
@@ -126,10 +128,12 @@ PK: `(sale_uuid, product_uuid)`.
 | uuid | uuid PK | |
 | name | text | |
 | phone | text | nullable |
-| balance | numeric | default 0 — running total owed by the customer, mutated independently by whichever device performs an action (see `CreditRepository`), and trusted directly by a receiving device (`RealtimeDataSyncService._applyRemoteCreditCustomerUpdate` writes this column's value straight through). A 2026-09-13 attempt to instead recompute this from the customer's full `credit_transactions` history on every Realtime event was reverted the next day: real store data already had a duplicate repayment in it (a double-submit, unrelated to that change), and blind full-history recomputation has no way to tell a duplicate from a real transaction - it permanently baked the resulting error into the balance every time it ran. A running total that settles once and stays put, even if occasionally stale for a moment until the next sync, proved safer against real-world duplicate-prone data than a "more correct" recompute with no de-duplication story. Revisit only with an actual de-duplication strategy (e.g. a unique index preventing the double-submit at the source) - see git history around that date for the reverted version. |
+| balance | numeric | default 0 - **server-owned, only ever changed by the `credit_transactions` trigger** (see "Triggers" below; clamped at 0). Any client write is silently ignored; on insert it is forced to 0. Devices mirror it (plus their own unsent transactions). Replaces the earlier scheme where each device kept its own running total and pushed it: two devices then disagreed permanently (found 2026-09-19 - one showed R100, the other R200). |
 | credit_limit | numeric | nullable |
 | created_at | timestamptz | |
 | last_activity_at | timestamptz | nullable |
+| version | integer | not null, default 0 - added 2026-09-20. Bumped by `apply_credit_customer_edit`. |
+| updated_at | timestamptz | not null, default `now()` - added 2026-09-20, stamped by a `before update` trigger on every change (including balance changes), used as a pull cursor. |
 | store_id | uuid | FK `stores(uuid)`, nullable, **populated on every row** |
 
 ### `credit_transactions`
@@ -138,7 +142,7 @@ PK: `(sale_uuid, product_uuid)`.
 | uuid | uuid PK | |
 | customer_id | text | |
 | amount | numeric | |
-| type | text | `purchase` \| `repayment` \| `return` |
+| type | text | `purchase` \| `repayment` \| `return` \| `manual_credit` \| `writeoff`. The trigger adds `purchase`/`manual_credit`, subtracts `repayment`/`writeoff`, and adds `return` as-is (already signed). |
 | sale_uuid | uuid | nullable |
 | note | text | nullable — repayment method (`Cash`/`Card`) or return reason label |
 | balance_before | numeric | nullable |
@@ -146,6 +150,9 @@ PK: `(sale_uuid, product_uuid)`.
 | cash_received | numeric | nullable — added 2026-09-10, same reasoning as `sales.cash_received`. Only set for a cash repayment (`note = 'Cash'`). |
 | created_at | timestamptz | |
 | store_id | uuid | FK `stores(uuid)`, nullable, **populated on every row** |
+
+### Server-stamped pull cursors (added 2026-09-20)
+`sales`, `sale_items`, `returns`, `return_items`, `extra_income`, `risk_log` and `credit_transactions` each have `received_at timestamptz not null default now()` (backfilled from `created_at`, or the parent sale/return for the two item tables), indexed with `store_id`. `stock_events.synced_at` already served this purpose. `products` and `credit_customers` use `updated_at`. Every device pulls "rows with this column newer than my last cursor (minus a 2 minute overlap)" - `created_at` is stamped by the *device's* clock and can arrive arbitrarily later, so it can't be used to ask "what did I miss". Rows are applied idempotently, so the overlap is harmless.
 
 ### `devices`
 Tracks per-(device, store) verification, not a single trusted device per
@@ -245,16 +252,7 @@ other's sale. Replaces relying on forced single-active-device logout to
 avoid the conflict in the first place (see `devices.verified_at` above and
 `stores.active_device_id`).
 
-Each device still maintains `products.stock` locally as a running total
-(applying each delta once, own-device events skipped on the realtime/
-catch-up path since that device already applied its own at creation time) -
-`products.stock` is **not** recomputed from this table on every read, this
-table is the durable ledger backing it. Note `products.stock` is *not* kept
-live-updated in Supabase itself by a sale/return/adjustment (no `product`
-row push for those, unlike a manual edit via Add/Edit Product) - it can
-genuinely lag behind `stock_events`, which is why a fresh restore
-(`RestoreService.restoreIfEmpty`) recomputes each product's stock as the
-sum of its events rather than trusting the column directly.
+**Since 2026-09-20 the database applies every event to the product itself**: an `after insert` trigger on this table adds `quantity_delta` to `products.stock` (see "Triggers"). A device no longer keeps its own running total that it pushes - it records the event, and shows `products.stock` from the server plus its own not-yet-sent events. Every kind of stock change is an event: `sale`, `return`, `restock`, `initial_stock` (a new product starts at 0 and this event brings it up), and `manual_adjustment` (a quick "+" restock, or the quantity part of an Edit Product save - the latter written by `apply_product_edit`, not the device). `RealtimeStockSyncService` and the "skip `initial_stock`" workaround below were removed; the earlier notes are kept for history only.
 
 Primary key is `id`, not `uuid` (unlike every other synced table) -
 `ProductRepository.recordStockEvent`'s payload builder deliberately keys it
@@ -329,19 +327,7 @@ One-time backfill (2026-09-09): every pre-existing product with
 equal to its stock at that time, bringing existing data into the
 event-sourcing model without loss.
 
-**`initial_stock` never mutates the running total, 2026-09-12**: found on a
-real two-device store that a brand-new product showed a different quantity
-on each device, offset by exactly its own `initial_stock` amount.
-`products` and `stock_events` are two independent Realtime channels with
-no guaranteed ordering - if the new product's own row (which already
-carries its starting `stock` baked in) happens to arrive before its
-`initial_stock` event, applying that event's delta on top double-counts
-it. `RealtimeStockSyncService._applyRemoteEvent` now treats
-`change_type = 'initial_stock'` as a no-op for the stock mutation
-unconditionally (still recorded for the durable ledger/`RestoreService`'s
-sum-from-scratch), regardless of whether the product already exists
-locally - safe in either arrival order, since a product's starting stock
-is always already reflected the moment it's first created on any device.
+**Superseded 2026-09-20:** the `initial_stock` no-op (added 2026-09-12 to avoid double counting between two independent realtime channels) no longer exists - a product row now always arrives with the server's stock, and there is no client-side event replay to double count.
 
 ### `rejected_catalogue_barcodes`
 Added 2026-09-07. Denylist backing pockettill_datamaster's `rejectProduct`
@@ -650,8 +636,19 @@ they don't need elevated privilege, so they run under the caller's own RLS.
 - **`get_product_stock(p_product_id uuid, p_store_id uuid) returns integer`** — `security invoker`, `set search_path = ''`. Added 2026-09-09. Sums `quantity_delta` from `stock_events` for one product - the authoritative recompute path, not on the Flutter app's hot read path (each device maintains `products.stock` as a running total instead, see `stock_events` above). Exists for reconciliation/debugging.
 - **`catalogue_category_counts() returns table(category text, product_count bigint)`** — `security invoker`, `set search_path = ''`. Added 2026-09-04 for the Flutter app's Catalogue Browse screen ("Beverages (124)"). No elevated privilege needed - `catalogue_products` is already readable by any `authenticated` store via its own RLS policy, this just aggregates over what the caller can already see. `category IS NULL` rows are grouped under `'Uncategorised'`.
 - **`database_usage_bytes() returns table(db_size_bytes bigint, storage_size_bytes bigint)`** — `security definer`, `set search_path = ''`, **execute revoked from `public`/`anon`/`authenticated`** (only the service-role client can call it — this one actually needs to be locked down, unlike the others in this list, since it exposes infra sizing that shouldn't be publicly queryable). Added 2026-08-10 for pockettill_datamaster's Infrastructure Costs page, after discovering Supabase's public Management API has **no endpoint for database/storage size** despite what the page's original spec assumed (`GET /v1/projects/{ref}/usage` doesn't exist — confirmed 404 against the real API; the only real usage endpoints are `analytics/endpoints/usage.api-counts` and `usage.api-requests-count`). `pg_database_size(current_database())` and a `sum` over `storage.objects.metadata->>'size'` are the actual, reliable sources. Note when creating any new `security definer` function: **Postgres grants `EXECUTE` to `PUBLIC` by default** — `revoke ... from anon, authenticated` alone does not remove a standing `PUBLIC` grant; revoke from `public` explicitly too, or the security advisor will still flag it (this bit us once already, see `20260810141855_fix_database_usage_bytes_grants.sql`).
-- **`apply_product_edit(p_uuid uuid, p_store_id uuid, p_expected_* ..., p_new_* ...) returns table(conflict boolean, final_* ...)`** — `security invoker`, `set search_path = ''`. Added 2026-09-16, replacing the Flutter app's own client-side conflict check (`SyncService._resolveProductConflicts`), which read the remote row, decided, and pushed as two separate round-trips - a real race two devices could both slip through, confirmed live (zero `concurrent_product_edit`/`concurrent_stock_edit` risk_log rows despite deliberately racing two devices in testing). Locks the row (`for update`), then: if the current row already matches `p_new_*`, treats it as an idempotent replay of an edit that already landed (not a conflict - a client retrying after losing its connection mid-push must never have its own already-applied edit wrongly reverted); else if the current row matches `p_expected_*` (this device's own pre-edit snapshot), applies `p_new_*` normally; otherwise a genuine conflict - some other device's edit landed first - and it reverts the row to `p_expected_*` (the shared starting point both edits began from, not whichever device's edit happened to land first) rather than applying either device's version. Covers name/price/category/mass/stock together as one row, so a manual stock-quantity edit through the product form gets the same conflict treatment as a metadata edit - never called for a sale/return/quick-restock's stock delta (see `ProductRepository.adjustStock`), which must always apply/sum regardless of what else happened, the same as any other event-sourced delta.
-- **`apply_credit_customer_edit(p_uuid uuid, p_store_id uuid, p_expected_* ..., p_new_* ...) returns table(conflict boolean, final_* ...)`** — `security invoker`, `set search_path = ''`. Added 2026-09-16, same compare-and-swap pattern as `apply_product_edit` above, for a credit customer's name/phone/balance/credit_limit together as one row. Only ever called for a "manual edit" with no transaction backing it - `CreditRepository.saveCustomer`/`updateCreditLimit` (details) and `addManualCredit`/`writeOffBalance` (a balance change with nothing else to show for it) - never for `addPurchase`/`recordRepayment`, which are event-sourced like a sale and must always apply regardless of a concurrent edit on another device.
+- **`apply_product_edit(p_uuid uuid, p_store_id uuid, p_device_id text, p_base jsonb, p_changes jsonb, p_base_stock_version integer, p_stock_delta integer, p_edit_id uuid) returns jsonb`** - `security invoker`, `set search_path = ''`, execute granted to `authenticated` only. Rewritten 2026-09-20 (the 2026-09-16 version compared whole rows and was replaced along with it). For a person saving the Edit Product form. `p_changes` holds only the fields that person changed (`name`, `barcode`, `mass`, `category`, `unit`, `price`, `cost_price`, `low_stock_threshold`), `p_base` the values they saw before. Locks the row, then per field: already at the new value -> nothing to do (a retry, or two devices making the same change - not a conflict); still at the base value -> applied; anything else -> another edit landed first: the server's value is kept and the field is reported in `conflicts`. `image_url` is deliberately **not** part of this - it is last-write-wins (a plain single-column update). Stock is a **change**, not an absolute: if `p_stock_delta <> 0` it inserts one `manual_adjustment` `stock_events` row (id = `p_edit_id`, so a retry finds it and does nothing) unless `products.stock_version` no longer equals `p_base_stock_version` (someone else manually edited stock since - reported as `'stock'` in `conflicts`). Returns `{found, conflicts[], row}`; `found = false` means the product was deleted. A losing edit is simply not applied - the other device's edit stands, and the losing device logs `concurrent_product_edit` / `concurrent_stock_edit` and adopts the returned row.
+- **`apply_credit_customer_edit(p_uuid uuid, p_store_id uuid, p_base jsonb, p_changes jsonb) returns jsonb`** - same pattern, for a customer's details (`name`, `phone`, `credit_limit`) only. The balance is never edited directly any more: a purchase, repayment, manual credit or write-off is a `credit_transactions` row and always counts, even if two devices record one at the same moment (both are real transactions - the Risk Log entry each one writes is what lets the owner review them).
+
+## Triggers (added 2026-09-20)
+
+Stock and balance have one owner, the database. Nothing else can change them.
+
+- **`stock_events_apply_delta`** (`after insert` on `stock_events`, `security definer`): `products.stock += quantity_delta` for that product/store. Fires only for a genuinely new row, so a retried push (an upsert onto an existing id) can't apply it twice.
+- **`credit_transactions_apply_delta`** (`after insert` on `credit_transactions`, `security definer`): moves `credit_customers.balance` by the transaction (see the type list above), clamped at 0, and advances `last_activity_at`.
+- **`products_guard_stock`** / **`credit_customers_guard_balance`** (`before insert or update`): on insert force `stock`/`balance` to 0; on update restore the old `stock`/`balance` (and `version`/`stock_version`) unless the write came from one of the functions above (they set a transaction-local flag, `app.stock_write` / `app.balance_write`). This is what stops an old app version that still pushes whole rows, or any stray upsert, from overwriting the server's number.
+- **`products_touch_updated_at`** / **`credit_customers_touch_updated_at`** (`before update`): `updated_at = now()`.
+
+One-time data reconciliation applied with the migration (`20260920120000_server_authoritative_stock_and_balance.sql`): every product with stock events had `stock` set to the sum of its events (the column had drifted - it lagged every sale); one product's manual stock edit that had never reached the ledger got a corrective `manual_adjustment` event (`device_id = 'migration'`). Customer balances were left as they were - their transaction history is incomplete for older data.
 
 ## Known advisor warnings (accepted, not bugs)
 

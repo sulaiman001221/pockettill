@@ -47,13 +47,23 @@ const CreditCustomerSchema = CollectionSchema(
       name: r'phone',
       type: IsarType.string,
     ),
-    r'synced': PropertySchema(
+    r'serverUpdatedAt': PropertySchema(
       id: 6,
+      name: r'serverUpdatedAt',
+      type: IsarType.dateTime,
+    ),
+    r'serverVersion': PropertySchema(
+      id: 7,
+      name: r'serverVersion',
+      type: IsarType.long,
+    ),
+    r'synced': PropertySchema(
+      id: 8,
       name: r'synced',
       type: IsarType.bool,
     ),
     r'uuid': PropertySchema(
-      id: 7,
+      id: 9,
       name: r'uuid',
       type: IsarType.string,
     )
@@ -101,8 +111,10 @@ void _creditCustomerSerialize(
   writer.writeDateTime(offsets[3], object.lastActivityAt);
   writer.writeString(offsets[4], object.name);
   writer.writeString(offsets[5], object.phone);
-  writer.writeBool(offsets[6], object.synced);
-  writer.writeString(offsets[7], object.uuid);
+  writer.writeDateTime(offsets[6], object.serverUpdatedAt);
+  writer.writeLong(offsets[7], object.serverVersion);
+  writer.writeBool(offsets[8], object.synced);
+  writer.writeString(offsets[9], object.uuid);
 }
 
 CreditCustomer _creditCustomerDeserialize(
@@ -119,8 +131,10 @@ CreditCustomer _creditCustomerDeserialize(
   object.lastActivityAt = reader.readDateTimeOrNull(offsets[3]);
   object.name = reader.readString(offsets[4]);
   object.phone = reader.readStringOrNull(offsets[5]);
-  object.synced = reader.readBool(offsets[6]);
-  object.uuid = reader.readString(offsets[7]);
+  object.serverUpdatedAt = reader.readDateTimeOrNull(offsets[6]);
+  object.serverVersion = reader.readLong(offsets[7]);
+  object.synced = reader.readBool(offsets[8]);
+  object.uuid = reader.readString(offsets[9]);
   return object;
 }
 
@@ -144,8 +158,12 @@ P _creditCustomerDeserializeProp<P>(
     case 5:
       return (reader.readStringOrNull(offset)) as P;
     case 6:
-      return (reader.readBool(offset)) as P;
+      return (reader.readDateTimeOrNull(offset)) as P;
     case 7:
+      return (reader.readLong(offset)) as P;
+    case 8:
+      return (reader.readBool(offset)) as P;
+    case 9:
       return (reader.readString(offset)) as P;
     default:
       throw IsarError('Unknown property with id $propertyId');
@@ -874,6 +892,136 @@ extension CreditCustomerQueryFilter
   }
 
   QueryBuilder<CreditCustomer, CreditCustomer, QAfterFilterCondition>
+      serverUpdatedAtIsNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(const FilterCondition.isNull(
+        property: r'serverUpdatedAt',
+      ));
+    });
+  }
+
+  QueryBuilder<CreditCustomer, CreditCustomer, QAfterFilterCondition>
+      serverUpdatedAtIsNotNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(const FilterCondition.isNotNull(
+        property: r'serverUpdatedAt',
+      ));
+    });
+  }
+
+  QueryBuilder<CreditCustomer, CreditCustomer, QAfterFilterCondition>
+      serverUpdatedAtEqualTo(DateTime? value) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'serverUpdatedAt',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<CreditCustomer, CreditCustomer, QAfterFilterCondition>
+      serverUpdatedAtGreaterThan(
+    DateTime? value, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'serverUpdatedAt',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<CreditCustomer, CreditCustomer, QAfterFilterCondition>
+      serverUpdatedAtLessThan(
+    DateTime? value, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'serverUpdatedAt',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<CreditCustomer, CreditCustomer, QAfterFilterCondition>
+      serverUpdatedAtBetween(
+    DateTime? lower,
+    DateTime? upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'serverUpdatedAt',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+      ));
+    });
+  }
+
+  QueryBuilder<CreditCustomer, CreditCustomer, QAfterFilterCondition>
+      serverVersionEqualTo(int value) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'serverVersion',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<CreditCustomer, CreditCustomer, QAfterFilterCondition>
+      serverVersionGreaterThan(
+    int value, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'serverVersion',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<CreditCustomer, CreditCustomer, QAfterFilterCondition>
+      serverVersionLessThan(
+    int value, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'serverVersion',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<CreditCustomer, CreditCustomer, QAfterFilterCondition>
+      serverVersionBetween(
+    int lower,
+    int upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'serverVersion',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+      ));
+    });
+  }
+
+  QueryBuilder<CreditCustomer, CreditCustomer, QAfterFilterCondition>
       syncedEqualTo(bool value) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.equalTo(
@@ -1106,6 +1254,34 @@ extension CreditCustomerQuerySortBy
     });
   }
 
+  QueryBuilder<CreditCustomer, CreditCustomer, QAfterSortBy>
+      sortByServerUpdatedAt() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'serverUpdatedAt', Sort.asc);
+    });
+  }
+
+  QueryBuilder<CreditCustomer, CreditCustomer, QAfterSortBy>
+      sortByServerUpdatedAtDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'serverUpdatedAt', Sort.desc);
+    });
+  }
+
+  QueryBuilder<CreditCustomer, CreditCustomer, QAfterSortBy>
+      sortByServerVersion() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'serverVersion', Sort.asc);
+    });
+  }
+
+  QueryBuilder<CreditCustomer, CreditCustomer, QAfterSortBy>
+      sortByServerVersionDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'serverVersion', Sort.desc);
+    });
+  }
+
   QueryBuilder<CreditCustomer, CreditCustomer, QAfterSortBy> sortBySynced() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'synced', Sort.asc);
@@ -1224,6 +1400,34 @@ extension CreditCustomerQuerySortThenBy
     });
   }
 
+  QueryBuilder<CreditCustomer, CreditCustomer, QAfterSortBy>
+      thenByServerUpdatedAt() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'serverUpdatedAt', Sort.asc);
+    });
+  }
+
+  QueryBuilder<CreditCustomer, CreditCustomer, QAfterSortBy>
+      thenByServerUpdatedAtDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'serverUpdatedAt', Sort.desc);
+    });
+  }
+
+  QueryBuilder<CreditCustomer, CreditCustomer, QAfterSortBy>
+      thenByServerVersion() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'serverVersion', Sort.asc);
+    });
+  }
+
+  QueryBuilder<CreditCustomer, CreditCustomer, QAfterSortBy>
+      thenByServerVersionDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'serverVersion', Sort.desc);
+    });
+  }
+
   QueryBuilder<CreditCustomer, CreditCustomer, QAfterSortBy> thenBySynced() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'synced', Sort.asc);
@@ -1293,6 +1497,20 @@ extension CreditCustomerQueryWhereDistinct
     });
   }
 
+  QueryBuilder<CreditCustomer, CreditCustomer, QDistinct>
+      distinctByServerUpdatedAt() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'serverUpdatedAt');
+    });
+  }
+
+  QueryBuilder<CreditCustomer, CreditCustomer, QDistinct>
+      distinctByServerVersion() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'serverVersion');
+    });
+  }
+
   QueryBuilder<CreditCustomer, CreditCustomer, QDistinct> distinctBySynced() {
     return QueryBuilder.apply(this, (query) {
       return query.addDistinctBy(r'synced');
@@ -1350,6 +1568,19 @@ extension CreditCustomerQueryProperty
   QueryBuilder<CreditCustomer, String?, QQueryOperations> phoneProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'phone');
+    });
+  }
+
+  QueryBuilder<CreditCustomer, DateTime?, QQueryOperations>
+      serverUpdatedAtProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'serverUpdatedAt');
+    });
+  }
+
+  QueryBuilder<CreditCustomer, int, QQueryOperations> serverVersionProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'serverVersion');
     });
   }
 

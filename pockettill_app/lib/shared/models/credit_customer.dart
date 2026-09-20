@@ -14,4 +14,9 @@ class CreditCustomer {
   bool synced = false;
   late DateTime createdAt;
   DateTime? lastActivityAt;
+
+  // Mirrors of `credit_customers.version` / `updated_at`, same purpose as the
+  // matching fields on Product.
+  int serverVersion = 0;
+  DateTime? serverUpdatedAt;
 }
