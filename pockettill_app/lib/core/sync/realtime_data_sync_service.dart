@@ -98,6 +98,8 @@ class RealtimeDataSyncService {
   bool _starting = false;
   bool _pulling = false;
   bool _pullAgain = false;
+  int _pullRun = 0;
+  DateTime? _pullStartedAt;
   Timer? _debounce;
 
   /// Opens the realtime nudge channels, then pulls. A no-op if already
@@ -242,19 +244,32 @@ class RealtimeDataSyncService {
   /// collapse into one more run after the current one.
   Future<void> pullNow() async {
     if (_pulling) {
-      _pullAgain = true;
-      return;
+      // A pull that never finishes (a request that hangs on a socket that
+      // died with no error) would otherwise block every later pull until the
+      // app restarts - the phone would keep pushing but never pick anything
+      // up again. Treat one running far too long as dead and start over.
+      final startedAt = _pullStartedAt;
+      final stuck =
+          startedAt != null &&
+          DateTime.now().difference(startedAt) > const Duration(seconds: 90);
+      if (!stuck) {
+        _pullAgain = true;
+        return;
+      }
+      debugPrint('RealtimeDataSyncService: abandoning a stuck pull');
     }
+    final run = ++_pullRun;
     _pulling = true;
+    _pullStartedAt = DateTime.now();
     try {
       do {
         _pullAgain = false;
-        await _pullOnce();
-      } while (_pullAgain);
+        await _pullOnce().timeout(const Duration(seconds: 60));
+      } while (_pullAgain && run == _pullRun);
     } catch (e, st) {
       debugPrint('RealtimeDataSyncService.pullNow() failed: $e\n$st');
     } finally {
-      _pulling = false;
+      if (run == _pullRun) _pulling = false;
     }
   }
 

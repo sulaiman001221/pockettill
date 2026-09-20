@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/hardware/camera_scanner_service.dart';
 import '../../core/sync/reachability_service.dart';
+import '../../core/sync/realtime_data_sync_service.dart';
 import '../../core/sync/sync_service.dart';
 import '../../core/sync/sync_status_provider.dart';
 import '../../main.dart';
@@ -351,6 +352,16 @@ class _SalesScreenState extends ConsumerState<SalesScreen> {
     final syncBanner = _buildSyncBanner(_computeNudgeLevel(syncStatus, lastSyncedAt));
     final isStorageLow = ref.watch(lowStorageWarningProvider).valueOrNull ?? false;
     final storageBanner = _buildLowStorageBanner(isStorageLow);
+
+    // The search dropdown is a snapshot taken when the query was typed - a
+    // product changing underneath it (a sale or restock on another device)
+    // would otherwise keep showing its old stock and price until retyped.
+    ref.listen(productsChangedProvider, (_, _) {
+      final query = ref.read(salesNotifierProvider).searchQuery;
+      if (query.trim().isNotEmpty) {
+        ref.read(salesNotifierProvider.notifier).searchProducts(query);
+      }
+    });
 
     return GestureDetector(
       // Tapping anywhere outside the search field dismisses its focus -

@@ -85,6 +85,25 @@ class AuthService {
     return '+27$digitsAndPlus';
   }
 
+  /// Validation message for a phone number typed into a form, or null if it
+  /// is fine. [formatPhone] deliberately throws away everything that isn't a
+  /// digit or '+', so without checking the raw text first a password typed
+  /// into the phone field (digits + symbols + letters) collapses to just its
+  /// digits and can still log in - found 2026-09-20.
+  ///
+  /// Only South African numbers are supported ([formatPhone] assumes +27).
+  static String? phoneInputError(String raw) {
+    final text = raw.trim();
+    if (text.isEmpty) return null;
+    if (!RegExp(r'^\+?[0-9 \-]+$').hasMatch(text)) {
+      return 'Phone number can only contain digits';
+    }
+    if (!RegExp(r'^\+27[0-9]{9}$').hasMatch(formatPhone(text))) {
+      return 'Enter a valid number, like 071 234 5678';
+    }
+    return null;
+  }
+
   /// Whether [phone] already has an account. Check before registering (to
   /// block duplicate sign-ups without sending an OTP or touching a
   /// password) or before a password-reset request (to block resets for
@@ -369,7 +388,7 @@ class AuthService {
         // Best-effort: a failed sign-out here must not mask the real error.
         try {
           await SupabaseService.supabaseClient.auth.signOut(
-            scope: SignOutScope.global,
+            scope: SignOutScope.local,
           );
         } catch (_) {}
         throw OtpDeliveryFailedException(_describeOtpFailure(error));
@@ -436,7 +455,7 @@ class AuthService {
   /// it can't be resumed at all.
   static Future<void> abandonNewDeviceVerification() {
     return SupabaseService.supabaseClient.auth.signOut(
-      scope: SignOutScope.global,
+      scope: SignOutScope.local,
     );
   }
 
@@ -672,12 +691,14 @@ class AuthService {
   /// Signs out of Supabase Auth. [StoreConfig] is kept (marked logged out
   /// only) so the app still works offline until the next login.
   ///
-  /// Uses [SignOutScope.global] (not the default `local`) so the refresh
-  /// token is actually revoked server-side, not just cleared from this
-  /// client's in-memory/local storage - a `local` sign-out left a window
-  /// where force-stopping the app right after tapping Logout could leave a
-  /// stale-but-still-valid session on disk, silently logging the device
-  /// back in on next launch.
+  /// Uses [SignOutScope.local]: it ends *this device's* session on the
+  /// server (its refresh token is revoked there, not just forgotten locally)
+  /// and leaves every other device's session alone. Every device of a store
+  /// signs in as the same Supabase user, so [SignOutScope.global] here signed
+  /// out all of them - not immediately, but the next time each one tried to
+  /// refresh its access token (up to an hour later), when it got "Your
+  /// session has expired" with no warning. Found 2026-09-20 when logging one
+  /// phone out expired the other mid-test.
   ///
   /// Throws [UnsyncedChangesException] instead of signing out if there are
   /// local changes still waiting to reach Supabase and no connectivity to
@@ -701,7 +722,7 @@ class AuthService {
     }
 
     await SupabaseService.supabaseClient.auth.signOut(
-      scope: SignOutScope.global,
+      scope: SignOutScope.local,
     );
 
     final repo = StoreConfigRepository(isar: isar);

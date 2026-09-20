@@ -115,7 +115,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
     if (config == null || config.storeId.isEmpty) {
       try {
         await SupabaseService.supabaseClient.auth.signOut(
-          scope: SignOutScope.global,
+          scope: SignOutScope.local,
         );
       } catch (_) {}
       if (!mounted) return;
