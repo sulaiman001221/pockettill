@@ -18,6 +18,7 @@ class PendingChanges {
     required this.deletedCustomerUuids,
     required this.createdProductUuids,
     required this.createdCustomerUuids,
+    required this.createdExtraIncomeUuids,
   });
 
   /// Unsent stock change per product uuid (sales, returns, restocks and the
@@ -42,6 +43,11 @@ class PendingChanges {
   final Set<String> createdProductUuids;
   final Set<String> createdCustomerUuids;
 
+  /// Extra-income entries created here that the server hasn't seen yet - an
+  /// entry missing from a delete-reconciliation pass because it was only
+  /// just created, not because another device deleted it.
+  final Set<String> createdExtraIncomeUuids;
+
   static Future<PendingChanges> load(Isar isar) async {
     final pending = await isar.syncEvents
         .filter()
@@ -56,6 +62,7 @@ class PendingChanges {
     final deletedCustomers = <String>{};
     final createdProducts = <String>{};
     final createdCustomers = <String>{};
+    final createdExtraIncome = <String>{};
 
     for (final event in pending) {
       switch (event.entityType) {
@@ -85,6 +92,10 @@ class PendingChanges {
           if (event.operation == 'create') {
             createdCustomers.add(event.entityUuid);
           }
+        case 'extra_income':
+          if (event.operation == 'create') {
+            createdExtraIncome.add(event.entityUuid);
+          }
         case 'credit_tx':
           final payload = jsonDecode(event.payload) as Map<String, dynamic>;
           final customerId = payload['customer_id'] as String?;
@@ -106,6 +117,7 @@ class PendingChanges {
       deletedCustomerUuids: deletedCustomers,
       createdProductUuids: createdProducts,
       createdCustomerUuids: createdCustomers,
+      createdExtraIncomeUuids: createdExtraIncome,
     );
   }
 

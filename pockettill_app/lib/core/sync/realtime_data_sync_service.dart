@@ -380,6 +380,7 @@ class RealtimeDataSyncService {
 
     await _reconcileProductDeletes(storeId);
     await _reconcileCustomerDeletes(storeId);
+    await _reconcileExtraIncomeDeletes(storeId);
     await _pullStoreProfile(storeId);
 
     await _saveCursors(cursors);
@@ -549,6 +550,46 @@ class RealtimeDataSyncService {
     }
   }
 
+  /// A History > Extra Income entry deleted on another device never reached
+  /// this one: unlike products/customers, extra_income only ever had an
+  /// insert subscription, and the delete itself pushes fine (a plain
+  /// `SyncEvent(operation: 'delete')`), it just had nothing on the pull side
+  /// to notice the row was gone remotely. Found 2026-09-22 on a real
+  /// two-device store. Mirrors [_reconcileCustomerDeletes] - no dependent
+  /// child rows to clean up here, just the entry itself.
+  Future<void> _reconcileExtraIncomeDeletes(String storeId) async {
+    try {
+      final localUuids = (await _isar.extraIncomes.where().findAll())
+          .map((e) => e.uuid)
+          .toSet();
+      final remoteRows = await SupabaseService.supabaseClient
+          .from('extra_income')
+          .select('uuid')
+          .eq('store_id', storeId);
+      final remoteUuids = remoteRows.map((r) => r['uuid'] as String).toSet();
+      if (remoteUuids.isEmpty && localUuids.length > 1) return;
+
+      var anyRemoved = false;
+      for (final uuid in localUuids.difference(remoteUuids)) {
+        final removed = await _isar.writeTxn(() async {
+          final pending = await PendingChanges.load(_isar);
+          if (pending.createdExtraIncomeUuids.contains(uuid)) return false;
+          final entry = await _isar.extraIncomes
+              .filter()
+              .uuidEqualTo(uuid)
+              .findFirst();
+          if (entry == null) return false;
+          await _isar.extraIncomes.delete(entry.id);
+          return true;
+        });
+        if (removed) anyRemoved = true;
+      }
+      if (anyRemoved) _salesChangedController.add(null);
+    } catch (e) {
+      debugPrint('RealtimeDataSyncService: extra income delete reconcile failed: $e');
+    }
+  }
+
   // -- append-only rows (idempotent by uuid) ---------------------------------
 
   Future<bool> _applySale(Map<String, dynamic> row) async {
@@ -638,12 +679,15 @@ class RealtimeDataSyncService {
   // -- store profile ---------------------------------------------------------
 
   /// Another device's Settings edit (store name, owner name/phone, address,
-  /// or the Product Images toggles). Only touches the profile fields
+  /// or "Use PocketTill catalogue images"). Only touches the profile fields
   /// `_enqueueStoreProfileSync` actually pushes, never this device's own
-  /// local-only state, and skips the write and the signal entirely when
-  /// nothing changed - `stores` is also updated for unrelated reasons (the
-  /// founding-store check stamps it on every call), and signalling on every
-  /// such change once created a genuine refresh loop in Settings.
+  /// local-only state (including `imagesWifiOnly` - a per-device preference,
+  /// deliberately never pulled from here since 2026-09-22; see
+  /// SettingsScreen's `_saveLocalPreference`), and skips the write and the
+  /// signal entirely when nothing changed - `stores` is also updated for
+  /// unrelated reasons (the founding-store check stamps it on every call),
+  /// and signalling on every such change once created a genuine refresh loop
+  /// in Settings.
   Future<void> _pullStoreProfile(String storeId) async {
     try {
       final rows = await SupabaseService.supabaseClient
@@ -662,16 +706,13 @@ class RealtimeDataSyncService {
       final newAddress = row['address'] as String?;
       final newUseCatalogueImages =
           row['use_catalogue_images'] as bool? ?? config.useCatalogueImages;
-      final newImagesWifiOnly =
-          row['images_wifi_only'] as bool? ?? config.imagesWifiOnly;
 
       final unchanged =
           config.storeName == newStoreName &&
           config.ownerName == newOwnerName &&
           config.ownerPhone == newOwnerPhone &&
           config.address == newAddress &&
-          config.useCatalogueImages == newUseCatalogueImages &&
-          config.imagesWifiOnly == newImagesWifiOnly;
+          config.useCatalogueImages == newUseCatalogueImages;
       if (unchanged) return;
 
       config
@@ -679,8 +720,7 @@ class RealtimeDataSyncService {
         ..ownerName = newOwnerName
         ..ownerPhone = newOwnerPhone
         ..address = newAddress
-        ..useCatalogueImages = newUseCatalogueImages
-        ..imagesWifiOnly = newImagesWifiOnly;
+        ..useCatalogueImages = newUseCatalogueImages;
       await _isar.writeTxn(() async {
         await _isar.storeConfigs.put(config);
       });

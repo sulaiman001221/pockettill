@@ -656,12 +656,16 @@ class AuthService {
       // fresh `StoreConfig()` here would otherwise do every single login.
       ..scanSoundEnabled = existingConfig?.scanSoundEnabled ?? true
       ..paymentSoundEnabled = existingConfig?.paymentSoundEnabled ?? true
-      // Product Images prefs, unlike sound, DO belong to the store (synced
-      // via store_profile), so they're read from the fetched `stores` row
+      // "Use PocketTill catalogue images" DOES belong to the store (synced
+      // via store_profile), so it's read from the fetched `stores` row
       // itself, not carried over from whatever device-local config existed
-      // before - this is what makes them "survive a reinstall" per spec.
+      // before - this is what makes it "survive a reinstall" per spec.
       ..useCatalogueImages = store['use_catalogue_images'] as bool? ?? true
-      ..imagesWifiOnly = store['images_wifi_only'] as bool? ?? false
+      // WiFi-only is a per-device preference (2026-09-22 - found applying
+      // itself to every device on the account the moment one owner toggled
+      // it, which is wrong since not every phone is on the same data plan)
+      // - carried over like the sound prefs above, never read from `stores`.
+      ..imagesWifiOnly = existingConfig?.imagesWifiOnly ?? false
       // Read straight from the `stores` row above, which is always
       // correct - no repair needed, see StoreConfigRepository's one-time
       // migration.
