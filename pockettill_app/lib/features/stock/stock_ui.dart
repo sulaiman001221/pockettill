@@ -85,6 +85,21 @@ class _CachedProductImageState extends ConsumerState<CachedProductImage> {
   File? _file;
   bool _loading = false;
 
+  // Bumped on every _resolve() call and captured locally by each one - lets
+  // a call whose result comes back after a *newer* call has already started
+  // recognize it's stale and drop its result instead of setState-ing over
+  // it. Needed because Flutter reuses this State positionally in a list
+  // with no per-item key (Stock, Catalogue Browse): switching Catalogue
+  // Browse categories swaps in a whole new set of items at the same list
+  // positions, which calls didUpdateWidget (not initState) on the existing
+  // State objects and starts a fresh _resolve() while a slower one from the
+  // *previous* category's item at that position can still be in flight -
+  // without this guard, whichever call happened to finish last would win,
+  // regardless of which item is actually showing by then, which is exactly
+  // how a switched-away-from category's photo ended up "stuck" on a
+  // different product. Found 2026-09-23 on Catalogue Browse.
+  int _resolveId = 0;
+
   @override
   void initState() {
     super.initState();
@@ -102,35 +117,38 @@ class _CachedProductImageState extends ConsumerState<CachedProductImage> {
   }
 
   Future<void> _resolve() async {
+    final id = ++_resolveId;
+    bool stillCurrent() => mounted && id == _resolveId;
+
     final knownPath = widget.cachedImagePath;
     if (knownPath != null && knownPath.isNotEmpty) {
       final file = File(knownPath);
       if (await file.exists()) {
-        if (mounted) setState(() => _file = file);
+        if (stillCurrent()) setState(() => _file = file);
         return;
       }
     }
 
     final cached = await ImageCacheService.getCachedFile(widget.cacheKey);
     if (cached != null) {
-      if (mounted) setState(() => _file = cached);
+      if (stillCurrent()) setState(() => _file = cached);
       return;
     }
 
     final url = widget.imageUrl;
     if (url == null || url.isEmpty) {
-      if (mounted) setState(() => _file = null);
+      if (stillCurrent()) setState(() => _file = null);
       return;
     }
 
-    if (mounted) setState(() => _loading = true);
+    if (stillCurrent()) setState(() => _loading = true);
     final wifiOnly = ref.read(storeConfigProvider)?.imagesWifiOnly ?? false;
     final downloaded = await ImageCacheService.fetchAndCache(
       cacheKey: widget.cacheKey,
       remoteUrl: url,
       wifiOnly: wifiOnly,
     );
-    if (!mounted) return;
+    if (!stillCurrent()) return;
     setState(() {
       _file = downloaded;
       _loading = false;

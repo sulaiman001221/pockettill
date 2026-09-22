@@ -378,6 +378,12 @@ class _CatalogueBrowseScreenState extends ConsumerState<CatalogueBrowseScreen> {
     final alreadyOwned = _ownedBarcodes.contains(item.barcode);
     final selected = _selectedItems.containsKey(item.barcode);
     return _CatalogueProductRow(
+      // Without a key, switching categories swaps in an entirely different
+      // list of items but Flutter still matches old and new widgets up by
+      // position, so row 0's image-loading state gets reused (and can race)
+      // across two completely unrelated products - see CachedProductImage's
+      // own _resolveId guard for the full explanation.
+      key: ValueKey(item.barcode),
       item: item,
       alreadyOwned: alreadyOwned,
       selected: selected,
@@ -456,6 +462,7 @@ class _CategoryChip extends StatelessWidget {
 /// a stock edit.
 class _CatalogueProductRow extends StatelessWidget {
   const _CatalogueProductRow({
+    super.key,
     required this.item,
     required this.alreadyOwned,
     required this.selected,
