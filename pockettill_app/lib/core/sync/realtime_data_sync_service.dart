@@ -102,20 +102,44 @@ class RealtimeDataSyncService {
   DateTime? _pullStartedAt;
   Timer? _debounce;
 
-  /// Opens the realtime nudge channels, then pulls. A no-op if already
-  /// subscribed or if there's no logged-in store.
-  Future<void> start() async {
-    if (_channels.isNotEmpty || _starting) return;
-    _starting = true;
+  /// Which store's channels [_channels] currently subscribes to, or null
+  /// when nothing is subscribed - lets [start] tell "already correctly
+  /// subscribed, do nothing" apart from "subscribed to the wrong store,
+  /// rebind".
+  String? _subscribedStoreId;
 
+  /// Opens the realtime nudge channels, then pulls. A no-op if already
+  /// subscribed to the current store, or if there's no logged-in store.
+  ///
+  /// Self-heals a store switch: logging into a *different* store on a
+  /// device that's still running (no process restart) used to leave the
+  /// previous store's channels sitting open forever - every call after the
+  /// first saw `_channels.isNotEmpty` and returned immediately, so the new
+  /// store never got its own subscriptions at all. Nothing was silently
+  /// broken (the 30s periodic pull and push-on-change still worked, just
+  /// with no realtime nudge), which is exactly why it went unnoticed until
+  /// a real two-device test on a freshly-switched store found stock/product
+  /// updates taking up to 30s instead of the usual couple of seconds -
+  /// found 2026-09-22. Comparing the target store id against
+  /// [_subscribedStoreId] and rebinding when they differ closes this
+  /// regardless of which call site is responsible for the switch, rather
+  /// than hunting down every login/logout path that can change the active
+  /// store.
+  Future<void> start() async {
+    if (_starting) return;
+
+    final storeConfig = await _isar.storeConfigs.get(1);
+    if (storeConfig == null ||
+        !storeConfig.isLoggedIn ||
+        storeConfig.storeId.isEmpty) {
+      return;
+    }
+    final storeId = storeConfig.storeId;
+    if (_channels.isNotEmpty && _subscribedStoreId == storeId) return;
+
+    _starting = true;
     try {
-      final storeConfig = await _isar.storeConfigs.get(1);
-      if (storeConfig == null ||
-          !storeConfig.isLoggedIn ||
-          storeConfig.storeId.isEmpty) {
-        return;
-      }
-      final storeId = storeConfig.storeId;
+      if (_channels.isNotEmpty) await stop();
 
       // A restored session can still hold an expired access token for a
       // moment on launch; channels joined with it are rejected outright
@@ -175,6 +199,7 @@ class RealtimeDataSyncService {
           filterColumn: 'uuid',
         ),
       ]);
+      _subscribedStoreId = storeId;
 
       await pullNow();
     } catch (e) {
@@ -190,6 +215,7 @@ class RealtimeDataSyncService {
     _debounce?.cancel();
     final channels = List<RealtimeChannel>.from(_channels);
     _channels.clear();
+    _subscribedStoreId = null;
     for (final channel in channels) {
       await SupabaseService.supabaseClient.removeChannel(channel);
     }

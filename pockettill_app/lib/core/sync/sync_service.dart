@@ -397,7 +397,20 @@ class SyncService {
       'price',
       'cost_price',
       'low_stock_threshold',
-      'image_url',
+      // Deliberately NOT 'image_url' - a device stops running the pre-
+      // 2026-09-20 whole-row `save()` the moment it's upgraded, but its
+      // local Isar `syncEvents` queue can still hold an old-format event
+      // from before the upgrade (reinstalling with `-r` keeps app data).
+      // If that stale event's captured image_url happened to be older than
+      // a real image_update event queued after the upgrade, this fallback
+      // ran *later* in the same push cycle and silently overwrote the
+      // fresh photo back to the stale one - permanently, since both events
+      // get marked pushed and nothing retries. Found 2026-09-22: an image
+      // upload reached Storage correctly but products.image_url never
+      // moved off a months-old value. image_url is always sent through a
+      // dedicated `image_update` event now (see ProductRepository.
+      // _queueImageUpdate) - this fallback exists only for the other
+      // fields a genuinely old build might still have queued.
     ];
     final update = {
       for (final f in fields)

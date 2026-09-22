@@ -446,12 +446,17 @@ class _StatsRow extends StatelessWidget {
       avgDelta = '${avgUp ? '+' : '-'}R${diff.abs().toStringAsFixed(0)}';
     }
 
+    // e.g. "This Week" - appended to each label below so the three headline
+    // numbers say what they cover without the owner having to check the
+    // period tabs above the chart separately.
+    final periodSuffix = _periodLabel(state.period);
+
     return Row(
       children: [
         Expanded(
           child: _StatCard(
             icon: Icons.insert_chart_outlined,
-            label: 'Total Sales',
+            label: 'Total Sales $periodSuffix',
             value: 'R${state.currentTotal.toStringAsFixed(0)}',
             delta: totalDelta,
             deltaUp: totalUp,
@@ -462,7 +467,7 @@ class _StatsRow extends StatelessWidget {
         Expanded(
           child: _StatCard(
             icon: Icons.receipt_long_outlined,
-            label: 'Transactions',
+            label: 'Transactions $periodSuffix',
             value: '${state.currentCount}',
             delta: transDelta,
             deltaUp: transUp,
@@ -473,7 +478,7 @@ class _StatsRow extends StatelessWidget {
         Expanded(
           child: _StatCard(
             icon: Icons.trending_up,
-            label: 'Avg. Sale',
+            label: 'Avg. Sale $periodSuffix',
             value: 'R${state.currentAvgSale.toStringAsFixed(0)}',
             delta: avgDelta,
             deltaUp: avgUp,
