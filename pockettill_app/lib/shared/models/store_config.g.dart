@@ -102,8 +102,13 @@ const StoreConfigSchema = CollectionSchema(
       name: r'storeName',
       type: IsarType.string,
     ),
-    r'useCatalogueImages': PropertySchema(
+    r'syncCursors': PropertySchema(
       id: 17,
+      name: r'syncCursors',
+      type: IsarType.string,
+    ),
+    r'useCatalogueImages': PropertySchema(
+      id: 18,
       name: r'useCatalogueImages',
       type: IsarType.bool,
     )
@@ -161,6 +166,12 @@ int _storeConfigEstimateSize(
   }
   bytesCount += 3 + object.storeId.length * 3;
   bytesCount += 3 + object.storeName.length * 3;
+  {
+    final value = object.syncCursors;
+    if (value != null) {
+      bytesCount += 3 + value.length * 3;
+    }
+  }
   return bytesCount;
 }
 
@@ -187,7 +198,8 @@ void _storeConfigSerialize(
   writer.writeBool(offsets[14], object.scanSoundEnabled);
   writer.writeString(offsets[15], object.storeId);
   writer.writeString(offsets[16], object.storeName);
-  writer.writeBool(offsets[17], object.useCatalogueImages);
+  writer.writeString(offsets[17], object.syncCursors);
+  writer.writeBool(offsets[18], object.useCatalogueImages);
 }
 
 StoreConfig _storeConfigDeserialize(
@@ -215,7 +227,8 @@ StoreConfig _storeConfigDeserialize(
   object.scanSoundEnabled = reader.readBool(offsets[14]);
   object.storeId = reader.readString(offsets[15]);
   object.storeName = reader.readString(offsets[16]);
-  object.useCatalogueImages = reader.readBool(offsets[17]);
+  object.syncCursors = reader.readStringOrNull(offsets[17]);
+  object.useCatalogueImages = reader.readBool(offsets[18]);
   return object;
 }
 
@@ -261,6 +274,8 @@ P _storeConfigDeserializeProp<P>(
     case 16:
       return (reader.readString(offset)) as P;
     case 17:
+      return (reader.readStringOrNull(offset)) as P;
+    case 18:
       return (reader.readBool(offset)) as P;
     default:
       throw IsarError('Unknown property with id $propertyId');
@@ -1869,6 +1884,160 @@ extension StoreConfigQueryFilter
   }
 
   QueryBuilder<StoreConfig, StoreConfig, QAfterFilterCondition>
+      syncCursorsIsNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(const FilterCondition.isNull(
+        property: r'syncCursors',
+      ));
+    });
+  }
+
+  QueryBuilder<StoreConfig, StoreConfig, QAfterFilterCondition>
+      syncCursorsIsNotNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(const FilterCondition.isNotNull(
+        property: r'syncCursors',
+      ));
+    });
+  }
+
+  QueryBuilder<StoreConfig, StoreConfig, QAfterFilterCondition>
+      syncCursorsEqualTo(
+    String? value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'syncCursors',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<StoreConfig, StoreConfig, QAfterFilterCondition>
+      syncCursorsGreaterThan(
+    String? value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'syncCursors',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<StoreConfig, StoreConfig, QAfterFilterCondition>
+      syncCursorsLessThan(
+    String? value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'syncCursors',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<StoreConfig, StoreConfig, QAfterFilterCondition>
+      syncCursorsBetween(
+    String? lower,
+    String? upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'syncCursors',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<StoreConfig, StoreConfig, QAfterFilterCondition>
+      syncCursorsStartsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.startsWith(
+        property: r'syncCursors',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<StoreConfig, StoreConfig, QAfterFilterCondition>
+      syncCursorsEndsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.endsWith(
+        property: r'syncCursors',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<StoreConfig, StoreConfig, QAfterFilterCondition>
+      syncCursorsContains(String value, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.contains(
+        property: r'syncCursors',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<StoreConfig, StoreConfig, QAfterFilterCondition>
+      syncCursorsMatches(String pattern, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.matches(
+        property: r'syncCursors',
+        wildcard: pattern,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<StoreConfig, StoreConfig, QAfterFilterCondition>
+      syncCursorsIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'syncCursors',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<StoreConfig, StoreConfig, QAfterFilterCondition>
+      syncCursorsIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        property: r'syncCursors',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<StoreConfig, StoreConfig, QAfterFilterCondition>
       useCatalogueImagesEqualTo(bool value) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.equalTo(
@@ -2101,6 +2270,18 @@ extension StoreConfigQuerySortBy
   QueryBuilder<StoreConfig, StoreConfig, QAfterSortBy> sortByStoreNameDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'storeName', Sort.desc);
+    });
+  }
+
+  QueryBuilder<StoreConfig, StoreConfig, QAfterSortBy> sortBySyncCursors() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'syncCursors', Sort.asc);
+    });
+  }
+
+  QueryBuilder<StoreConfig, StoreConfig, QAfterSortBy> sortBySyncCursorsDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'syncCursors', Sort.desc);
     });
   }
 
@@ -2350,6 +2531,18 @@ extension StoreConfigQuerySortThenBy
     });
   }
 
+  QueryBuilder<StoreConfig, StoreConfig, QAfterSortBy> thenBySyncCursors() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'syncCursors', Sort.asc);
+    });
+  }
+
+  QueryBuilder<StoreConfig, StoreConfig, QAfterSortBy> thenBySyncCursorsDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'syncCursors', Sort.desc);
+    });
+  }
+
   QueryBuilder<StoreConfig, StoreConfig, QAfterSortBy>
       thenByUseCatalogueImages() {
     return QueryBuilder.apply(this, (query) {
@@ -2482,6 +2675,13 @@ extension StoreConfigQueryWhereDistinct
     });
   }
 
+  QueryBuilder<StoreConfig, StoreConfig, QDistinct> distinctBySyncCursors(
+      {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'syncCursors', caseSensitive: caseSensitive);
+    });
+  }
+
   QueryBuilder<StoreConfig, StoreConfig, QDistinct>
       distinctByUseCatalogueImages() {
     return QueryBuilder.apply(this, (query) {
@@ -2602,6 +2802,12 @@ extension StoreConfigQueryProperty
   QueryBuilder<StoreConfig, String, QQueryOperations> storeNameProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'storeName');
+    });
+  }
+
+  QueryBuilder<StoreConfig, String?, QQueryOperations> syncCursorsProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'syncCursors');
     });
   }
 

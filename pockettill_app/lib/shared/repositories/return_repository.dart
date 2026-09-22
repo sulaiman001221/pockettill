@@ -201,15 +201,8 @@ class ReturnRepository {
           product.stock += item.quantity;
           product.updatedAt = now;
           await _isar.products.put(product);
-          events.add(
-            _buildEvent(
-              entityType: 'product',
-              entityUuid: product.uuid,
-              operation: 'update',
-              deviceId: deviceId,
-              payload: _productToPayload(product),
-            ),
-          );
+          // Only the stock event is sent - the server adds it to the
+          // product's stock itself.
           await ProductRepository.recordStockEvent(
             isar: _isar,
             productUuid: product.uuid,
@@ -231,15 +224,6 @@ class ReturnRepository {
           product.stock -= 1;
           product.updatedAt = now;
           await _isar.products.put(product);
-          events.add(
-            _buildEvent(
-              entityType: 'product',
-              entityUuid: product.uuid,
-              operation: 'update',
-              deviceId: deviceId,
-              payload: _productToPayload(product),
-            ),
-          );
           await ProductRepository.recordStockEvent(
             isar: _isar,
             productUuid: product.uuid,
@@ -289,22 +273,8 @@ class ReturnRepository {
             payload: _transactionToPayload(transaction),
           ),
         );
-        // The balance change itself must reach Supabase too, not just the
-        // transaction record - without this, credit_customers.balance never
-        // updates server-side, so restoring from a local wipe (e.g.
-        // switching stores and back) resurrects a stale balance while the
-        // transaction history (which did sync) still shows the real one.
-        // Same bug, same fix, as CreditRepository's balance-changing
-        // methods - found and fixed 2026-08-21.
-        events.add(
-          _buildEvent(
-            entityType: 'credit_customer',
-            entityUuid: customer.uuid,
-            operation: 'update',
-            deviceId: deviceId,
-            payload: _customerToPayload(customer),
-          ),
-        );
+        // Only the transaction is sent - the server applies it to the
+        // customer's balance itself.
       }
 
       await _isar.syncEvents.putAll(events);
@@ -366,31 +336,6 @@ class ReturnRepository {
     'product_name': item.productName,
     'unit_price': item.unitPrice,
     'quantity': item.quantity,
-  };
-
-  Map<String, dynamic> _productToPayload(Product product) => {
-    'uuid': product.uuid,
-    'barcode': product.barcode,
-    'name': product.name,
-    'mass': product.mass,
-    'category': product.category,
-    'unit': product.unit,
-    'price': product.price,
-    'cost_price': product.costPrice,
-    'stock': product.stock,
-    'low_stock_threshold': product.lowStockThreshold,
-    'created_at': product.createdAt.toUtc().toIso8601String(),
-    'updated_at': product.updatedAt?.toUtc().toIso8601String(),
-  };
-
-  Map<String, dynamic> _customerToPayload(CreditCustomer customer) => {
-    'uuid': customer.uuid,
-    'name': customer.name,
-    'phone': customer.phone,
-    'balance': customer.balance,
-    'credit_limit': customer.creditLimit,
-    'created_at': customer.createdAt.toUtc().toIso8601String(),
-    'last_activity_at': customer.lastActivityAt?.toUtc().toIso8601String(),
   };
 
   Map<String, dynamic> _transactionToPayload(CreditTransaction transaction) => {

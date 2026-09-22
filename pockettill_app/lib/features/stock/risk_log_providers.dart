@@ -19,11 +19,14 @@ RiskLogCategory categoryForRiskType(String type) {
     case 'product_deleted':
     case 'price_changed':
     case 'concurrent_price_edit':
-    case 'concurrent_stock_adjustment':
+    case 'concurrent_product_edit':
+    case 'concurrent_stock_edit':
+    case 'concurrent_stock_adjustment': // historical only, no longer logged
       return RiskLogCategory.stock;
     case 'manual_credit':
     case 'credit_writeoff':
     case 'customer_deleted_with_balance':
+    case 'concurrent_credit_edit':
       return RiskLogCategory.credit;
     default:
       return RiskLogCategory.stock;

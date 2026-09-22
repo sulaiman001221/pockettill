@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:isar/isar.dart';
 
 import 'app.dart';
 import 'core/database/isar_service.dart';
@@ -16,8 +17,8 @@ import 'core/hardware/sunmi_scanner_service.dart';
 import 'core/supabase/supabase_service.dart';
 import 'core/sync/reachability_service.dart';
 import 'core/sync/realtime_data_sync_service.dart';
-import 'core/sync/realtime_stock_sync_service.dart';
 import 'core/sync/sync_service.dart';
+import 'shared/models/sync_event.dart';
 import 'shared/theme/system_ui.dart';
 
 /// The [ScannerService] appropriate for this device, chosen once at app
@@ -71,26 +72,23 @@ Future<void> main() async {
   );
 
   final syncService = container.read(syncServiceProvider);
-  final realtimeStockSync = container.read(realtimeStockSyncServiceProvider);
   final realtimeDataSync = container.read(realtimeDataSyncServiceProvider);
 
   Future<void> syncAndGoLive() async {
-    // Push this device's own pending changes first, then open the Realtime
-    // channels (each starts with its own catch-up pull of whatever other
-    // devices recorded while this one was offline/backgrounded) - pushing
-    // first means other devices' next catch-up already sees this device's
-    // latest, even though the ordering doesn't affect this device's own
-    // correctness (catch-up always excludes its own device_id/uuids
-    // regardless of push timing).
+    // Push this device's own pending changes first, then open the realtime
+    // channels, which pull everything other devices recorded meanwhile.
+    // Pushing first means the pull that follows already reflects this
+    // device's own latest changes.
     await syncService.sync();
-    await Future.wait([realtimeStockSync.start(), realtimeDataSync.start()]);
+    await realtimeDataSync.start();
+    await realtimeDataSync.pullNow();
   }
 
   Future<void> goOffline() async {
     // A dead channel doesn't deliver anything useful anyway - closing it
     // here means the next reconnect always starts from a clean
-    // catch-up-then-subscribe, not a stale channel silently doing nothing.
-    await Future.wait([realtimeStockSync.stop(), realtimeDataSync.stop()]);
+    // subscribe-then-pull, not a stale channel silently doing nothing.
+    await realtimeDataSync.stop();
   }
 
   reachabilityService.isReachable.listen((reachable) {
@@ -100,6 +98,25 @@ Future<void> main() async {
       unawaited(goOffline());
     }
   });
+
+  // `isReachable` is a plain broadcast stream - it only replays to whoever
+  // is *already* listening the moment reachability first resolves, it
+  // doesn't remember and replay that value to a listener attaching a
+  // moment later. `ReachabilityService.init()` above already kicks off its
+  // own first health-check ping (fire-and-forget, before this point), so
+  // there's a real race: if that ping resolves before the `.listen()` call
+  // above finishes attaching, this app never gets its first
+  // syncAndGoLive() call at all - stuck with no Realtime channels ever
+  // started until some *later* genuine connectivity change happens to
+  // occur. Found 2026-09-13 explaining "product updates don't sync until
+  // the app's storage is cleared" - a fresh process restart just gave the
+  // race another, differently-timed chance to go the other way, which
+  // read as "clearing fixed it" without anything about the fix being
+  // about cache at all. Calling this once, unconditionally, closes the
+  // gap regardless of which way that race goes - sync()/start() are both
+  // safe no-ops if genuinely offline (the next real reachable event
+  // retries them), and start() itself no-ops if channels are already up.
+  unawaited(syncAndGoLive());
 
   // Realtime channels only ever got (re)started above, on a network
   // reachability *change* - a phone that's simply backgrounded and later
@@ -119,6 +136,40 @@ Future<void> main() async {
       await syncAndGoLive();
     }),
   );
+
+  // Every trigger above is edge-based (a reachability *change*, an app
+  // *resume*) - a device that's simply been sitting online and in the
+  // foreground the whole time never hits any of them again after the first
+  // one. This timer is also the safety net for realtime: a dropped socket or
+  // a missed message costs at most one tick, because every tick both pushes
+  // what this device has and pulls what it missed. sync() and pullNow() are
+  // both safe no-ops if one's already running or there's nothing to do.
+  Timer.periodic(const Duration(seconds: 30), (_) {
+    unawaited(() async {
+      await syncService.sync();
+      await realtimeDataSync.pullNow();
+    }());
+  });
+
+  // Don't make a change wait for the next tick: as soon as something new is
+  // queued, push it (and pull what came back) a moment later. Marking events
+  // as pushed also touches this collection, hence the pending check - it
+  // stops that from triggering another round.
+  Timer? syncSoon;
+  IsarService.db.syncEvents.watchLazy().listen((_) {
+    syncSoon?.cancel();
+    syncSoon = Timer(const Duration(milliseconds: 1500), () {
+      unawaited(() async {
+        final pending = await IsarService.db.syncEvents
+            .filter()
+            .pushedEqualTo(false)
+            .count();
+        if (pending == 0) return;
+        await syncService.sync();
+        await realtimeDataSync.pullNow();
+      }());
+    });
+  });
 
   runApp(
     UncontrolledProviderScope(

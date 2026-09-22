@@ -56,4 +56,11 @@ class StoreConfig {
   // correct as of now" (same reasoning as the stock one), not "pull
   // everything".
   DateTime? lastRealtimeDataSyncedAt;
+
+  // JSON map of table name -> newest server-stamped row time this device has
+  // pulled (`received_at` for append-only tables, `updated_at` for products
+  // and credit customers). Null means "never pulled here" (pull everything
+  // once). Supersedes the two watermarks above, which compared against
+  // device-clock `created_at` values.
+  String? syncCursors;
 }

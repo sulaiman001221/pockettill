@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/sync/realtime_data_sync_service.dart';
-import '../../core/sync/realtime_stock_sync_service.dart';
 import '../../core/sync/sync_service.dart';
 import '../../shared/models/product.dart';
 import '../../shared/repositories/repositories.dart';
@@ -303,14 +302,11 @@ class _StockScreenState extends ConsumerState<StockScreen> {
   Widget build(BuildContext context) {
     final filtered = _filteredProducts;
 
-    // Another device's sale/return/adjustment landed - reload so this
-    // screen reflects it without the owner having to pull to refresh
-    // themselves. Silent, same as _syncImagesEagerly - the underlying
-    // Product read is local/instant, no loading spinner needed for it.
-    ref.listen(stockChangedProvider, (_, _) => _loadProducts());
-    // Another device creating or editing a product (not just its stock,
-    // already covered above) should show up here too without a manual
-    // refresh - see RealtimeDataSyncService.
+    // A product changed anywhere - created, edited, sold or restocked on
+    // another device (stock is part of the product row), or deleted - reload
+    // so this screen reflects it without the owner having to pull to
+    // refresh. Silent - the underlying Product read is local/instant, no
+    // loading spinner needed for it. See RealtimeDataSyncService.
     ref.listen(productsChangedProvider, (_, _) => _loadProducts());
 
     return GestureDetector(

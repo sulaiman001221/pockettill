@@ -226,53 +226,6 @@ class SupabaseService {
         .eq('store_id', storeId);
   }
 
-  /// `stock_events` rows for [storeId] recorded by a device other than
-  /// [excludingDeviceId], with `synced_at` after [since] - the reconnect
-  /// catch-up query [RealtimeStockSyncService] runs before re-subscribing,
-  /// so a gap while offline (or while a Realtime channel was down) doesn't
-  /// leave this device's stock silently behind. Own-device events are
-  /// excluded here for the same reason [RealtimeStockSyncService] filters
-  /// them out of the live channel too - this device already applied its
-  /// own deltas locally the moment it created them.
-  static Future<List<Map<String, dynamic>>> fetchMissedStockEvents({
-    required String storeId,
-    required String excludingDeviceId,
-    DateTime? since,
-  }) {
-    var query = supabaseClient
-        .from('stock_events')
-        .select()
-        .eq('store_id', storeId)
-        .neq('device_id', excludingDeviceId);
-    if (since != null) {
-      query = query.gt('synced_at', since.toUtc().toIso8601String());
-    }
-    return query.order('synced_at');
-  }
-
-  /// The most recent `stock_events.synced_at` across the whole store, or
-  /// null if it has none yet - used to seed
-  /// [StoreConfig.lastStockEventSyncedAt] the very first time
-  /// [RealtimeStockSyncService] runs on a device that already has real
-  /// local data (as opposed to a fresh restore), so its existing local
-  /// stock - already correct as of right now, from before stock_events
-  /// existed - isn't perturbed by retroactively re-applying old events
-  /// (e.g. double-counting the `initial_stock` migration backfill). Mirrors
-  /// [RestoreService]'s own same-purpose watermark seeding on a fresh
-  /// restore.
-  static Future<DateTime?> fetchLatestStockEventSyncedAt(
-    String storeId,
-  ) async {
-    final rows = await supabaseClient
-        .from('stock_events')
-        .select('synced_at')
-        .eq('store_id', storeId)
-        .order('synced_at', ascending: false)
-        .limit(1);
-    if (rows.isEmpty) return null;
-    return DateTime.parse(rows.first['synced_at'] as String).toLocal();
-  }
-
   /// Fetches verified shared-catalogue products created after [since].
   static Future<List<Map<String, dynamic>>> pullCatalogueUpdates(
     DateTime since,

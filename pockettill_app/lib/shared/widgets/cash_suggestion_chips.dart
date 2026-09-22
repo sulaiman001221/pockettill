@@ -23,20 +23,23 @@ class CashSuggestionChips extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Wrap(
-      spacing: 8,
-      runSpacing: 8,
-      children: [
-        _SuggestionChip(
-          label: 'Exact',
-          onTap: () => onAmountChanged(amountDue),
-        ),
-        for (final note in _notes)
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: [
           _SuggestionChip(
-            label: 'R$note',
-            onTap: () => onAmountChanged(currentAmount + note),
+            label: 'Exact',
+            onTap: () => onAmountChanged(amountDue),
           ),
-      ],
+          for (final note in _notes) ...[
+            const SizedBox(width: 8),
+            _SuggestionChip(
+              label: 'R$note',
+              onTap: () => onAmountChanged(currentAmount + note),
+            ),
+          ],
+        ],
+      ),
     );
   }
 }

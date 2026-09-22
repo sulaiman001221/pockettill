@@ -42,9 +42,13 @@ class CustomerAvatar extends StatelessWidget {
   }
 }
 
-/// A customer's balance status - "Settled"/"Credit RXXX" get a shaded pill,
-/// "Owes RXXX" stays plain colored text. Shared by the Customers list and
-/// the checkout screen's customer picker so both stay visually identical.
+/// A customer's balance status - "Credit RXXX" gets a shaded pill; "Owes
+/// RXXX" and "Settled" stay plain text (2026-09-22 per feedback: "Settled"
+/// used to share Credit's green pill, which read as too positive/celebratory
+/// for "owes nothing" - now a neutral grey; "Owes" used to be full-strength
+/// red, softened to read as informational rather than alarming). Shared by
+/// the Customers list and the checkout screen's customer picker so both stay
+/// visually identical.
 class CustomerBalanceStatus extends StatelessWidget {
   const CustomerBalanceStatus({super.key, required this.balance});
 
@@ -59,7 +63,7 @@ class CustomerBalanceStatus extends StatelessWidget {
     final bool shaded;
     if (owing) {
       label = 'Owes ${formatCreditBalance(balance)}';
-      color = AppTheme.logoutRed;
+      color = AppTheme.logoutRed.withValues(alpha: 0.75);
       shaded = false;
     } else if (balance < 0) {
       label = 'Credit ${formatCreditBalance(balance)}';
@@ -67,8 +71,8 @@ class CustomerBalanceStatus extends StatelessWidget {
       shaded = true;
     } else {
       label = 'Settled';
-      color = AppTheme.syncGreen;
-      shaded = true;
+      color = AppTheme.textSecondary;
+      shaded = false;
     }
 
     if (!shaded) {

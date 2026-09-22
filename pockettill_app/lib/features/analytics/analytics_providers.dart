@@ -9,5 +9,6 @@ final analyticsNotifierProvider =
       return AnalyticsNotifier(
         saleRepository: ref.watch(saleRepositoryProvider),
         productRepository: ref.watch(productRepositoryProvider),
+        extraIncomeRepository: ref.watch(extraIncomeRepositoryProvider),
       );
     });

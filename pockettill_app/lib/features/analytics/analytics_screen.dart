@@ -2,6 +2,7 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/sync/realtime_data_sync_service.dart';
 import '../../shared/theme/app_theme.dart';
 import '../../shared/widgets/pockettill_app_bar.dart';
 import 'analytics_notifier.dart';
@@ -32,6 +33,10 @@ class AnalyticsScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(analyticsNotifierProvider);
     final notifier = ref.read(analyticsNotifierProvider.notifier);
+
+    // Another device's sale/return/extra-income entry changes these totals
+    // - refresh without a manual pull-to-refresh, same as History.
+    ref.listen(salesDataChangedProvider, (_, _) => notifier.loadAll());
 
     return Scaffold(
       appBar: const CustomAppBar(
@@ -441,12 +446,17 @@ class _StatsRow extends StatelessWidget {
       avgDelta = '${avgUp ? '+' : '-'}R${diff.abs().toStringAsFixed(0)}';
     }
 
+    // e.g. "This Week" - appended to each label below so the three headline
+    // numbers say what they cover without the owner having to check the
+    // period tabs above the chart separately.
+    final periodSuffix = _periodLabel(state.period);
+
     return Row(
       children: [
         Expanded(
           child: _StatCard(
             icon: Icons.insert_chart_outlined,
-            label: 'Total Sales',
+            label: 'Total Sales $periodSuffix',
             value: 'R${state.currentTotal.toStringAsFixed(0)}',
             delta: totalDelta,
             deltaUp: totalUp,
@@ -457,7 +467,7 @@ class _StatsRow extends StatelessWidget {
         Expanded(
           child: _StatCard(
             icon: Icons.receipt_long_outlined,
-            label: 'Transactions',
+            label: 'Transactions $periodSuffix',
             value: '${state.currentCount}',
             delta: transDelta,
             deltaUp: transUp,
@@ -468,7 +478,7 @@ class _StatsRow extends StatelessWidget {
         Expanded(
           child: _StatCard(
             icon: Icons.trending_up,
-            label: 'Avg. Sale',
+            label: 'Avg. Sale $periodSuffix',
             value: 'R${state.currentAvgSale.toStringAsFixed(0)}',
             delta: avgDelta,
             deltaUp: avgUp,

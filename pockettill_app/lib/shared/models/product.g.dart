@@ -72,28 +72,43 @@ const ProductSchema = CollectionSchema(
       name: r'price',
       type: IsarType.double,
     ),
-    r'stock': PropertySchema(
+    r'serverUpdatedAt': PropertySchema(
       id: 11,
+      name: r'serverUpdatedAt',
+      type: IsarType.dateTime,
+    ),
+    r'serverVersion': PropertySchema(
+      id: 12,
+      name: r'serverVersion',
+      type: IsarType.long,
+    ),
+    r'stock': PropertySchema(
+      id: 13,
       name: r'stock',
       type: IsarType.long,
     ),
+    r'stockVersion': PropertySchema(
+      id: 14,
+      name: r'stockVersion',
+      type: IsarType.long,
+    ),
     r'synced': PropertySchema(
-      id: 12,
+      id: 15,
       name: r'synced',
       type: IsarType.bool,
     ),
     r'unit': PropertySchema(
-      id: 13,
+      id: 16,
       name: r'unit',
       type: IsarType.string,
     ),
     r'updatedAt': PropertySchema(
-      id: 14,
+      id: 17,
       name: r'updatedAt',
       type: IsarType.dateTime,
     ),
     r'uuid': PropertySchema(
-      id: 15,
+      id: 18,
       name: r'uuid',
       type: IsarType.string,
     )
@@ -177,11 +192,14 @@ void _productSerialize(
   writer.writeString(offsets[8], object.mass);
   writer.writeString(offsets[9], object.name);
   writer.writeDouble(offsets[10], object.price);
-  writer.writeLong(offsets[11], object.stock);
-  writer.writeBool(offsets[12], object.synced);
-  writer.writeString(offsets[13], object.unit);
-  writer.writeDateTime(offsets[14], object.updatedAt);
-  writer.writeString(offsets[15], object.uuid);
+  writer.writeDateTime(offsets[11], object.serverUpdatedAt);
+  writer.writeLong(offsets[12], object.serverVersion);
+  writer.writeLong(offsets[13], object.stock);
+  writer.writeLong(offsets[14], object.stockVersion);
+  writer.writeBool(offsets[15], object.synced);
+  writer.writeString(offsets[16], object.unit);
+  writer.writeDateTime(offsets[17], object.updatedAt);
+  writer.writeString(offsets[18], object.uuid);
 }
 
 Product _productDeserialize(
@@ -203,11 +221,14 @@ Product _productDeserialize(
   object.mass = reader.readStringOrNull(offsets[8]);
   object.name = reader.readString(offsets[9]);
   object.price = reader.readDouble(offsets[10]);
-  object.stock = reader.readLong(offsets[11]);
-  object.synced = reader.readBool(offsets[12]);
-  object.unit = reader.readStringOrNull(offsets[13]);
-  object.updatedAt = reader.readDateTimeOrNull(offsets[14]);
-  object.uuid = reader.readString(offsets[15]);
+  object.serverUpdatedAt = reader.readDateTimeOrNull(offsets[11]);
+  object.serverVersion = reader.readLong(offsets[12]);
+  object.stock = reader.readLong(offsets[13]);
+  object.stockVersion = reader.readLong(offsets[14]);
+  object.synced = reader.readBool(offsets[15]);
+  object.unit = reader.readStringOrNull(offsets[16]);
+  object.updatedAt = reader.readDateTimeOrNull(offsets[17]);
+  object.uuid = reader.readString(offsets[18]);
   return object;
 }
 
@@ -241,14 +262,20 @@ P _productDeserializeProp<P>(
     case 10:
       return (reader.readDouble(offset)) as P;
     case 11:
-      return (reader.readLong(offset)) as P;
-    case 12:
-      return (reader.readBool(offset)) as P;
-    case 13:
-      return (reader.readStringOrNull(offset)) as P;
-    case 14:
       return (reader.readDateTimeOrNull(offset)) as P;
+    case 12:
+      return (reader.readLong(offset)) as P;
+    case 13:
+      return (reader.readLong(offset)) as P;
+    case 14:
+      return (reader.readLong(offset)) as P;
     case 15:
+      return (reader.readBool(offset)) as P;
+    case 16:
+      return (reader.readStringOrNull(offset)) as P;
+    case 17:
+      return (reader.readDateTimeOrNull(offset)) as P;
+    case 18:
       return (reader.readString(offset)) as P;
     default:
       throw IsarError('Unknown property with id $propertyId');
@@ -1651,6 +1678,132 @@ extension ProductQueryFilter
     });
   }
 
+  QueryBuilder<Product, Product, QAfterFilterCondition>
+      serverUpdatedAtIsNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(const FilterCondition.isNull(
+        property: r'serverUpdatedAt',
+      ));
+    });
+  }
+
+  QueryBuilder<Product, Product, QAfterFilterCondition>
+      serverUpdatedAtIsNotNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(const FilterCondition.isNotNull(
+        property: r'serverUpdatedAt',
+      ));
+    });
+  }
+
+  QueryBuilder<Product, Product, QAfterFilterCondition> serverUpdatedAtEqualTo(
+      DateTime? value) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'serverUpdatedAt',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<Product, Product, QAfterFilterCondition>
+      serverUpdatedAtGreaterThan(
+    DateTime? value, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'serverUpdatedAt',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<Product, Product, QAfterFilterCondition> serverUpdatedAtLessThan(
+    DateTime? value, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'serverUpdatedAt',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<Product, Product, QAfterFilterCondition> serverUpdatedAtBetween(
+    DateTime? lower,
+    DateTime? upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'serverUpdatedAt',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+      ));
+    });
+  }
+
+  QueryBuilder<Product, Product, QAfterFilterCondition> serverVersionEqualTo(
+      int value) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'serverVersion',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<Product, Product, QAfterFilterCondition>
+      serverVersionGreaterThan(
+    int value, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'serverVersion',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<Product, Product, QAfterFilterCondition> serverVersionLessThan(
+    int value, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'serverVersion',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<Product, Product, QAfterFilterCondition> serverVersionBetween(
+    int lower,
+    int upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'serverVersion',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+      ));
+    });
+  }
+
   QueryBuilder<Product, Product, QAfterFilterCondition> stockEqualTo(
       int value) {
     return QueryBuilder.apply(this, (query) {
@@ -1696,6 +1849,59 @@ extension ProductQueryFilter
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.between(
         property: r'stock',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+      ));
+    });
+  }
+
+  QueryBuilder<Product, Product, QAfterFilterCondition> stockVersionEqualTo(
+      int value) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'stockVersion',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<Product, Product, QAfterFilterCondition> stockVersionGreaterThan(
+    int value, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'stockVersion',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<Product, Product, QAfterFilterCondition> stockVersionLessThan(
+    int value, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'stockVersion',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<Product, Product, QAfterFilterCondition> stockVersionBetween(
+    int lower,
+    int upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'stockVersion',
         lower: lower,
         includeLower: includeLower,
         upper: upper,
@@ -2200,6 +2406,30 @@ extension ProductQuerySortBy on QueryBuilder<Product, Product, QSortBy> {
     });
   }
 
+  QueryBuilder<Product, Product, QAfterSortBy> sortByServerUpdatedAt() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'serverUpdatedAt', Sort.asc);
+    });
+  }
+
+  QueryBuilder<Product, Product, QAfterSortBy> sortByServerUpdatedAtDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'serverUpdatedAt', Sort.desc);
+    });
+  }
+
+  QueryBuilder<Product, Product, QAfterSortBy> sortByServerVersion() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'serverVersion', Sort.asc);
+    });
+  }
+
+  QueryBuilder<Product, Product, QAfterSortBy> sortByServerVersionDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'serverVersion', Sort.desc);
+    });
+  }
+
   QueryBuilder<Product, Product, QAfterSortBy> sortByStock() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'stock', Sort.asc);
@@ -2209,6 +2439,18 @@ extension ProductQuerySortBy on QueryBuilder<Product, Product, QSortBy> {
   QueryBuilder<Product, Product, QAfterSortBy> sortByStockDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'stock', Sort.desc);
+    });
+  }
+
+  QueryBuilder<Product, Product, QAfterSortBy> sortByStockVersion() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'stockVersion', Sort.asc);
+    });
+  }
+
+  QueryBuilder<Product, Product, QAfterSortBy> sortByStockVersionDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'stockVersion', Sort.desc);
     });
   }
 
@@ -2408,6 +2650,30 @@ extension ProductQuerySortThenBy
     });
   }
 
+  QueryBuilder<Product, Product, QAfterSortBy> thenByServerUpdatedAt() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'serverUpdatedAt', Sort.asc);
+    });
+  }
+
+  QueryBuilder<Product, Product, QAfterSortBy> thenByServerUpdatedAtDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'serverUpdatedAt', Sort.desc);
+    });
+  }
+
+  QueryBuilder<Product, Product, QAfterSortBy> thenByServerVersion() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'serverVersion', Sort.asc);
+    });
+  }
+
+  QueryBuilder<Product, Product, QAfterSortBy> thenByServerVersionDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'serverVersion', Sort.desc);
+    });
+  }
+
   QueryBuilder<Product, Product, QAfterSortBy> thenByStock() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'stock', Sort.asc);
@@ -2417,6 +2683,18 @@ extension ProductQuerySortThenBy
   QueryBuilder<Product, Product, QAfterSortBy> thenByStockDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'stock', Sort.desc);
+    });
+  }
+
+  QueryBuilder<Product, Product, QAfterSortBy> thenByStockVersion() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'stockVersion', Sort.asc);
+    });
+  }
+
+  QueryBuilder<Product, Product, QAfterSortBy> thenByStockVersionDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'stockVersion', Sort.desc);
     });
   }
 
@@ -2546,9 +2824,27 @@ extension ProductQueryWhereDistinct
     });
   }
 
+  QueryBuilder<Product, Product, QDistinct> distinctByServerUpdatedAt() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'serverUpdatedAt');
+    });
+  }
+
+  QueryBuilder<Product, Product, QDistinct> distinctByServerVersion() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'serverVersion');
+    });
+  }
+
   QueryBuilder<Product, Product, QDistinct> distinctByStock() {
     return QueryBuilder.apply(this, (query) {
       return query.addDistinctBy(r'stock');
+    });
+  }
+
+  QueryBuilder<Product, Product, QDistinct> distinctByStockVersion() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'stockVersion');
     });
   }
 
@@ -2654,9 +2950,27 @@ extension ProductQueryProperty
     });
   }
 
+  QueryBuilder<Product, DateTime?, QQueryOperations> serverUpdatedAtProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'serverUpdatedAt');
+    });
+  }
+
+  QueryBuilder<Product, int, QQueryOperations> serverVersionProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'serverVersion');
+    });
+  }
+
   QueryBuilder<Product, int, QQueryOperations> stockProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'stock');
+    });
+  }
+
+  QueryBuilder<Product, int, QQueryOperations> stockVersionProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'stockVersion');
     });
   }
 

@@ -90,79 +90,71 @@ class ProductRepository {
         .toList();
   }
 
-  /// Writes [product] to Isar and enqueues a sync event.
+  /// Writes [product] to Isar and queues what the server needs to hear.
   ///
-  /// Looks up any existing row by [Product.uuid] first: if found, this is an
-  /// update (the existing Isar [Id] is reused so `put` replaces the row
-  /// instead of inserting a duplicate, and [Product.createdAt] is
-  /// preserved); otherwise a uuid is generated if needed and this is a
-  /// create.
+  /// Looks up any existing row by [Product.uuid] first: if found, this is a
+  /// manual edit (the existing Isar [Id] is reused so `put` replaces the row
+  /// instead of inserting a duplicate); otherwise it's a create.
+  ///
+  /// A manual edit is queued as one `_edit` event carrying only the fields
+  /// that actually changed, each with the value this device saw before the
+  /// change. The server applies a field only if nobody else changed it in the
+  /// meantime (see `apply_product_edit`); a field that lost that race is
+  /// reverted here on the next sync and logged in the Risk Log.
+  ///
+  /// [initial] is a snapshot of the product as the form opened. Only fields
+  /// that differ between it and [product] count as this person's edit - a
+  /// field they never touched isn't sent, so a change another device made
+  /// while the form was open can't be overwritten by saving it. Stock is sent
+  /// as a *change* (typed quantity minus the quantity the form opened with),
+  /// never as an absolute number, so a sale made while the form was open
+  /// isn't undone by saving it either.
   ///
   /// This is the only place the app ever calls to edit an existing product
-  /// (add_product_screen.dart, for both create and edit), so an update here
-  /// is always a direct, manual edit - never a sale/return/quick-restock,
-  /// which all go through [adjustStock] instead. That's what makes it safe
+  /// by hand (add_product_screen.dart, for both create and edit), so an update
+  /// here is always a direct, manual edit - never a sale/return/quick-restock
+  /// (those go through [adjustStock] or the ledger directly) and never a
+  /// background image sync (see [updateImageUrl]). That's what makes it safe
   /// to log a stock drop or price change here as a Risk Log entry without
   /// needing to distinguish the caller.
-  Future<void> save(Product product) async {
+  Future<void> save(Product product, {Product? initial}) async {
     // An empty uuid always means "not yet created" - never match it against
     // another row (a stray empty-uuid row in the data would otherwise get
     // silently overwritten by every subsequent new product).
     final existing = product.uuid.isEmpty
         ? null
         : await _isar.products.filter().uuidEqualTo(product.uuid).findFirst();
-    final isNew = existing == null;
     final now = DateTime.now();
 
-    if (isNew) {
+    if (existing == null) {
       if (product.uuid.isEmpty) {
         product.uuid = _uuid.v4();
       }
       product.createdAt = now;
-    } else {
-      product.id = existing.id;
-      product.createdAt = existing.createdAt;
-      product.updatedAt = now;
-    }
+      await _isar.writeTxn(() async {
+        await _isar.products.put(product);
+      });
 
-    // If the image actually changed, any previously cached file is now
-    // stale - drop it (and forget the now-wrong cachedImagePath) so the
-    // next display re-downloads the new one instead of silently
-    // continuing to show the old cached bytes forever. The on-device cache
-    // has no other way to notice its bytes no longer match imageUrl: it's
-    // keyed purely by barcode, not by which URL was last fetched. Found
-    // 2026-09-08 - Stock kept showing the pre-edit photo after a manual
-    // re-upload via Add/Edit Product, even though the edit screen's own
-    // preview (which reads imageUrl fresh over the network) showed the
-    // new one correctly.
-    if (!isNew && existing.imageUrl != product.imageUrl) {
-      await ImageCacheService.deleteCachedFile(product.barcode);
-      product.cachedImagePath = null;
-    }
+      // "Undo" of a delete that hasn't reached the server yet: the server
+      // still has the row, so just cancel the delete and bring the local
+      // row back - re-creating it would count its stock a second time.
+      final pendingDelete = await _pendingProductEvent(
+        product.uuid,
+        operation: 'delete',
+      );
+      if (pendingDelete != null) {
+        await _eventQueue.discard([pendingDelete.uuid]);
+        return;
+      }
 
-    await _isar.writeTxn(() async {
-      await _isar.products.put(product);
-    });
-
-    await _enqueueEvent(
-      entityUuid: product.uuid,
-      operation: isNew ? 'create' : 'update',
-      payload: _toPayload(product),
-      // The state this device knew about right before this edit - null for
-      // a brand-new product (nothing to compare against) or a product
-      // that's never been edited since creation (falls back to createdAt,
-      // its only known "last state" timestamp). See SyncEvent.baseUpdatedAt.
-      baseUpdatedAt: isNew
-          ? null
-          : (existing.updatedAt ?? existing.createdAt).toUtc().toIso8601String(),
-    );
-
-    if (isNew) {
-      // A brand-new product can start with a non-zero stock (the owner
-      // typed an initial quantity) - record it as the product's baseline
-      // stock_event so the durable delta ledger is complete from day one,
-      // same as the backfill migration did for every product that already
-      // existed when stock_events was introduced.
+      await _enqueueEvent(
+        entityUuid: product.uuid,
+        operation: 'create',
+        payload: _toPayload(product),
+      );
+      // A brand-new product can start with a non-zero stock (the owner typed
+      // an initial quantity) - the server starts every product at zero and
+      // counts this event, the same as any other change to stock.
       if (product.stock != 0) {
         await _recordStockEvent(
           productUuid: product.uuid,
@@ -170,17 +162,269 @@ class ProductRepository {
           quantityDelta: product.stock,
         );
       }
-    } else {
-      final stockDelta = product.stock - existing.stock;
+      return;
+    }
+
+    final started = initial ?? existing;
+    final before = _snapshot(existing);
+
+    // Start from the row as it is right now and apply only what this person
+    // changed - a three-way merge of (what they started from, what they
+    // typed, what's stored now).
+    final base = <String, dynamic>{};
+    final changes = <String, dynamic>{};
+    void track<T>(String key, T startedWith, T typed, void Function(T) apply) {
+      if (startedWith == typed) return;
+      base[key] = startedWith;
+      changes[key] = typed;
+      apply(typed);
+    }
+
+    track('barcode', started.barcode, product.barcode, (v) => existing.barcode = v);
+    track('name', started.name, product.name, (v) => existing.name = v);
+    track('mass', started.mass, product.mass, (v) => existing.mass = v);
+    track('category', started.category, product.category, (v) => existing.category = v);
+    track('unit', started.unit, product.unit, (v) => existing.unit = v);
+    track('price', started.price, product.price, (v) => existing.price = v);
+    track('cost_price', started.costPrice, product.costPrice, (v) => existing.costPrice = v);
+    track(
+      'low_stock_threshold',
+      started.lowStockThreshold,
+      product.lowStockThreshold,
+      (v) => existing.lowStockThreshold = v,
+    );
+
+    // Keep any sale/return that landed while the form was open.
+    final stockDelta = product.stock - started.stock;
+    existing.stock += stockDelta;
+    existing.updatedAt = now;
+
+    // If the image actually changed, any previously cached file is now
+    // stale - drop it (and forget the now-wrong cachedImagePath) so the
+    // next display re-downloads the new one instead of silently
+    // continuing to show the old cached bytes forever. The on-device cache
+    // has no other way to notice its bytes no longer match imageUrl: it's
+    // keyed purely by barcode, not by which URL was last fetched.
+    final imageChanged = started.imageUrl != product.imageUrl;
+    if (imageChanged) {
+      await ImageCacheService.deleteCachedFile(before.barcode);
+      existing.imageUrl = product.imageUrl;
+      existing.cachedImagePath = null;
+    }
+
+    await _isar.writeTxn(() async {
+      await _isar.products.put(existing);
+    });
+
+    final pendingCreate = await _pendingProductEvent(
+      existing.uuid,
+      operation: 'create',
+    );
+    if (pendingCreate != null) {
+      // The server has never seen this product, so nobody can be racing this
+      // edit - fold it into the create that's still waiting to be sent.
+      await _replacePayload(pendingCreate, _toPayload(existing));
       if (stockDelta != 0) {
         await _recordStockEvent(
-          productUuid: product.uuid,
+          productUuid: existing.uuid,
           changeType: 'manual_adjustment',
           quantityDelta: stockDelta,
         );
       }
-      await _recordEditRiskEvents(before: existing, after: product);
+    } else {
+      if (changes.isNotEmpty || stockDelta != 0) {
+        await _queueEdit(
+          existing.uuid,
+          base: base,
+          changes: changes,
+          stockBaseVersion: existing.stockVersion,
+          stockDelta: stockDelta,
+        );
+      }
+      if (imageChanged) {
+        await _queueImageUpdate(existing.uuid, existing.imageUrl);
+      }
     }
+
+    await _recordEditRiskEvents(before: before, after: existing);
+  }
+
+  /// A detached copy of the fields a manual edit can change, for comparing
+  /// "before" against "after" once the row itself has been updated.
+  Product _snapshot(Product p) => Product()
+    ..uuid = p.uuid
+    ..barcode = p.barcode
+    ..name = p.name
+    ..mass = p.mass
+    ..category = p.category
+    ..unit = p.unit
+    ..price = p.price
+    ..costPrice = p.costPrice
+    ..stock = p.stock
+    ..lowStockThreshold = p.lowStockThreshold
+    ..imageUrl = p.imageUrl
+    ..createdAt = p.createdAt;
+
+  /// Queues (or merges into an already-queued) manual edit for [uuid]. Two
+  /// edits made before the first one syncs are one edit as far as the server
+  /// is concerned - sent separately, the second would be checked against a
+  /// starting point the first already moved and read as a conflict with
+  /// itself.
+  Future<void> _queueEdit(
+    String uuid, {
+    required Map<String, dynamic> base,
+    required Map<String, dynamic> changes,
+    required int stockBaseVersion,
+    required int stockDelta,
+  }) async {
+    final pending = await _pendingProductEvent(
+      uuid,
+      operation: 'update',
+      isEdit: true,
+    );
+    if (pending == null) {
+      await _enqueueEvent(
+        entityUuid: uuid,
+        operation: 'update',
+        payload: {
+          '_edit': {
+            'base': base,
+            'changes': changes,
+            'base_stock_version': stockBaseVersion,
+            'stock_delta': stockDelta,
+            'edit_id': _uuid.v4(),
+          },
+        },
+      );
+      return;
+    }
+
+    final payload = jsonDecode(pending.payload) as Map<String, dynamic>;
+    final edit = Map<String, dynamic>.from(payload['_edit'] as Map);
+    final mergedBase = Map<String, dynamic>.from(edit['base'] as Map);
+    final mergedChanges = Map<String, dynamic>.from(edit['changes'] as Map);
+    changes.forEach((key, value) {
+      mergedBase.putIfAbsent(key, () => base[key]);
+      mergedChanges[key] = value;
+    });
+    // A field put back to where it started is no longer an edit at all.
+    for (final key in mergedChanges.keys.toList()) {
+      if (mergedChanges[key] == mergedBase[key]) {
+        mergedChanges.remove(key);
+        mergedBase.remove(key);
+      }
+    }
+    final mergedDelta =
+        ((edit['stock_delta'] as num?)?.toInt() ?? 0) + stockDelta;
+
+    if (mergedChanges.isEmpty && mergedDelta == 0) {
+      await _eventQueue.discard([pending.uuid]);
+      return;
+    }
+    edit['base'] = mergedBase;
+    edit['changes'] = mergedChanges;
+    edit['stock_delta'] = mergedDelta;
+    await _replacePayload(pending, {'_edit': edit});
+  }
+
+  /// The photo is last-write-wins and deliberately outside the conflict
+  /// check: a single-column update, never the whole row.
+  Future<void> _queueImageUpdate(String uuid, String? imageUrl) async {
+    final pending = await _pendingProductEvent(uuid, operation: 'image_update');
+    if (pending != null) {
+      await _replacePayload(pending, {'uuid': uuid, 'image_url': imageUrl});
+      return;
+    }
+    await _enqueueEvent(
+      entityUuid: uuid,
+      operation: 'image_update',
+      payload: {'uuid': uuid, 'image_url': imageUrl},
+    );
+  }
+
+  Future<SyncEvent?> _pendingProductEvent(
+    String uuid, {
+    required String operation,
+    bool isEdit = false,
+  }) async {
+    final candidates = await _isar.syncEvents
+        .filter()
+        .pushedEqualTo(false)
+        .and()
+        .entityTypeEqualTo('product')
+        .and()
+        .entityUuidEqualTo(uuid)
+        .and()
+        .operationEqualTo(operation)
+        .sortByCreatedAtDesc()
+        .findAll();
+    for (final event in candidates) {
+      if (!isEdit) return event;
+      final payload = jsonDecode(event.payload) as Map<String, dynamic>;
+      if (payload['_edit'] != null) return event;
+    }
+    return null;
+  }
+
+  Future<void> _replacePayload(
+    SyncEvent event,
+    Map<String, dynamic> payload,
+  ) async {
+    event.payload = jsonEncode(payload);
+    await _isar.writeTxn(() async {
+      await _isar.syncEvents.put(event);
+    });
+  }
+
+  /// Records where this device's copy of the photo came from - device-local
+  /// bookkeeping only, never synced. Re-reads the product first so a stale
+  /// in-memory copy can't overwrite a sale recorded since it was loaded.
+  Future<void> updateCatalogueSyncedImageUrl(
+    String productUuid,
+    String? url,
+  ) async {
+    final product = await getByUuid(productUuid);
+    if (product == null) return;
+    product.catalogueSyncedImageUrl = url;
+    await _isar.writeTxn(() async {
+      await _isar.products.put(product);
+    });
+  }
+
+  /// Sets a product's photo without going through [save] - for the
+  /// background catalogue image sync, which must never be treated as a
+  /// person editing the product (and so never raises or loses an edit
+  /// conflict). [catalogueSyncedImageUrl] is this device's own bookkeeping
+  /// for where the image came from, never synced.
+  Future<void> updateImageUrl(
+    String productUuid,
+    String? imageUrl, {
+    String? catalogueSyncedImageUrl,
+  }) async {
+    final product = await getByUuid(productUuid);
+    if (product == null) return;
+
+    final changed = product.imageUrl != imageUrl;
+    if (changed) {
+      await ImageCacheService.deleteCachedFile(product.barcode);
+      product.cachedImagePath = null;
+    }
+    product.imageUrl = imageUrl;
+    product.catalogueSyncedImageUrl = catalogueSyncedImageUrl;
+    await _isar.writeTxn(() async {
+      await _isar.products.put(product);
+    });
+    if (!changed) return;
+
+    final pendingCreate = await _pendingProductEvent(
+      productUuid,
+      operation: 'create',
+    );
+    if (pendingCreate != null) {
+      await _replacePayload(pendingCreate, _toPayload(product));
+      return;
+    }
+    await _queueImageUpdate(productUuid, imageUrl);
   }
 
   /// Updates just [Product.cachedImagePath] for [productUuid] - a pure
@@ -261,7 +505,9 @@ class ProductRepository {
     }
   }
 
-  /// Applies [delta] to the product's stock (negative for sales) and saves.
+  /// Applies [delta] to the product's stock (negative for sales) - a plain
+  /// ledger fact: the server adds it to whatever else has been recorded, so
+  /// it can never conflict with another device's sale or restock.
   Future<void> adjustStock(String productUuid, int delta) async {
     final product = await getByUuid(productUuid);
     if (product == null) {
@@ -275,11 +521,6 @@ class ProductRepository {
       await _isar.products.put(product);
     });
 
-    await _enqueueEvent(
-      entityUuid: product.uuid,
-      operation: 'update',
-      payload: _toPayload(product),
-    );
     await _recordStockEvent(
       productUuid: product.uuid,
       changeType: 'manual_adjustment',
@@ -293,8 +534,12 @@ class ProductRepository {
   /// purely private inventory data now (the shared, admin-moderated
   /// catalogue lives entirely in `catalogue_products`, a structurally
   /// separate table stores can't write to at all - see
-  /// SupabaseService.fetchCatalogueProduct), so nothing else can ever
-  /// depend on this exact row.
+  /// SupabaseService.fetchCatalogueProduct). Its own `stock_events` rows
+  /// (virtually every product has at least an `initial_stock` one) cascade
+  /// away with it remotely - see the FK note in SCHEMA_TRUTH.md - so this
+  /// doesn't need to clean those up itself. That FK used to be plain `NO
+  /// ACTION`, which meant almost every product delete permanently violated
+  /// it and retried forever with no way to succeed; fixed 2026-09-12.
   Future<void> delete(String productUuid) async {
     final product = await getByUuid(productUuid);
     if (product == null) return;

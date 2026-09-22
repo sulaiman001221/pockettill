@@ -93,7 +93,8 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   bool get _storeNameValid => _storeNameController.text.trim().length >= 2;
   bool get _ownerNameValid => _ownerNameController.text.trim().length >= 2;
   bool get _phoneValid =>
-      _phoneController.text.replaceAll(RegExp(r'\s'), '').length >= 9;
+      _phoneController.text.trim().isNotEmpty &&
+      AuthService.phoneInputError(_phoneController.text) == null;
   bool get _passwordValid => _passwordController.text.length >= 6;
   bool get _confirmPasswordValid =>
       _confirmPasswordController.text == _passwordController.text;
@@ -272,7 +273,8 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                 labelText: 'Phone Number *',
                 helperText: 'This will be your login number',
                 errorText: _phoneTouched && !_phoneValid
-                    ? 'Enter a valid phone number'
+                    ? (AuthService.phoneInputError(_phoneController.text) ??
+                          'Enter a valid phone number')
                     : null,
               ),
             ),

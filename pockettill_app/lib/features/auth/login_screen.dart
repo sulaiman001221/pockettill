@@ -49,8 +49,22 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     setState(() {});
   }
 
+  /// Shown under the phone field once it's clearly not a phone number - a
+  /// password typed here by mistake (letters/symbols) or a number that's too
+  /// long. A number that's merely still being typed shows nothing yet.
+  String? get _phoneError {
+    final text = _phoneController.text.trim();
+    if (text.isEmpty) return null;
+    final error = AuthService.phoneInputError(text);
+    if (error == null) return null;
+    final invalidChars = !RegExp(r'^\+?[0-9 \-]+$').hasMatch(text);
+    final digits = text.replaceAll(RegExp(r'[^0-9]'), '').length;
+    return (invalidChars || digits >= 10) ? error : null;
+  }
+
   bool get _canSubmit =>
       _phoneController.text.trim().isNotEmpty &&
+      AuthService.phoneInputError(_phoneController.text) == null &&
       _passwordController.text.isNotEmpty;
 
   @override
@@ -304,6 +318,17 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   onPressed: sending
                       ? null
                       : () async {
+                          final phoneError = AuthService.phoneInputError(
+                            phoneController.text,
+                          );
+                          if (phoneController.text.trim().isEmpty ||
+                              phoneError != null) {
+                            setSheetState(() {
+                              errorText =
+                                  phoneError ?? 'Enter your phone number';
+                            });
+                            return;
+                          }
                           setSheetState(() {
                             sending = true;
                             errorText = null;
@@ -418,10 +443,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             TextField(
               controller: _phoneController,
               keyboardType: TextInputType.phone,
-              decoration: const InputDecoration(
-                prefixIcon: Icon(Icons.phone_outlined),
+              decoration: InputDecoration(
+                prefixIcon: const Icon(Icons.phone_outlined),
                 hintText: '071 234 5678',
                 labelText: 'Phone Number',
+                errorText: _phoneError,
               ),
             ),
             const SizedBox(height: 16),

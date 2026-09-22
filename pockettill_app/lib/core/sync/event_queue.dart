@@ -45,4 +45,19 @@ class EventQueue {
   Future<int> pendingCount() {
     return _isar.syncEvents.filter().pushedEqualTo(false).count();
   }
+
+  /// Deletes events matching [uuids] outright, without ever marking them
+  /// pushed - for an event this device has decided should never reach
+  /// Supabase at all (see SyncService's product-conflict resolution), as
+  /// opposed to [markPushed] for one that already has.
+  Future<void> discard(List<String> uuids) async {
+    if (uuids.isEmpty) return;
+    await _isar.writeTxn(() async {
+      final events = await _isar.syncEvents
+          .filter()
+          .anyOf(uuids, (q, String uuid) => q.uuidEqualTo(uuid))
+          .findAll();
+      await _isar.syncEvents.deleteAll(events.map((e) => e.id).toList());
+    });
+  }
 }

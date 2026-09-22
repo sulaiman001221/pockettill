@@ -293,10 +293,23 @@ _RiskTypeInfo _infoForType(String type) {
         'Concurrent Price Edit',
         AppTheme.syncAmber,
       );
-    case 'concurrent_stock_adjustment':
+    case 'concurrent_stock_adjustment': // historical only, no longer logged
+    case 'concurrent_stock_edit':
       return const _RiskTypeInfo(
         Icons.sync_problem,
         'Concurrent Stock Edit',
+        AppTheme.syncAmber,
+      );
+    case 'concurrent_product_edit':
+      return const _RiskTypeInfo(
+        Icons.sync_problem,
+        'Concurrent Product Edit',
+        AppTheme.syncAmber,
+      );
+    case 'concurrent_credit_edit':
+      return const _RiskTypeInfo(
+        Icons.sync_problem,
+        'Concurrent Customer Edit',
         AppTheme.syncAmber,
       );
     default:

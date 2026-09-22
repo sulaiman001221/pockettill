@@ -11,6 +11,7 @@ import '../../core/auth/auth_service.dart';
 import '../../core/hardware/hardware_detector.dart';
 import '../../core/storage/image_cache_service.dart';
 import '../../core/supabase/supabase_service.dart';
+import '../../core/sync/realtime_data_sync_service.dart';
 import '../../core/sync/sync_service.dart';
 import '../../core/sync/sync_status_provider.dart';
 import '../../shared/models/store_config.dart';
@@ -236,11 +237,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     if (mounted) setState(() {});
   }
 
-  /// Local-only preference (Settings > Sound) - deliberately not
-  /// [_saveConfig], which also enqueues a `store_profile` sync event; a
-  /// sound toggle has nothing to do with the store's own profile and should
-  /// never touch the network.
-  Future<void> _saveSoundPreference(void Function(StoreConfig config) mutate) async {
+  /// A per-device preference (sound toggles, "Download images on WiFi
+  /// only") - deliberately not [_saveConfig], which also enqueues a
+  /// `store_profile` sync event that would push it to every other device on
+  /// the account. WiFi-only used to go through [_saveConfig] and so
+  /// silently applied to every device the moment one owner toggled it -
+  /// found 2026-09-20 on a real two-device store, since not every phone is
+  /// on the same data plan.
+  Future<void> _saveLocalPreference(void Function(StoreConfig config) mutate) async {
     final config = _config;
     if (config == null) return;
     mutate(config);
@@ -265,7 +269,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         'owner_phone': config.ownerPhone,
         'address': config.address,
         'use_catalogue_images': config.useCatalogueImages,
-        'images_wifi_only': config.imagesWifiOnly,
+        // images_wifi_only is deliberately NOT sent - it's a per-device
+        // preference (see _saveLocalPreference's doc comment), not part of
+        // the store's shared profile.
         // Required for the upsert's RLS check to pass, not just cosmetic -
         // `stores`' INSERT policy checks `auth_user_id = auth.uid()`, and
         // Postgres evaluates that WITH CHECK against the *proposed* row
@@ -470,6 +476,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Another device's Settings edit (store name, owner name/phone,
+    // address) should show up here without a manual refresh - see
+    // RealtimeDataSyncService.
+    ref.listen(storeProfileChangedProvider, (_, _) => _load());
+
     return Scaffold(
       appBar: const CustomAppBar(showMenuIcon: false, title: 'Settings'),
       backgroundColor: AppTheme.background,
@@ -975,7 +986,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               label: 'Scan Sound',
               subtitle: 'Play a sound when a barcode is scanned',
               value: config?.scanSoundEnabled ?? true,
-              onChanged: (value) => _saveSoundPreference(
+              onChanged: (value) => _saveLocalPreference(
                 (c) => c.scanSoundEnabled = value,
               ),
             ),
@@ -988,7 +999,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             label: 'Payment Success Sound',
             subtitle: 'Play a sound when a sale is completed',
             value: config?.paymentSoundEnabled ?? true,
-            onChanged: (value) => _saveSoundPreference(
+            onChanged: (value) => _saveLocalPreference(
               (c) => c.paymentSoundEnabled = value,
             ),
           ),
@@ -1024,10 +1035,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             label: 'Download images on WiFi only',
             subtitle:
                 'Only download new product images when connected to WiFi '
-                'to save mobile data.',
+                'to save mobile data. This device only - each phone sets '
+                'its own.',
             value: config?.imagesWifiOnly ?? false,
             onChanged: (value) =>
-                _saveConfig((c) => c.imagesWifiOnly = value),
+                _saveLocalPreference((c) => c.imagesWifiOnly = value),
           ),
           const Padding(
             padding: EdgeInsets.symmetric(vertical: 12),

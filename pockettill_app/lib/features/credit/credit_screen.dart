@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/sync/realtime_data_sync_service.dart';
 import '../../shared/models/credit_customer.dart';
 import '../../shared/repositories/repositories.dart';
 import '../../shared/theme/app_theme.dart';
@@ -55,6 +56,15 @@ class _CreditScreenState extends ConsumerState<CreditScreen> {
       _customers = customers;
       _loading = false;
     });
+  }
+
+  /// Same fetch as [_loadCustomers], without the loading spinner - for a
+  /// remote change arriving via Realtime while this screen is already
+  /// open, where a spinner flash would just be noise.
+  Future<void> _reloadCustomersSilently() async {
+    final customers = await ref.read(creditRepositoryProvider).getAll();
+    if (!mounted) return;
+    setState(() => _customers = customers);
   }
 
   bool _matchesFilter(CreditCustomer customer, _CreditFilter filter) {
@@ -161,6 +171,11 @@ class _CreditScreenState extends ConsumerState<CreditScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Another device adding/editing/deleting a customer, or recording a
+    // credit transaction, should show up here without a manual refresh -
+    // see RealtimeDataSyncService.
+    ref.listen(creditChangedProvider, (_, _) => _reloadCustomersSilently());
+
     final filtered = _filteredCustomers;
 
     return GestureDetector(

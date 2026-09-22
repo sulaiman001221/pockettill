@@ -20,23 +20,10 @@ import '../../shared/models/sale_item.dart';
 /// "today"/"this week" comparisons elsewhere in the app.
 DateTime parseLocal(String value) => DateTime.parse(value).toLocal();
 
-/// [stockByProduct], if given (keyed by `products.uuid`), is the sum of
-/// every `stock_events` delta for that product - the authoritative current
-/// stock, used in place of the possibly-stale `stock` column whenever this
-/// product has at least one event (see [RestoreService]'s full-history
-/// pull, which computes this once for every product it's restoring).
-/// Omitted (null) when mapping a single row for [RealtimeDataSyncService] -
-/// there, the row's own `stock` column is trusted directly, which is safe
-/// specifically for a brand-new product this device has never seen before:
-/// whatever `stock_events` the creating device already recorded for it get
-/// marked "seen" (not reapplied) by [RealtimeStockSyncService] the moment
-/// they arrive, whether that's before or after this row itself does, so
-/// there's no double-count risk the way there would be for reapplying
-/// history to a product this device already has its own running total for.
-Product productFromRow(
-  Map<String, dynamic> row, {
-  Map<String, int>? stockByProduct,
-}) => Product()
+/// The row's own `stock` is the server's authoritative quantity (kept by
+/// the stock_events trigger) - a caller that has unsent local stock changes
+/// must add them on top (see PendingChanges).
+Product productFromRow(Map<String, dynamic> row) => Product()
   ..uuid = row['uuid'] as String
   ..barcode = row['barcode'] as String
   ..name = row['name'] as String
@@ -45,12 +32,17 @@ Product productFromRow(
   ..unit = row['unit'] as String?
   ..price = (row['price'] as num).toDouble()
   ..costPrice = (row['cost_price'] as num?)?.toDouble()
-  ..stock = stockByProduct?[row['uuid'] as String] ?? row['stock'] as int
+  ..stock = (row['stock'] as num).toInt()
   ..lowStockThreshold = row['low_stock_threshold'] as int? ?? 5
   ..imageUrl = row['image_url'] as String?
   ..synced = true
   ..createdAt = parseLocal(row['created_at'] as String)
   ..updatedAt = row['updated_at'] != null
+      ? parseLocal(row['updated_at'] as String)
+      : null
+  ..serverVersion = (row['version'] as num?)?.toInt() ?? 0
+  ..stockVersion = (row['stock_version'] as num?)?.toInt() ?? 0
+  ..serverUpdatedAt = row['updated_at'] != null
       ? parseLocal(row['updated_at'] as String)
       : null;
 
@@ -84,6 +76,10 @@ CreditCustomer creditCustomerFromRow(Map<String, dynamic> row) =>
       ..createdAt = parseLocal(row['created_at'] as String)
       ..lastActivityAt = row['last_activity_at'] != null
           ? parseLocal(row['last_activity_at'] as String)
+          : null
+      ..serverVersion = (row['version'] as num?)?.toInt() ?? 0
+      ..serverUpdatedAt = row['updated_at'] != null
+          ? parseLocal(row['updated_at'] as String)
           : null;
 
 CreditTransaction creditTransactionFromRow(Map<String, dynamic> row) =>

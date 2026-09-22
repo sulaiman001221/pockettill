@@ -56,13 +56,18 @@ class CreditRepository {
     return all.fold<double>(0, (sum, customer) => sum + customer.balance);
   }
 
-  /// Writes [customer] to Isar and enqueues a sync event.
+  /// Writes [customer] to Isar and queues what the server needs to hear.
   ///
   /// Looks up any existing row by [CreditCustomer.uuid] first: if found,
-  /// this is an update (the existing Isar [Id] is reused so `put` replaces
-  /// the row instead of inserting a duplicate, and [CreditCustomer.createdAt]
-  /// is preserved); otherwise a uuid is generated if needed and this is a
+  /// this is a details edit (name, phone, credit limit - the existing Isar
+  /// [Id] is reused so `put` replaces the row instead of inserting a
+  /// duplicate); otherwise a uuid is generated if needed and this is a
   /// create.
+  ///
+  /// An edit is queued carrying only the fields that changed, each with the
+  /// value this device saw before - the server applies one only if nobody
+  /// else changed it in the meantime (`apply_credit_customer_edit`). The
+  /// balance is never sent from here: it belongs to the transaction ledger.
   Future<void> saveCustomer(CreditCustomer customer) async {
     // An empty uuid always means "not yet created" - never match it against
     // another row (a stray empty-uuid row in the data would otherwise get
@@ -73,29 +78,142 @@ class CreditRepository {
               .filter()
               .uuidEqualTo(customer.uuid)
               .findFirst();
-    final isNew = existing == null;
     final now = DateTime.now();
 
-    if (isNew) {
+    if (existing == null) {
       if (customer.uuid.isEmpty) {
         customer.uuid = _uuid.v4();
       }
       customer.createdAt = now;
-    } else {
-      customer.id = existing.id;
-      customer.createdAt = existing.createdAt;
+      await _isar.writeTxn(() async {
+        await _isar.creditCustomers.put(customer);
+      });
+      await _enqueueEvent(
+        entityType: 'credit_customer',
+        entityUuid: customer.uuid,
+        operation: 'create',
+        payload: _customerToPayload(customer),
+      );
+      return;
     }
+
+    customer.id = existing.id;
+    customer.createdAt = existing.createdAt;
+    // Server-owned, and possibly newer than the copy the form was holding.
+    customer.balance = existing.balance;
+    customer.lastActivityAt = existing.lastActivityAt;
+    customer.serverVersion = existing.serverVersion;
+    customer.serverUpdatedAt = existing.serverUpdatedAt;
 
     await _isar.writeTxn(() async {
       await _isar.creditCustomers.put(customer);
     });
 
-    await _enqueueEvent(
-      entityType: 'credit_customer',
-      entityUuid: customer.uuid,
-      operation: isNew ? 'create' : 'update',
-      payload: _customerToPayload(customer),
+    await _queueDetailsEdit(
+      customer.uuid,
+      base: {
+        'name': existing.name,
+        'phone': existing.phone,
+        'credit_limit': existing.creditLimit,
+      },
+      changes: {
+        'name': customer.name,
+        'phone': customer.phone,
+        'credit_limit': customer.creditLimit,
+      },
+      pendingCreatePayload: _customerToPayload(customer),
     );
+  }
+
+  /// Queues (or merges into an already-queued) details edit - two edits made
+  /// before the first one syncs are one edit as far as the server is
+  /// concerned (see ProductRepository._queueEdit for why). Only the fields
+  /// that actually differ are kept. If the customer's own create hasn't been
+  /// sent yet, nobody else can be racing it, so the edit just folds into
+  /// that create ([pendingCreatePayload]).
+  Future<void> _queueDetailsEdit(
+    String uuid, {
+    required Map<String, dynamic> base,
+    required Map<String, dynamic> changes,
+    required Map<String, dynamic> pendingCreatePayload,
+  }) async {
+    final pendingEvents = await _isar.syncEvents
+        .filter()
+        .pushedEqualTo(false)
+        .and()
+        .entityTypeEqualTo('credit_customer')
+        .and()
+        .entityUuidEqualTo(uuid)
+        .sortByCreatedAtDesc()
+        .findAll();
+
+    for (final event in pendingEvents) {
+      if (event.operation == 'create') {
+        event.payload = jsonEncode(pendingCreatePayload);
+        await _isar.writeTxn(() async {
+          await _isar.syncEvents.put(event);
+        });
+        return;
+      }
+    }
+
+    final onlyChanged = <String, dynamic>{};
+    final onlyBase = <String, dynamic>{};
+    changes.forEach((key, value) {
+      if (value == base[key]) return;
+      onlyChanged[key] = value;
+      onlyBase[key] = base[key];
+    });
+
+    SyncEvent? pendingEdit;
+    for (final event in pendingEvents) {
+      if (event.operation != 'update') continue;
+      final payload = jsonDecode(event.payload) as Map<String, dynamic>;
+      if (payload['_edit'] != null) {
+        pendingEdit = event;
+        break;
+      }
+    }
+
+    if (pendingEdit == null) {
+      if (onlyChanged.isEmpty) return;
+      await _enqueueEvent(
+        entityType: 'credit_customer',
+        entityUuid: uuid,
+        operation: 'update',
+        payload: {
+          '_edit': {'base': onlyBase, 'changes': onlyChanged},
+        },
+      );
+      return;
+    }
+
+    final edit = Map<String, dynamic>.from(
+      (jsonDecode(pendingEdit.payload) as Map<String, dynamic>)['_edit'] as Map,
+    );
+    final mergedBase = Map<String, dynamic>.from(edit['base'] as Map);
+    final mergedChanges = Map<String, dynamic>.from(edit['changes'] as Map);
+    onlyChanged.forEach((key, value) {
+      mergedBase.putIfAbsent(key, () => onlyBase[key]);
+      mergedChanges[key] = value;
+    });
+    // A field put back to where it started is no longer an edit at all.
+    for (final key in mergedChanges.keys.toList()) {
+      if (mergedChanges[key] == mergedBase[key]) {
+        mergedChanges.remove(key);
+        mergedBase.remove(key);
+      }
+    }
+    if (mergedChanges.isEmpty) {
+      await _eventQueue.discard([pendingEdit.uuid]);
+      return;
+    }
+    pendingEdit.payload = jsonEncode({
+      '_edit': {'base': mergedBase, 'changes': mergedChanges},
+    });
+    await _isar.writeTxn(() async {
+      await _isar.syncEvents.put(pendingEdit!);
+    });
   }
 
   /// Records a credit purchase: creates a `purchase` [CreditTransaction],
@@ -137,26 +255,16 @@ class CreditRepository {
     });
 
     // Isar doesn't support nested transactions - EventQueue.enqueue opens
-    // its own writeTxn, so both of these must run after the one above has
-    // closed.
+    // its own writeTxn, so this must run after the one above has closed.
+    //
+    // Only the transaction is sent: the server adds it to the customer's
+    // balance itself (see the credit_transactions trigger), so a balance
+    // change is never a separate write that two devices could race.
     await _enqueueEvent(
       entityType: 'credit_tx',
       entityUuid: transaction.uuid,
       operation: 'create',
       payload: _transactionToPayload(transaction),
-    );
-    // The balance change itself must reach Supabase too, not just the
-    // transaction record - without this, credit_customers.balance never
-    // updates server-side, so restoring from a local wipe (e.g. switching
-    // stores and back) resurrects a stale balance while the transaction
-    // history (which did sync) still shows the real one. Missing here and
-    // in every other balance-changing method below, plus ReturnRepository's
-    // own credit-touching path - found and fixed 2026-08-21.
-    await _enqueueEvent(
-      entityType: 'credit_customer',
-      entityUuid: customer.uuid,
-      operation: 'update',
-      payload: _customerToPayload(customer),
     );
   }
 
@@ -206,22 +314,13 @@ class CreditRepository {
       await _isar.creditTransactions.put(transaction);
     });
 
-    // Isar doesn't support nested transactions - EventQueue.enqueue opens
-    // its own writeTxn, so both of these must run after the one above has
-    // closed.
+    // See the matching comment in addPurchase - only the transaction is
+    // sent; the server applies it to the balance.
     await _enqueueEvent(
       entityType: 'credit_tx',
       entityUuid: transaction.uuid,
       operation: 'create',
       payload: _transactionToPayload(transaction),
-    );
-    // See the matching comment in addPurchase - the balance change itself
-    // must reach Supabase too, not just the transaction record.
-    await _enqueueEvent(
-      entityType: 'credit_customer',
-      entityUuid: customer.uuid,
-      operation: 'update',
-      payload: _customerToPayload(customer),
     );
   }
 
@@ -267,19 +366,15 @@ class CreditRepository {
       await _isar.creditTransactions.put(transaction);
     });
 
+    // A manual credit is a real transaction like any other: it always counts,
+    // even if another device records one at the same moment (both are
+    // separate facts, so both add to the balance). The Risk Log entry below
+    // is what lets the owner review every one.
     await _enqueueEvent(
       entityType: 'credit_tx',
       entityUuid: transaction.uuid,
       operation: 'create',
       payload: _transactionToPayload(transaction),
-    );
-    // See the matching comment in addPurchase - the balance change itself
-    // must reach Supabase too, not just the transaction record.
-    await _enqueueEvent(
-      entityType: 'credit_customer',
-      entityUuid: customer.uuid,
-      operation: 'update',
-      payload: _customerToPayload(customer),
     );
 
     await _riskLog.record(
@@ -347,14 +442,6 @@ class CreditRepository {
       operation: 'create',
       payload: _transactionToPayload(transaction),
     );
-    // See the matching comment in addPurchase - the balance change itself
-    // must reach Supabase too, not just the transaction record.
-    await _enqueueEvent(
-      entityType: 'credit_customer',
-      entityUuid: customer.uuid,
-      operation: 'update',
-      payload: _customerToPayload(customer),
-    );
 
     await _riskLog.record(
       type: 'credit_writeoff',
@@ -371,6 +458,7 @@ class CreditRepository {
   Future<void> updateCreditLimit(String customerUuid, double? creditLimit) async {
     final customer = await getByUuid(customerUuid);
     if (customer == null) return;
+    final before = customer.creditLimit;
 
     customer.creditLimit = creditLimit;
 
@@ -378,11 +466,11 @@ class CreditRepository {
       await _isar.creditCustomers.put(customer);
     });
 
-    await _enqueueEvent(
-      entityType: 'credit_customer',
-      entityUuid: customer.uuid,
-      operation: 'update',
-      payload: _customerToPayload(customer),
+    await _queueDetailsEdit(
+      customer.uuid,
+      base: {'credit_limit': before},
+      changes: {'credit_limit': creditLimit},
+      pendingCreatePayload: _customerToPayload(customer),
     );
   }
 

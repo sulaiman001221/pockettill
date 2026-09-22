@@ -9,6 +9,7 @@ import '../../core/catalogue/open_food_facts_service.dart';
 import '../../core/storage/product_image_service.dart';
 import '../../core/supabase/supabase_service.dart';
 import '../../core/sync/reachability_service.dart';
+import '../../core/sync/realtime_data_sync_service.dart';
 import '../../shared/models/product.dart';
 import '../../shared/repositories/repositories.dart';
 import '../../shared/theme/app_theme.dart';
@@ -60,6 +61,12 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
   // barcode re-lookup can never silently clobber a photo the owner already
   // took, only an explicit pick or removal can.
   String? _existingImageUrl;
+  // The product exactly as this screen opened it (edit mode only). Saving
+  // sends only what differs from this - never a field the person didn't
+  // touch, and the stock as a change from this quantity rather than an
+  // absolute number - so anything another device (or a sale) changed while
+  // the form was open isn't overwritten by saving it.
+  Product? _initialProduct;
   File? _pickedImageFile;
   bool _imageRemoved = false;
   bool _saving = false;
@@ -83,6 +90,19 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
       _priceController.text = existing.price.toStringAsFixed(2);
       _costController.text = existing.costPrice?.toStringAsFixed(2) ?? '';
       _stockController.text = '${existing.stock}';
+      _initialProduct = Product()
+        ..uuid = existing.uuid
+        ..barcode = existing.barcode
+        ..name = existing.name
+        ..mass = existing.mass
+        ..category = existing.category
+        ..unit = existing.unit
+        ..price = existing.price
+        ..costPrice = existing.costPrice
+        ..stock = existing.stock
+        ..lowStockThreshold = existing.lowStockThreshold
+        ..imageUrl = existing.imageUrl
+        ..createdAt = existing.createdAt;
       _lowStockController.text = '${existing.lowStockThreshold}';
       _existingImageUrl = existing.imageUrl;
       if (existing.category != null) {
@@ -439,7 +459,9 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
       return;
     }
 
-    await ref.read(productRepositoryProvider).save(product);
+    await ref
+        .read(productRepositoryProvider)
+        .save(product, initial: _initialProduct);
 
     if (!mounted) return;
     setState(() => _saving = false);
@@ -482,6 +504,20 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // If another device deletes the exact product this screen is editing,
+    // there's nothing left to save against - leave instead of letting the
+    // owner submit an edit to a row that no longer exists.
+    final editingUuid = widget.existingProduct?.uuid;
+    if (editingUuid != null) {
+      ref.listen(productDeletedProvider, (_, next) {
+        if (next.valueOrNull != editingUuid || !mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('This product has been removed')),
+        );
+        Navigator.of(context).pop();
+      });
+    }
+
     return Scaffold(
       appBar: CustomAppBar(
         showMenuIcon: false,
@@ -698,6 +734,14 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
         ? (_existingImageUrl ?? _autoFilledImageUrl)
         : null;
     final hasImage = picked != null || networkUrl != null;
+    // Only meaningful for the product's own original image - a fresh
+    // catalogue/OFF autofill URL was never cached under this barcode, and
+    // this stops applying the instant a different photo is picked or the
+    // current one removed anyway (networkUrl becomes null either way).
+    final cachedImagePath = networkUrl != null && networkUrl == _existingImageUrl
+        ? widget.existingProduct?.cachedImagePath
+        : null;
+    final barcode = _barcodeController.text.trim();
 
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -716,12 +760,27 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
             child: picked != null
                 ? Image.file(picked, fit: BoxFit.cover)
                 : networkUrl != null
-                ? Image.network(
-                    networkUrl,
+                ? CachedProductImage(
+                    // Falls back to the URL itself only for the rare
+                    // barcode-less product - ImageCacheService's own cache
+                    // key everywhere else is always the barcode (see
+                    // CachedProductImage's other call sites), so this stays
+                    // consistent with whatever the Stock list already
+                    // cached for the same product.
+                    cacheKey: barcode.isNotEmpty ? barcode : networkUrl,
+                    imageUrl: networkUrl,
+                    cachedImagePath: cachedImagePath,
                     fit: BoxFit.cover,
-                    errorBuilder: (_, _, _) => const Icon(
+                    placeholder: const Icon(
                       Icons.image_not_supported_outlined,
                       color: AppTheme.iconBorder,
+                    ),
+                    loadingPlaceholder: const Center(
+                      child: SizedBox(
+                        width: 24,
+                        height: 24,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
                     ),
                   )
                 : const Icon(
