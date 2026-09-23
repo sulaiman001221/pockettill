@@ -8,6 +8,7 @@ import '../../core/sync/reachability_service.dart';
 import '../../core/sync/realtime_data_sync_service.dart';
 import '../../core/sync/sync_service.dart';
 import '../../core/sync/sync_status_provider.dart';
+import '../../core/update/app_update_service.dart';
 import '../../main.dart';
 import '../../shared/models/product.dart';
 import '../../shared/repositories/repositories.dart';
@@ -56,6 +57,7 @@ class _SalesScreenState extends ConsumerState<SalesScreen> {
   bool _showingNotFoundSheet = false;
   bool _bannerDismissed = false;
   bool _lowStorageBannerDismissed = false;
+  bool _updateBannerDismissed = false;
 
   // Static so it survives this State object being recreated (e.g. hot
   // reload) - the 30-day warning should still only ever appear once per
@@ -344,6 +346,23 @@ class _SalesScreenState extends ConsumerState<SalesScreen> {
     );
   }
 
+  Widget? _buildUpdateBanner(AppUpdateBannerState state) {
+    if (state != AppUpdateBannerState.readyToInstall || _updateBannerDismissed) {
+      return null;
+    }
+    return _SyncBanner(
+      background: const Color(0xFFEBF8FF),
+      borderColor: const Color(0xFF3182CE),
+      icon: Icons.system_update_outlined,
+      iconColor: const Color(0xFF3182CE),
+      title: 'Update ready',
+      subtitle: 'A newer version of PocketTill has downloaded',
+      actionLabel: 'Update Now',
+      onAction: () => ref.read(appUpdateServiceProvider).completeUpdate(),
+      onDismiss: () => setState(() => _updateBannerDismissed = true),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(salesNotifierProvider);
@@ -352,6 +371,9 @@ class _SalesScreenState extends ConsumerState<SalesScreen> {
     final syncBanner = _buildSyncBanner(_computeNudgeLevel(syncStatus, lastSyncedAt));
     final isStorageLow = ref.watch(lowStorageWarningProvider).valueOrNull ?? false;
     final storageBanner = _buildLowStorageBanner(isStorageLow);
+    final updateState = ref.watch(appUpdateBannerProvider).valueOrNull ??
+        AppUpdateBannerState.none;
+    final updateBanner = _buildUpdateBanner(updateState);
 
     // The search dropdown is a snapshot taken when the query was typed - a
     // product changing underneath it (a sale or restock on another device)
@@ -375,6 +397,7 @@ class _SalesScreenState extends ConsumerState<SalesScreen> {
             children: [
               if (syncBanner != null) syncBanner,
               if (storageBanner != null) storageBanner,
+              if (updateBanner != null) updateBanner,
               Expanded(
                 child: CustomScrollView(
                   slivers: [

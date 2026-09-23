@@ -8,6 +8,7 @@ import '../../core/auth/auth_service.dart';
 import '../../core/database/isar_service.dart';
 import '../../core/supabase/supabase_service.dart';
 import '../../core/sync/sync_service.dart';
+import '../../core/update/app_update_service.dart';
 import '../../shared/repositories/store_config_repository.dart';
 import '../../shared/theme/app_theme.dart';
 import '../../shared/widgets/pockettill_app_bar.dart';
@@ -73,6 +74,7 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
         .displacedByAnotherDevice
         .listen((_) => unawaited(_handleSignedOut(kickedByNewDevice: true)));
     unawaited(_checkFoundingStoreQualification());
+    unawaited(ref.read(appUpdateServiceProvider).checkAndStart());
 
     if (widget.showNewDeviceNotice) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
