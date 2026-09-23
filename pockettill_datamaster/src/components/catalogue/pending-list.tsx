@@ -130,12 +130,21 @@ export function PendingList({
                     );
                     return (
                       <div className="flex max-w-40 items-center gap-1.5">
-                        {/* min-w-0 (not shrink-0 - that was the actual bug: it
-                            stops a flex child from ever shrinking below its
-                            content width, so `truncate` never gets the chance
-                            to clip a long category name, and it overflows into
-                            the Mass column instead, as seen in the report). */}
-                        <Badge variant="outline" className="min-w-0 truncate">
+                        {/* `shrink` (not min-w-0 alone) is the part that
+                            actually matters here: Badge's own component
+                            styles (badge.tsx's cva base classes) bake in
+                            `shrink-0` unconditionally, and `min-w-0` doesn't
+                            cancel it - they're different CSS properties
+                            (min-width vs flex-shrink), so the previous
+                            attempt at this fix changed nothing: the badge
+                            still refused to shrink below its content width,
+                            `truncate` never got the chance to clip a long
+                            category name, and it kept overflowing into the
+                            Mass column. `shrink` here is what overrides the
+                            component's own `shrink-0` (same Tailwind
+                            flex-shrink family, so tailwind-merge lets it
+                            win). Found still-broken 2026-09-23. */}
+                        <Badge variant="outline" className="min-w-0 shrink truncate">
                           {item.mostCommonCategory ?? "Uncategorized"}
                         </Badge>
                         {others.length > 0 ? (
