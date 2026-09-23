@@ -70,11 +70,23 @@ export async function approveProduct(
   // not "the most common" - same simplification, just extended to image_url
   // when this column was added. A store's own photo of a specific unit
   // isn't canonically "more correct" than another store's for the same
-  // barcode, so there's no principled way to pick a "best" one anyway.
+  // barcode, so there's no principled way to pick a "best" one anyway -
+  // *between two submissions that both have a photo*. Between one that has
+  // one and one that doesn't, there is a clear best pick, and the plain
+  // `.limit(1)` this used to be gave Postgres no ordering to go on at all,
+  // so it could - and did - just as easily return the submission with no
+  // photo, approving the barcode into the catalogue with no image even
+  // though another store's real photo of it was sitting right there. Found
+  // 2026-09-23 on "B Well Pure Canola Oil": two submissions existed, one
+  // photographed, one not, and the no-photo one got picked. `nullsFirst:
+  // false` only changes where NULLs sort, not which non-null one wins when
+  // more than one has a photo - still an arbitrary, undocumented pick,
+  // same as before.
   const { data: submitter } = await supabase
     .from("products")
     .select("store_id, image_url")
     .eq("barcode", barcode)
+    .order("image_url", { ascending: true, nullsFirst: false })
     .limit(1)
     .maybeSingle();
 
@@ -237,12 +249,18 @@ export async function updateVerifiedProduct(
   // original rather than being silently skipped (which is what a bare
   // truthy check on this field used to do - Clear looked like it did
   // nothing, found 2026-09-08).
+  //
+  // Declared outside the `if` (rather than the previous inline `const`) so
+  // the cascade fix below can still read what the image URL *was* before
+  // this edit replaces it - see that comment for why.
+  let existing: { image_url: string | null; original_image_url: string | null; is_image_enhanced: boolean } | null = null;
   if (options.enhancedImageUrl !== undefined) {
-    const { data: existing } = await supabase
+    const { data } = await supabase
       .from("catalogue_products")
       .select("image_url, original_image_url, is_image_enhanced")
       .eq("barcode", barcode)
       .maybeSingle();
+    existing = data;
 
     if (options.enhancedImageUrl === null) {
       update.image_url = existing?.original_image_url ?? existing?.image_url ?? null;
@@ -264,6 +282,29 @@ export async function updateVerifiedProduct(
   const { error } = await supabase.from("catalogue_products").update(update).eq("barcode", barcode);
 
   if (error) return { error: error.message };
+
+  // A store's own `products.image_url` is a one-time copy taken whenever
+  // that store's app happened to sync in this barcode's catalogue image -
+  // changing it here doesn't retroactively touch any store that already has
+  // the old value. Each store's app *can* notice on its own next background
+  // image sync (see the Flutter app's ImageSyncService), but only if
+  // `is_image_enhanced` was true and is now false - a plain re-upload
+  // (enhanced replacing enhanced) isn't covered by that check at all, and
+  // even the covered case depends on that specific device's own local
+  // bookkeeping and next sync timing, which found 2026-09-23 a real store
+  // permanently stuck showing a wrong photo (uploaded for the wrong barcode
+  // by mistake, later cleared here) with nothing to fix it. Correcting
+  // every store's copy directly, right here, is the only guarantee - a
+  // plain column update, not a stock/balance write, so it isn't subject to
+  // the Flutter app's server-owned-field guards.
+  const oldImageUrl = options.enhancedImageUrl !== undefined ? existing?.image_url : undefined;
+  if (oldImageUrl && oldImageUrl !== update.image_url) {
+    await supabase
+      .from("products")
+      .update({ image_url: update.image_url })
+      .eq("barcode", barcode)
+      .eq("image_url", oldImageUrl);
+  }
 
   revalidateTag(CATALOGUE_CACHE_TAG);
   revalidatePath("/product-catalogue");

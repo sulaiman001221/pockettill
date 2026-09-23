@@ -1,11 +1,12 @@
 "use client";
 
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { Search } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
 import type { StoreFilter } from "@/lib/data/stores";
 
 const FILTERS: { value: StoreFilter; label: string }[] = [
@@ -19,8 +20,17 @@ export function StoresFilters({ search, filter }: { search: string; filter: Stor
   const router = useRouter();
   const pathname = usePathname();
   const [value, setValue] = useState(search);
+  const [pending, startTransition] = useTransition();
+  // The filter chip's highlight used to depend entirely on the server
+  // round-trip (re-querying Supabase for the new page of stores) completing
+  // before `filter` (the prop) changed - a click looked like it needed a
+  // second try before anything visibly happened. Same fix as
+  // ErrorLogFilters/DateRangeSelector: track the clicked value locally so it
+  // highlights instantly. Found 2026-09-23.
+  const [optimisticFilter, setOptimisticFilter] = useState(filter);
 
   useEffect(() => setValue(search), [search]);
+  useEffect(() => setOptimisticFilter(filter), [filter]);
 
   function navigate(next: { q?: string; filter?: StoreFilter }) {
     const q = next.q ?? value;
@@ -29,7 +39,9 @@ export function StoresFilters({ search, filter }: { search: string; filter: Stor
     if (q) params.set("q", q);
     if (f && f !== "all") params.set("filter", f);
     const qs = params.toString();
-    router.push(qs ? `${pathname}?${qs}` : pathname);
+    startTransition(() => {
+      router.push(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+    });
   }
 
   useEffect(() => {
@@ -39,6 +51,11 @@ export function StoresFilters({ search, filter }: { search: string; filter: Stor
     return () => clearTimeout(handle);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value]);
+
+  function handleFilterClick(f: StoreFilter) {
+    setOptimisticFilter(f);
+    navigate({ filter: f });
+  }
 
   return (
     <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -56,8 +73,9 @@ export function StoresFilters({ search, filter }: { search: string; filter: Stor
           <Button
             key={f.value}
             size="sm"
-            variant={filter === f.value ? "default" : "outline"}
-            onClick={() => navigate({ filter: f.value })}
+            variant={optimisticFilter === f.value ? "default" : "outline"}
+            className={cn(pending && optimisticFilter === f.value && "opacity-70")}
+            onClick={() => handleFilterClick(f.value)}
           >
             {f.label}
           </Button>

@@ -115,13 +115,42 @@ export function PendingList({
                   </div>
                 </TableCell>
                 <TableCell>
-                  <div className="flex max-w-40 flex-wrap gap-1">
-                    {item.categoryVariations.map((c) => (
-                      <Badge key={c ?? "none"} variant="outline">
-                        {c ?? "Uncategorized"}
-                      </Badge>
-                    ))}
-                  </div>
+                  {(() => {
+                    // Same "most common, +N others in a tooltip" pattern
+                    // as the Name column above - this used to render every
+                    // distinct submitted category as its own always-visible
+                    // badge, so a barcode a few stores had each categorized
+                    // slightly differently (free-text, not a controlled
+                    // list - "Snacks" vs "snacks" vs a trailing space all
+                    // count as distinct) grew a badge per submission with
+                    // no cap, overflowing into neighbouring columns. Found
+                    // 2026-09-23.
+                    const others = item.categoryVariations.filter(
+                      (c) => c !== item.mostCommonCategory,
+                    );
+                    return (
+                      <div className="flex max-w-40 items-center gap-1.5">
+                        <Badge variant="outline" className="shrink-0 truncate">
+                          {item.mostCommonCategory ?? "Uncategorized"}
+                        </Badge>
+                        {others.length > 0 ? (
+                          <Tooltip>
+                            <TooltipTrigger
+                              render={
+                                <span className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-[0.7rem] text-muted-foreground">
+                                  +{others.length}
+                                </span>
+                              }
+                            />
+                            <TooltipContent>
+                              Also submitted as:{" "}
+                              {others.map((c) => c ?? "Uncategorized").join(", ")}
+                            </TooltipContent>
+                          </Tooltip>
+                        ) : null}
+                      </div>
+                    );
+                  })()}
                 </TableCell>
                 <TableCell>{item.mostCommonMass ?? "—"}</TableCell>
                 <TableCell>
