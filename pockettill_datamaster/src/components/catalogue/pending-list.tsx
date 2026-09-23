@@ -130,7 +130,12 @@ export function PendingList({
                     );
                     return (
                       <div className="flex max-w-40 items-center gap-1.5">
-                        <Badge variant="outline" className="shrink-0 truncate">
+                        {/* min-w-0 (not shrink-0 - that was the actual bug: it
+                            stops a flex child from ever shrinking below its
+                            content width, so `truncate` never gets the chance
+                            to clip a long category name, and it overflows into
+                            the Mass column instead, as seen in the report). */}
+                        <Badge variant="outline" className="min-w-0 truncate">
                           {item.mostCommonCategory ?? "Uncategorized"}
                         </Badge>
                         {others.length > 0 ? (

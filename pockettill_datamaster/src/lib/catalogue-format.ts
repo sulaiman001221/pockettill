@@ -32,15 +32,54 @@ function normalizeMass(input: string): string {
   return `${number}${normalizedUnit}`;
 }
 
-/** Title-cases on any run of non-alphanumeric characters: "coca-cola  zero" -> "Coca Cola Zero". */
+/** Lowercase unless it's the name's first word - standard title-case convention. */
+const MINOR_WORDS = new Set([
+  "a", "an", "and", "are", "as", "at", "but", "by", "for", "in", "is",
+  "nor", "of", "on", "or", "the", "to", "with",
+]);
+
+/** Uppercases the first letter found in [word] and lowercases every other
+ * letter, leaving every non-letter character (digits, %, &, ...) exactly
+ * where it was. */
+function capitalizeLetters(word: string): string {
+  let seenFirstLetter = false;
+  return word.replace(/[A-Za-z]/g, (letter) => {
+    if (seenFirstLetter) return letter.toLowerCase();
+    seenFirstLetter = true;
+    return letter.toUpperCase();
+  });
+}
+
+/**
+ * Title-cases on whitespace only: "coca-cola  zero 100% pulp" ->
+ * "Coca-Cola Zero 100% Pulp". Punctuation *within* a word (%, /, &, a
+ * hyphen) is meaningful on a product label and is now preserved exactly,
+ * not treated as a word boundary to strip - found 2026-09-23 splitting on
+ * every non-alphanumeric run silently deleted it ("100%" -> "100",
+ * "Rice/Pasta" -> "Rice Pasta"). A hyphen or slash still starts a fresh
+ * capital on each side ("stir-fry" -> "Stir-Fry"), just without discarding
+ * the character itself. A word on [MINOR_WORDS] stays lowercase unless it
+ * opens the name, matching how PocketTill's own product names already read
+ * ("Coca Cola Zero", never "Coca Cola Zero With Sugar" mid-capitalized on
+ * "with").
+ */
 function toPocketTillCase(input: string): string {
   const words = input
     .trim()
-    .split(/[^A-Za-z0-9]+/)
+    .split(/\s+/)
     .filter((word) => word.length > 0);
   if (words.length === 0) return input.trim();
+
   return words
-    .map((word) => `${word[0].toUpperCase()}${word.slice(1).toLowerCase()}`)
+    .map((word, index) => {
+      if (index > 0 && MINOR_WORDS.has(word.toLowerCase())) {
+        return word.toLowerCase();
+      }
+      return word
+        .split(/([-/])/)
+        .map((part) => (part === "-" || part === "/" ? part : capitalizeLetters(part)))
+        .join("");
+    })
     .join(" ");
 }
 
