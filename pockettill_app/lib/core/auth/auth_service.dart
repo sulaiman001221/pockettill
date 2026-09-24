@@ -18,6 +18,7 @@ import '../../shared/models/sync_event.dart';
 import '../../shared/repositories/store_config_repository.dart';
 import '../database/isar_service.dart';
 import '../hardware/hardware_detector.dart';
+import '../storage/image_cache_service.dart';
 import '../supabase/supabase_service.dart';
 import '../sync/event_queue.dart';
 import '../sync/restore_service.dart';
@@ -265,6 +266,10 @@ class AuthService {
         await IsarService.db.syncEvents.clear();
         await IsarService.db.stockEvents.clear();
       });
+      // Product photos are cached on disk by barcode alone, so the previous
+      // store's photo for a shared barcode would otherwise keep showing under
+      // this store - see the matching note in _completeLogin.
+      await ImageCacheService.clearCache();
     }
 
     final config = StoreConfig()
@@ -631,6 +636,12 @@ class AuthService {
         await IsarService.db.syncEvents.clear();
         await IsarService.db.stockEvents.clear();
       });
+      // The on-disk product photo cache is keyed by barcode only, not by
+      // store: without this, store A's photo for a barcode both stores sell
+      // kept displaying under store B (the "image leak" between accounts,
+      // reported 2026-09-24 - the shared-storage-file cause was fixed
+      // server-side, but this device-side copy survived every switch).
+      await ImageCacheService.clearCache();
     }
 
     final config = StoreConfig()
