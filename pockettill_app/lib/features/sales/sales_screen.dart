@@ -30,7 +30,11 @@ _SyncNudgeLevel _computeNudgeLevel(
   DateTime? lastSyncedAt,
 ) {
   if (status == SyncIndicatorStatus.offline) return _SyncNudgeLevel.none;
-  if (lastSyncedAt == null) return _SyncNudgeLevel.modal30Day;
+  // No sync timestamp means "not known yet", not "30+ days ago": switching
+  // to another store account (or a fresh install) leaves it null until that
+  // store's first sync lands, and warning "not backed up in 30 days" seconds
+  // after the owner synced was plainly wrong (reported 2026-09-24).
+  if (lastSyncedAt == null) return _SyncNudgeLevel.none;
 
   final days = DateTime.now().difference(lastSyncedAt).inDays;
   if (days > 30) return _SyncNudgeLevel.modal30Day;

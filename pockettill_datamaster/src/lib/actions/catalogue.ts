@@ -15,6 +15,45 @@ export type ApproveProductResult =
   | { conflict: { existingName: string }; error?: undefined }
   | undefined;
 
+/**
+ * Copies a store-submitted photo into the catalogue's own storage and returns
+ * the copy's public URL (or [url] unchanged if it isn't a store-owned file or
+ * the copy fails).
+ *
+ * The catalogue used to keep the submitting store's URL as-is, but a store's
+ * photo lives at a fixed `{storeId}/{productUuid}.jpg` path that the store
+ * overwrites in place on every re-upload - so replacing a photo in one store
+ * silently changed the catalogue image and every other store that had copied
+ * it (reported 2026-09-24). A unique, never-overwritten path per snapshot
+ * makes the catalogue image immune to later edits in any store.
+ */
+async function snapshotStoreImage(
+  supabase: ReturnType<typeof createServiceRoleClient>,
+  url: string | null | undefined,
+  barcode: string
+): Promise<string | null> {
+  if (!url) return null;
+  const marker = "/storage/v1/object/public/product-images/";
+  const at = url.indexOf(marker);
+  if (at === -1) return url; // already a catalogue-owned (or external) URL
+
+  const sourcePath = decodeURIComponent(url.slice(at + marker.length).split("?")[0]);
+  const destPath = `originals/${barcode}-${Date.now()}.jpg`;
+  try {
+    const { data: blob, error: downloadError } = await supabase.storage
+      .from("product-images")
+      .download(sourcePath);
+    if (downloadError || !blob) return url;
+    const { error: uploadError } = await supabase.storage
+      .from("catalogue-images")
+      .upload(destPath, blob, { contentType: "image/jpeg", upsert: false });
+    if (uploadError) return url;
+    return supabase.storage.from("catalogue-images").getPublicUrl(destPath).data.publicUrl;
+  } catch {
+    return url;
+  }
+}
+
 export interface ProductEdits {
   name: string;
   category: string;
@@ -96,14 +135,15 @@ export async function approveProduct(
   // is unchanged from before the image-enhancement workflow existed - the
   // original submission is the catalogue image, nothing else to track.
   const enhancedImageUrl = options.enhancedImageUrl ?? null;
+  const originalImageUrl = await snapshotStoreImage(supabase, submitter?.image_url, barcode);
   const imageFields = enhancedImageUrl
     ? {
         image_url: enhancedImageUrl,
-        original_image_url: submitter?.image_url ?? null,
+        original_image_url: originalImageUrl,
         is_image_enhanced: true,
       }
     : {
-        image_url: submitter?.image_url ?? null,
+        image_url: originalImageUrl,
         original_image_url: null,
         is_image_enhanced: false,
       };

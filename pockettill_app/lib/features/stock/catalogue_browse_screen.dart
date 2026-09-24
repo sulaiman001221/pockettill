@@ -118,9 +118,21 @@ class _CatalogueBrowseScreenState extends ConsumerState<CatalogueBrowseScreen> {
       _loadingProducts = !hasCached;
     });
 
-    final items = category == _kAllCategory
-        ? await repo.fetchAll(offset: 0)
-        : await repo.fetchByCategory(category, offset: 0);
+    // Bounded and failure-tolerant: with no timeout a stalled request left
+    // the pull-to-refresh spinner (and, with an empty cache, the full-screen
+    // one) spinning forever - reported 2026-09-24 right after an account
+    // switch. On failure keep whatever is already showing and stop loading.
+    List<CatalogueBrowseItem> items;
+    try {
+      items = await (category == _kAllCategory
+              ? repo.fetchAll(offset: 0)
+              : repo.fetchByCategory(category, offset: 0))
+          .timeout(const Duration(seconds: 15));
+    } catch (_) {
+      if (!mounted || _selectedCategory != category) return;
+      setState(() => _loadingProducts = false);
+      return;
+    }
     if (!mounted || _selectedCategory != category) return;
     setState(() {
       _products = items;

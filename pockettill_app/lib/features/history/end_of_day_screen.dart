@@ -26,6 +26,19 @@ class EndOfDayScreen extends ConsumerStatefulWidget {
 
 class _EndOfDayScreenState extends ConsumerState<EndOfDayScreen> {
   bool _printing = false;
+  bool _manualRefreshing = false;
+
+  /// The summary is a local database read that finishes in a few
+  /// milliseconds, so the provider's own loading state flips on and off too
+  /// fast to ever paint - the button looked dead when tapped. Hold the
+  /// spinner for a visible minimum so a tap always gives feedback.
+  Future<void> _onRefreshTapped() async {
+    if (_manualRefreshing) return;
+    setState(() => _manualRefreshing = true);
+    refreshEndOfDaySummary(ref, _day);
+    await Future.delayed(const Duration(milliseconds: 700));
+    if (mounted) setState(() => _manualRefreshing = false);
+  }
 
   DateTime get _day =>
       DateTime(widget.date.year, widget.date.month, widget.date.day);
@@ -83,8 +96,8 @@ class _EndOfDayScreenState extends ConsumerState<EndOfDayScreen> {
       backgroundColor: AppTheme.background,
       appBar: _EndOfDayAppBar(
         dateText: dateText,
-        refreshing: summaryAsync.isLoading,
-        onRefresh: () => refreshEndOfDaySummary(ref, _day),
+        refreshing: _manualRefreshing || summaryAsync.isLoading,
+        onRefresh: _onRefreshTapped,
       ),
       body: SafeArea(
         bottom: false,
@@ -129,7 +142,7 @@ class _EndOfDayAppBar extends StatelessWidget implements PreferredSizeWidget {
 
   final String dateText;
   final bool refreshing;
-  final VoidCallback onRefresh;
+  final Future<void> Function() onRefresh;
 
   @override
   Widget build(BuildContext context) {
