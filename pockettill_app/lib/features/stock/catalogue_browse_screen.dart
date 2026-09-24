@@ -486,6 +486,16 @@ class _CatalogueProductRow extends StatelessWidget {
   final bool selected;
   final VoidCallback? onTap;
 
+  /// Stable across launches (unlike String.hashCode, which Dart doesn't
+  /// promise to keep the same between runs/versions) - FNV-1a over the URL.
+  static String _urlFingerprint(String? url) {
+    var hash = 0x811c9dc5;
+    for (final unit in (url ?? '').codeUnits) {
+      hash = ((hash ^ unit) * 0x01000193) & 0xffffffff;
+    }
+    return hash.toRadixString(16);
+  }
+
   @override
   Widget build(BuildContext context) {
     final subtitleParts = [
@@ -496,7 +506,13 @@ class _CatalogueProductRow extends StatelessWidget {
     return ProductRow(
       name: item.name,
       imageUrl: item.imageUrl,
-      cacheKey: item.barcode,
+      // Namespaced away from the store's own product photos, which are cached
+      // under the bare barcode: sharing that key meant a store's own photo
+      // for a barcode showed up in the shared catalogue instead of the
+      // catalogue's (the "image leaks into the PocketTill catalogue" report,
+      // 2026-09-24). The URL fingerprint makes an admin replacing the
+      // catalogue photo fetch fresh instead of serving the old cached file.
+      cacheKey: 'catalogue_${item.barcode}_${_urlFingerprint(item.imageUrl)}',
       // Not dimmed for already-owned items (removed 2026-09-08 per
       // feedback) - the "In Stock" pill on the trailing edge is signal
       // enough on its own; fading the whole row read as the item being
