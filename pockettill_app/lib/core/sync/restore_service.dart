@@ -61,28 +61,88 @@ class RestoreService {
       return;
     }
 
+    // The "is local empty?" check above happens before the (slow) fetches,
+    // and the normal pull path can insert the very same rows while they run.
+    // uuid has no unique index, so a blind putAll then created a second copy
+    // of every row (a whole store's products showing twice after switching
+    // accounts, reported 2026-09-24). Re-check inside the write transaction,
+    // which serializes against the pull's own writes, and skip anything
+    // already there.
     await _isar.writeTxn(() async {
+      Future<List<T>> onlyNew<T>(
+        Iterable<T> incoming,
+        String Function(T) uuidOf,
+        Future<List<T>> Function() loadLocal,
+      ) async {
+        final have = (await loadLocal()).map(uuidOf).toSet();
+        return incoming.where((row) => !have.contains(uuidOf(row))).toList();
+      }
+
       await _isar.products.putAll(
-        products.map(productFromRow).toList(),
+        await onlyNew(
+          products.map(productFromRow),
+          (p) => p.uuid,
+          () => _isar.products.where().findAll(),
+        ),
       );
-      await _isar.sales.putAll(sales.map(saleFromRow).toList());
-      await _isar.saleItems.putAll(saleItems.map(saleItemFromRow).toList());
+      final newSales = await onlyNew(
+        sales.map(saleFromRow),
+        (s) => s.uuid,
+        () => _isar.sales.where().findAll(),
+      );
+      await _isar.sales.putAll(newSales);
+      // Sale items have no uuid of their own - they belong to whichever
+      // sales were just inserted here; items of a sale that already existed
+      // locally are already there too.
+      final newSaleUuids = newSales.map((s) => s.uuid).toSet();
+      await _isar.saleItems.putAll(
+        saleItems
+            .map(saleItemFromRow)
+            .where((item) => newSaleUuids.contains(item.saleUuid))
+            .toList(),
+      );
       await _isar.creditCustomers.putAll(
-        creditCustomers.map(creditCustomerFromRow).toList(),
+        await onlyNew(
+          creditCustomers.map(creditCustomerFromRow),
+          (c) => c.uuid,
+          () => _isar.creditCustomers.where().findAll(),
+        ),
       );
       await _isar.creditTransactions.putAll(
-        creditTransactions.map(creditTransactionFromRow).toList(),
+        await onlyNew(
+          creditTransactions.map(creditTransactionFromRow),
+          (t) => t.uuid,
+          () => _isar.creditTransactions.where().findAll(),
+        ),
       );
       await _isar.returnRecords.putAll(
-        returns.map(returnRecordFromRow).toList(),
+        await onlyNew(
+          returns.map(returnRecordFromRow),
+          (r) => r.uuid,
+          () => _isar.returnRecords.where().findAll(),
+        ),
       );
       await _isar.returnItems.putAll(
-        returnItems.map(returnItemFromRow).toList(),
+        await onlyNew(
+          returnItems.map(returnItemFromRow),
+          (r) => r.uuid,
+          () => _isar.returnItems.where().findAll(),
+        ),
       );
       await _isar.extraIncomes.putAll(
-        extraIncome.map(extraIncomeFromRow).toList(),
+        await onlyNew(
+          extraIncome.map(extraIncomeFromRow),
+          (e) => e.uuid,
+          () => _isar.extraIncomes.where().findAll(),
+        ),
       );
-      await _isar.riskLogs.putAll(riskLog.map(riskLogFromRow).toList());
+      await _isar.riskLogs.putAll(
+        await onlyNew(
+          riskLog.map(riskLogFromRow),
+          (r) => r.uuid,
+          () => _isar.riskLogs.where().findAll(),
+        ),
+      );
     });
   }
 

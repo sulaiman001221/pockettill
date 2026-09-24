@@ -14,6 +14,7 @@ import '../../shared/models/product.dart';
 import '../../shared/repositories/repositories.dart';
 import '../../shared/theme/app_theme.dart';
 import '../../shared/widgets/quick_stock_update_sheet.dart';
+import '../../shared/widgets/update_ready_sheet.dart';
 import '../stock/add_product_screen.dart';
 import '../stock/barcode_scanner_screen.dart';
 import '../stock/stock_ui.dart';
@@ -362,7 +363,10 @@ class _SalesScreenState extends ConsumerState<SalesScreen> {
       title: 'Update ready',
       subtitle: 'A newer version of PocketTill has downloaded',
       actionLabel: 'Update Now',
-      onAction: () => ref.read(appUpdateServiceProvider).completeUpdate(),
+      onAction: () async {
+        final confirmed = await showUpdateReadySheet(context);
+        if (confirmed) await ref.read(appUpdateServiceProvider).completeUpdate();
+      },
       onDismiss: () => setState(() => _updateBannerDismissed = true),
     );
   }

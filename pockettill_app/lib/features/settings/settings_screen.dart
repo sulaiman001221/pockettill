@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../core/auth/auth_service.dart';
@@ -76,10 +77,17 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   bool _foundingProgressLoading = false;
   bool _checkingStatus = false;
 
+  // The installed build's real version (from the platform, so it always
+  // matches pubspec) - this was a hardcoded "v1.0.0" that never changed.
+  String _appVersion = '';
+
   @override
   void initState() {
     super.initState();
     _load();
+    PackageInfo.fromPlatform().then((info) {
+      if (mounted) setState(() => _appVersion = '${info.version} (${info.buildNumber})');
+    }).catchError((_) {});
   }
 
   Future<void> _load() async {
@@ -376,9 +384,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           children: [
             Image.asset('assets/images/pockettill_logo.png', height: 40),
             const SizedBox(height: 16),
-            const Text(
-              'PocketTill v1.0.0',
-              style: TextStyle(
+            Text(
+              _appVersion.isEmpty ? 'PocketTill' : 'PocketTill v$_appVersion',
+              style: const TextStyle(
                 fontWeight: FontWeight.bold,
                 fontSize: 16,
                 color: AppTheme.textPrimary,
@@ -917,9 +925,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 style: TextStyle(color: AppTheme.textPrimary, fontSize: 14),
               ),
               const Spacer(),
-              const Text(
-                'v1.0.0 (Beta)',
-                style: TextStyle(color: AppTheme.textSecondary, fontSize: 13),
+              Text(
+                _appVersion.isEmpty ? '' : 'v$_appVersion',
+                style: const TextStyle(color: AppTheme.textSecondary, fontSize: 13),
               ),
             ],
           ),
