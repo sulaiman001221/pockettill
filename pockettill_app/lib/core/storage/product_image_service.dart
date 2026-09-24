@@ -1,6 +1,6 @@
 import 'dart:io';
-import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -45,13 +45,25 @@ class ProductImageService {
     final compressed = await _compress(source);
     final path = '$storeId/$productUuid.jpg';
 
-    await SupabaseService.supabaseClient.storage
-        .from(_bucket)
-        .uploadBinary(
-          path,
-          compressed,
-          fileOptions: const FileOptions(contentType: 'image/jpeg', upsert: true),
-        );
+    // The access token can go stale while the Add/Edit Product screen sits
+    // open (barcode scan -> Open Food Facts lookup -> deciding to swap the
+    // photo, or the app briefly backgrounded - Supabase's background
+    // auto-refresh timer doesn't fire while suspended), and this direct
+    // Storage call has no other retry: the first upload after that hit a
+    // 401, the SDK refreshed on its own, and the owner's second attempt
+    // worked - "fails on the 1st upload, works on the 2nd" (reported
+    // 2026-09-23, same root cause already found and fixed for realtime
+    // channels, see RealtimeDataSyncService.start()). Refresh up front if
+    // the token is already expired, and retry once after refreshing if the
+    // first attempt still fails for any reason.
+    await _refreshSessionIfExpired();
+    try {
+      await _upload(path, compressed);
+    } catch (firstError) {
+      debugPrint('ProductImageService: first upload attempt failed: $firstError');
+      await _refreshSessionIfExpired(force: true);
+      await _upload(path, compressed);
+    }
 
     final publicUrl = SupabaseService.supabaseClient.storage
         .from(_bucket)
@@ -63,6 +75,30 @@ class ProductImageService {
     // which is exactly the "old photo shows until I force-stop the app" bug
     // this fixes.
     return '$publicUrl?v=${DateTime.now().millisecondsSinceEpoch}';
+  }
+
+  static Future<void> _upload(String path, Uint8List bytes) {
+    return SupabaseService.supabaseClient.storage
+        .from(_bucket)
+        .uploadBinary(
+          path,
+          bytes,
+          fileOptions: const FileOptions(contentType: 'image/jpeg', upsert: true),
+        );
+  }
+
+  /// Best-effort: never throws. A failed refresh just leaves the caller to
+  /// try the upload anyway and surface its own error.
+  static Future<void> _refreshSessionIfExpired({bool force = false}) async {
+    final auth = SupabaseService.supabaseClient.auth;
+    final session = auth.currentSession;
+    if (session == null) return;
+    if (!force && !session.isExpired) return;
+    try {
+      await auth.refreshSession();
+    } catch (e) {
+      debugPrint('ProductImageService: session refresh failed: $e');
+    }
   }
 
   /// Removes this product's image from Storage outright (the "remove image

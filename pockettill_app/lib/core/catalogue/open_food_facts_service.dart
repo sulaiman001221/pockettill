@@ -81,23 +81,64 @@ String _normalizeMass(String input) {
   return '$number$normalizedUnit';
 }
 
-/// Normalizes a raw Open Food Facts word-based field (name, category) to
-/// PocketTill's naming convention: each word capitalized, the rest
-/// lowercase, with any run of whitespace or punctuation between words
-/// collapsed to a single space - Open Food Facts data is inconsistent about
-/// this (double spaces, hyphens/underscores standing in for spaces in
-/// category tags). Deliberately not used for [OpenFoodFactsProduct.mass]:
-/// splitting on non-alphanumeric characters would break up a decimal
-/// quantity like "1.5 L".
+/// Words that stay lowercase unless they open the name - standard title-case
+/// convention ("Sauce of the Day", not "Sauce Of The Day"). Mirrors
+/// pockettill_datamaster/src/lib/catalogue-format.ts's MINOR_WORDS - keep
+/// both in sync.
+const _minorWords = {
+  'a', 'an', 'and', 'are', 'as', 'at', 'but', 'by', 'for', 'in', 'is',
+  'nor', 'of', 'on', 'or', 'the', 'to', 'with',
+};
+
+/// Uppercases the first letter found in [word] and lowercases every other
+/// letter, leaving every non-letter character (digits, %, &, ...) exactly
+/// where it was.
+String _capitalizeLetters(String word) {
+  var seenFirstLetter = false;
+  return word.replaceAllMapped(RegExp(r'[A-Za-z]'), (match) {
+    final letter = match[0]!;
+    if (seenFirstLetter) return letter.toLowerCase();
+    seenFirstLetter = true;
+    return letter.toUpperCase();
+  });
+}
+
+/// Normalizes a raw Open Food Facts product name to PocketTill's naming
+/// convention: title-cased, split on whitespace only, so punctuation *within*
+/// a word (%, /, &, a hyphen) - meaningful on a product label - is preserved
+/// exactly instead of being treated as a word boundary to throw away.
+/// Splitting on every non-alphanumeric run used to silently delete it: "100%
+/// Pulp" became "100 Pulp", "Rice/Pasta" became "Rice Pasta". A hyphen or
+/// slash still starts a fresh capital on each side ("stir-fry" ->
+/// "Stir-Fry"), just without discarding the character itself; a word in
+/// [_minorWords] stays lowercase unless it opens the name. Same fix as
+/// pockettill_datamaster's catalogue-format.ts (found and fixed there
+/// 2026-09-23, ported here 2026-09-24). Deliberately not used for
+/// [OpenFoodFactsProduct.mass], which has its own [_normalizeMass].
 String _toPocketTillCase(String input) {
   final words = input
       .trim()
-      .split(RegExp(r'[^A-Za-z0-9]+'))
-      .where((word) => word.isNotEmpty);
+      .split(RegExp(r'\s+'))
+      .where((word) => word.isNotEmpty)
+      .toList();
   if (words.isEmpty) return input.trim();
-  return words
-      .map((word) => '${word[0].toUpperCase()}${word.substring(1).toLowerCase()}')
-      .join(' ');
+
+  final cased = <String>[];
+  for (var i = 0; i < words.length; i++) {
+    final word = words[i];
+    if (i > 0 && _minorWords.contains(word.toLowerCase())) {
+      cased.add(word.toLowerCase());
+      continue;
+    }
+    cased.add(
+      word.splitMapJoin(
+        RegExp(r'[-/]'),
+        onMatch: (match) => match[0]!,
+        onNonMatch: _capitalizeLetters,
+      ),
+    );
+  }
+  return cased.join(' ');
 }
 
 /// Fallback barcode lookup against Open Food Facts (world.openfoodfacts.org)

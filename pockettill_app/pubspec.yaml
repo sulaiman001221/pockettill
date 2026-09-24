@@ -2,7 +2,7 @@ name: pockettill_app
 description: "PocketTill - offline-first POS app for South African spaza shops."
 publish_to: 'none'
 
-version: 1.1.1+5
+version: 1.1.2+6
 
 environment:
   sdk: ^3.12.2

@@ -19,6 +19,7 @@ import 'core/sync/reachability_service.dart';
 import 'core/sync/realtime_data_sync_service.dart';
 import 'core/sync/sync_service.dart';
 import 'shared/models/sync_event.dart';
+import 'shared/utils/sync_status.dart';
 import 'shared/theme/system_ui.dart';
 
 /// The [ScannerService] appropriate for this device, chosen once at app
@@ -72,6 +73,15 @@ Future<void> main() async {
   );
 
   final syncService = container.read(syncServiceProvider);
+
+  // A sync cycle that completed talked to Supabase successfully, which is
+  // stronger proof of connectivity than the periodic health ping - so it
+  // clears a stale "No internet" reading right away instead of leaving it up
+  // until the next ping succeeds (reported 2026-09-24: "shows no internet,
+  // then syncs after a few seconds or a minute").
+  syncService.syncStatus.listen((status) {
+    if (status == SyncStatus.success) reachabilityService.confirmReachable();
+  });
   final realtimeDataSync = container.read(realtimeDataSyncServiceProvider);
 
   Future<void> syncAndGoLive() async {
