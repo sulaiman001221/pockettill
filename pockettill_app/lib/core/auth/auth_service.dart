@@ -313,15 +313,16 @@ class AuthService {
   }) async {
     final formatted = formatPhone(phone);
     // REVIEWER_TEST_ACCOUNT - see the block comment at the top of this
-    // class. Whatever a reviewer types into the password field is ignored
-    // for this one number, since [setPassword] never actually changes it.
+    // class. The typed password is checked like any other account's (the
+    // account's real password is pinned to the fixed value by [setPassword]
+    // being a no-op for it) - this used to substitute the fixed password
+    // for whatever was typed, so any password "worked" for this number,
+    // which looks like an open backdoor to a reviewer. Only the new-device
+    // OTP challenge is skipped for it.
     final isReviewerAccount = formatted == _reviewerTestPhone;
 
     final authResponse = await SupabaseService.supabaseClient.auth
-        .signInWithPassword(
-          phone: formatted,
-          password: isReviewerAccount ? _reviewerTestPassword : password,
-        );
+        .signInWithPassword(phone: formatted, password: password);
 
     if (authResponse.user == null) {
       throw Exception('Login failed');
