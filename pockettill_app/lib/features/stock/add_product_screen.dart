@@ -328,7 +328,27 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
     );
     if (source == null) return;
 
-    final file = await ProductImageService.pickImage(source);
+    File? file;
+    try {
+      file = await ProductImageService.pickImage(source);
+    } catch (e) {
+      // A plain cancellation returns null and never throws (see
+      // ProductImageService.pickImage's doc comment) - this catch is for a
+      // genuine failure (camera permission denied this time, camera unusable,
+      // a corrupt/unreadable file). Uncaught, this call previously threw
+      // silently with no UI feedback at all - "I upload several photos and
+      // they don't go through" (reported 2026-09-28) exactly matches picking
+      // repeatedly and never seeing any error, because there wasn't one to
+      // see - the picked file just silently never reached _pickedImageFile.
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Could not open camera/gallery: $e'),
+          backgroundColor: AppTheme.logoutRed,
+        ),
+      );
+      return;
+    }
     if (file == null || !mounted) return;
     setState(() {
       _pickedImageFile = file;
@@ -361,16 +381,30 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
       }
     }
 
-    final normalizedName = _nameController.text.trim().toLowerCase();
-    final normalizedMass = _massController.text.trim().toLowerCase();
-    final allProducts = await repo.getAll();
-    final hasDuplicate = allProducts.any((p) {
-      if (p.uuid == currentUuid) return false;
-      final sameName = p.name.trim().toLowerCase() == normalizedName;
-      final sameMass = (p.mass ?? '').trim().toLowerCase() == normalizedMass;
-      return sameName && sameMass;
-    });
-    if (hasDuplicate) return 'Product already exists';
+    // Only meant to catch an accidental duplicate *manual* entry (typing the
+    // same product in twice with no barcode to tell them apart) - it used to
+    // run unconditionally, so two genuinely different products that happen
+    // to share a display name and mass (e.g. two spice sachets both named
+    // "Rajah Mild & Spicy 7g" under different barcodes) got blocked as
+    // "already exists" even though their barcodes proved they were distinct
+    // (reported 2026-09-28, "similar names ... even if the barcodes are
+    // different"). A present, distinct barcode is already a stronger
+    // identity check than name+mass, so skip this one whenever this product
+    // has a barcode - only bother comparing name+mass among products that,
+    // like this one, have none.
+    if (barcode.isEmpty) {
+      final normalizedName = _nameController.text.trim().toLowerCase();
+      final normalizedMass = _massController.text.trim().toLowerCase();
+      final allProducts = await repo.getAll();
+      final hasDuplicate = allProducts.any((p) {
+        if (p.uuid == currentUuid) return false;
+        if (p.barcode.isNotEmpty) return false;
+        final sameName = p.name.trim().toLowerCase() == normalizedName;
+        final sameMass = (p.mass ?? '').trim().toLowerCase() == normalizedMass;
+        return sameName && sameMass;
+      });
+      if (hasDuplicate) return 'Product already exists';
+    }
 
     return null;
   }
@@ -734,10 +768,14 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
         ? (_existingImageUrl ?? _autoFilledImageUrl)
         : null;
     final hasImage = picked != null || networkUrl != null;
-    // Only meaningful for the product's own original image - a fresh
-    // catalogue/OFF autofill URL was never cached under this barcode, and
-    // this stops applying the instant a different photo is picked or the
-    // current one removed anyway (networkUrl becomes null either way).
+    // Only meaningful for the product's own original image - [cachedImagePath]
+    // is a path already known to hold that exact image's bytes. A fresh
+    // catalogue/OFF autofill URL has no such known-good path (showing it
+    // here does cache *something* under this barcode as a side effect - see
+    // ProductRepository.save's create-path comment for why that's handled
+    // there, not here), and this stops applying the instant a different
+    // photo is picked or the current one removed anyway (networkUrl becomes
+    // null either way).
     final cachedImagePath = networkUrl != null && networkUrl == _existingImageUrl
         ? widget.existingProduct?.cachedImagePath
         : null;

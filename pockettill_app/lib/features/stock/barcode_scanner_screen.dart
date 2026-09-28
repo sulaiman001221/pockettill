@@ -144,7 +144,26 @@ class _ScannerBodyState extends ConsumerState<_ScannerBody> {
       fit: StackFit.expand,
       children: [
         if (cameraScanner != null)
-          MobileScanner(controller: cameraScanner.controller)
+          MobileScanner(
+            controller: cameraScanner.controller,
+            // Without these, an initialization failure (or the controller
+            // getting stuck un-initialized after this screen is opened,
+            // closed, then reopened - the same long-lived controller is
+            // reused every time, see BarcodeScannerScreen.dispose) renders
+            // as a bare black ColoredBox with no icon, no message and no way
+            // out but backing all the way out of the screen - reported
+            // 2026-09-28 as "opening the scanner sometimes just shows
+            // black". Both give a visible, recoverable state instead.
+            errorBuilder: (context, error) => _ScannerFailed(
+              message: error.errorCode.message,
+              onRetry: () => cameraScanner.controller.start(),
+            ),
+            placeholderBuilder: (context) => _ScannerFailed(
+              message: 'Camera is starting…',
+              onRetry: () => cameraScanner.controller.start(),
+              isLoading: true,
+            ),
+          )
         else
           const _WaitingForHardwareScan(),
         _ScannerOverlay(
@@ -202,6 +221,93 @@ class _WaitingForHardwareScan extends StatelessWidget {
             'Press the scanner button on your device to scan a barcode.',
             textAlign: TextAlign.center,
             style: TextStyle(color: Colors.white70, fontSize: 16),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Shown in place of the camera preview when it fails outright ([isLoading]
+/// false, a real [MobileScannerException]) or hasn't started after a beat
+/// ([isLoading] true - still climbing out of the "not initialized yet"
+/// placeholder state most opens pass through in well under a second). The
+/// retry button is hidden for the first few seconds of a loading state so a
+/// normal camera start never flashes it - only a stall long enough to look
+/// like the reported black screen reveals it.
+class _ScannerFailed extends StatefulWidget {
+  const _ScannerFailed({
+    required this.message,
+    required this.onRetry,
+    this.isLoading = false,
+  });
+
+  final String message;
+  final VoidCallback onRetry;
+  final bool isLoading;
+
+  @override
+  State<_ScannerFailed> createState() => _ScannerFailedState();
+}
+
+class _ScannerFailedState extends State<_ScannerFailed> {
+  bool _showRetry = false;
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.isLoading) {
+      _timer = Timer(const Duration(seconds: 4), () {
+        if (mounted) setState(() => _showRetry = true);
+      });
+    } else {
+      _showRetry = true;
+    }
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ColoredBox(
+      color: Colors.black,
+      child: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (widget.isLoading && !_showRetry)
+                const CircularProgressIndicator(color: Colors.white)
+              else
+                const Icon(Icons.error_outline, color: Colors.white70, size: 40),
+              const SizedBox(height: 16),
+              Text(
+                widget.isLoading && !_showRetry ? widget.message : 'Camera not responding',
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: Colors.white70),
+              ),
+              if (_showRetry) ...[
+                const SizedBox(height: 20),
+                ElevatedButton(
+                  onPressed: widget.onRetry,
+                  child: const Text('Retry Camera'),
+                ),
+                const SizedBox(height: 8),
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text(
+                    'Search by Product Name Instead',
+                    style: TextStyle(color: Colors.white70),
+                  ),
+                ),
+              ],
+            ],
           ),
         ),
       ),

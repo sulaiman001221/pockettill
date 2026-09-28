@@ -131,6 +131,25 @@ class ProductRepository {
         product.uuid = _uuid.v4();
       }
       product.createdAt = now;
+      // The on-device image cache is keyed by barcode, not by uuid or which
+      // URL was actually fetched (see ImageCacheService's own doc comment) -
+      // add_product_screen's own image-picker preview shows the Layer
+      // 1/Open Food Facts auto-filled photo *before* this product is ever
+      // saved, and that preview's CachedProductImage downloads and caches it
+      // under this same barcode key as a side effect of just being on
+      // screen. If the owner then picks their own photo instead, this brand
+      // new product's `imageUrl` is correct, but the stale auto-fill photo
+      // is still sitting on disk under its barcode from the preview - and
+      // display always checks disk before ever looking at imageUrl, so the
+      // auto-filled photo kept showing regardless of what was actually
+      // saved ("the main photo is still the one pulled from open food
+      // fact", reported 2026-09-28). The edit path already guards against
+      // this for an existing product's *changed* image below; a brand-new
+      // product needs the same guard against whatever a preview happened to
+      // leave behind under its barcode.
+      if ((product.imageUrl ?? '').isNotEmpty && product.barcode.isNotEmpty) {
+        await ImageCacheService.deleteCachedFile(product.barcode);
+      }
       await _isar.writeTxn(() async {
         await _isar.products.put(product);
       });

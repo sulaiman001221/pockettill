@@ -390,6 +390,20 @@ class _StockScreenState extends ConsumerState<StockScreen> {
                               (context, index) {
                                 final product = filtered[index];
                                 return _ProductListItem(
+                                  // Without a stable key, Flutter matches
+                                  // rows to widgets by list position, not
+                                  // identity - editing a product (which can
+                                  // shift its position via the stock-status
+                                  // filter or just a name/price change) then
+                                  // reused another product's already-resolved
+                                  // image state for this position, so the
+                                  // freshly edited product's own photo didn't
+                                  // show until a manual refresh. Same class of
+                                  // bug already fixed in
+                                  // catalogue_browse_screen.dart; this list
+                                  // never got the same fix. Reported
+                                  // 2026-09-28.
+                                  key: ValueKey(product.uuid),
                                   product: product,
                                   onQuickAdd: () => _quickAddStock(product),
                                   onEdit: () => _openAddProduct(existing: product),
@@ -569,6 +583,7 @@ class _FilterChipButton extends StatelessWidget {
 /// background/shadow, just [ProductRow]'s own divider between rows.
 class _ProductListItem extends StatelessWidget {
   const _ProductListItem({
+    super.key,
     required this.product,
     required this.onQuickAdd,
     required this.onEdit,

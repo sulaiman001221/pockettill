@@ -1021,6 +1021,16 @@ class _CheckoutBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final hasItems = cartItems.isNotEmpty;
+    // The bar sits at the very bottom of the Scaffold's body with no
+    // enclosing SafeArea (ShellScreen sets resizeToAvoidBottomInset: false
+    // and passes SalesScreen straight through), so a fixed bottom padding
+    // alone leaves the Checkout button sitting under - or partly behind -
+    // the system gesture bar/3-button nav on a phone whose inset is taller
+    // than that fixed value (reported on a Samsung A06, 2026-09-28). 25 was
+    // tuned for the common case of a small/no inset; adding the device's
+    // actual bottom inset on top keeps that same visual breathing room
+    // there while giving real clearance wherever the system bar is bigger.
+    final systemInset = MediaQuery.paddingOf(context).bottom;
     return Container(
       decoration: BoxDecoration(
         color: AppTheme.surface,
@@ -1032,7 +1042,12 @@ class _CheckoutBar extends StatelessWidget {
           ),
         ],
       ),
-      padding: const EdgeInsets.only(top: 16, left: 20, right: 20, bottom: 25),
+      padding: EdgeInsets.only(
+        top: 16,
+        left: 20,
+        right: 20,
+        bottom: 25 + systemInset,
+      ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
