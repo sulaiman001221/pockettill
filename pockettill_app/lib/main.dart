@@ -18,6 +18,8 @@ import 'core/supabase/supabase_service.dart';
 import 'core/sync/reachability_service.dart';
 import 'core/sync/realtime_data_sync_service.dart';
 import 'core/sync/sync_service.dart';
+import 'core/update/app_update_service.dart';
+import 'features/sales/sales_providers.dart';
 import 'shared/models/sync_event.dart';
 import 'shared/utils/sync_status.dart';
 import 'shared/theme/system_ui.dart';
@@ -83,6 +85,33 @@ Future<void> main() async {
     if (status == SyncStatus.success) reachabilityService.confirmReachable();
   });
   final realtimeDataSync = container.read(realtimeDataSyncServiceProvider);
+
+  // Installs a downloaded Play Store update with no prompt at all - neither
+  // Play's nor one of our own - the instant it's safe to (the cart is
+  // empty), since completeUpdate() restarts the whole app process outright
+  // and would otherwise wipe an in-progress sale. This app-wide banner and a
+  // separate confirmation sheet both asked "restart now?" first; the owner
+  // asked twice (2026-09-24, 2026-09-29) for the whole thing to just happen
+  // silently instead. Play's own download-consent dialog, shown earlier by
+  // startFlexibleUpdate() itself, is untouched - only these two
+  // PocketTill-drawn prompts are gone.
+  final appUpdateService = container.read(appUpdateServiceProvider);
+  var updateReadyToInstall = false;
+  Future<void> installUpdateIfSafe() async {
+    if (!updateReadyToInstall) return;
+    if (container.read(salesNotifierProvider).cartItems.isNotEmpty) return;
+    await appUpdateService.completeUpdate();
+  }
+
+  appUpdateService.bannerState.listen((state) {
+    if (state != AppUpdateBannerState.readyToInstall) return;
+    updateReadyToInstall = true;
+    unawaited(installUpdateIfSafe());
+  });
+  container.listen(
+    salesNotifierProvider,
+    (previous, next) => unawaited(installUpdateIfSafe()),
+  );
 
   Future<void> syncAndGoLive() async {
     // Push this device's own pending changes first, then open the realtime

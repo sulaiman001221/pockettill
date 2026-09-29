@@ -92,12 +92,10 @@ class ImageCacheService {
     if (await isStorageLow()) return null;
 
     try {
-      final response = await http
-          .get(Uri.parse(remoteUrl))
-          .timeout(const Duration(seconds: 15));
-      if (response.statusCode != 200) return null;
+      final bytes = await _download(remoteUrl);
+      if (bytes == null) return null;
 
-      final compressed = await _compress(response.bodyBytes);
+      final compressed = await _compress(bytes);
       final file = await _fileFor(cacheKey);
       await file.writeAsBytes(compressed, flush: true);
       // Image.file/FileImage cache decoded bytes keyed by this file's path,
@@ -109,6 +107,33 @@ class ImageCacheService {
       // 2026-09-19.
       PaintingBinding.instance.imageCache.evict(FileImage(file));
       return file;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Fetches [remoteUrl]'s bytes, retrying once after a short pause on a
+  /// failure. A photo just uploaded moments ago by *this exact edit* (the
+  /// most common time this method runs at all - display always tries to
+  /// fetch a changed imageUrl right away) can 404 or otherwise fail on the
+  /// very next GET: Supabase Storage's public-read path isn't guaranteed to
+  /// be immediately consistent with an upload that just completed. Without
+  /// this, that single failed attempt was the whole story until the next
+  /// background image sync happened to run (up to ~30-60s later, since it
+  /// only retries missing images once per periodic sync cycle) - reported
+  /// 2026-09-29 as a new photo taking "about a minute" to actually show,
+  /// consistently, regardless of how the product was found.
+  static Future<Uint8List?> _download(String url) async {
+    final first = await _attemptDownload(url);
+    if (first != null) return first;
+    await Future.delayed(const Duration(seconds: 2));
+    return _attemptDownload(url);
+  }
+
+  static Future<Uint8List?> _attemptDownload(String url) async {
+    try {
+      final response = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 15));
+      return response.statusCode == 200 ? response.bodyBytes : null;
     } catch (_) {
       return null;
     }
