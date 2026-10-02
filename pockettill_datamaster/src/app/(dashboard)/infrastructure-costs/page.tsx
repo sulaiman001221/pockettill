@@ -1,3 +1,4 @@
+import { GeminiSection } from "@/components/infrastructure/gemini-section";
 import { SupabaseCostSection } from "@/components/infrastructure/supabase-cost-section";
 import { TwilioSection } from "@/components/infrastructure/twilio-section";
 import { PageHeader } from "@/components/shared/page-header";
@@ -23,6 +24,13 @@ export default function InfrastructureCostsPage() {
       <div className="flex flex-col gap-4">
         <h2 className="text-lg font-semibold">Twilio</h2>
         <TwilioSection />
+      </div>
+
+      <Separator />
+
+      <div className="flex flex-col gap-4">
+        <h2 className="text-lg font-semibold">Gemini (AI image enhancement)</h2>
+        <GeminiSection />
       </div>
     </div>
   );

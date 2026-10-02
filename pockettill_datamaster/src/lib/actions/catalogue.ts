@@ -6,7 +6,7 @@ import { logAudit } from "@/lib/audit";
 import { canManageStores, getCurrentAdmin } from "@/lib/auth";
 import { formatProductMass, formatProductName } from "@/lib/catalogue-format";
 import { CATALOGUE_CACHE_TAG } from "@/lib/data/catalogue";
-import { enhanceProductImage } from "@/lib/gemini-image";
+import { enhanceProductImage, estimateImageCostUsd } from "@/lib/gemini-image";
 import { createServiceRoleClient } from "@/lib/supabase/server";
 
 export type CatalogueActionResult = { error?: string } | undefined;
@@ -323,7 +323,12 @@ export async function enhanceImageWithAI(
   );
   if (stored.error) return { error: stored.error };
 
-  await logAudit(admin.id, "product.image_enhanced_ai", barcode, { model: result.model });
+  // cost_usd is stored on the row (not recomputed later) so past months keep
+  // the price that applied at the time if Google changes it.
+  await logAudit(admin.id, "product.image_enhanced_ai", barcode, {
+    model: result.model,
+    cost_usd: estimateImageCostUsd(result.model),
+  });
   return { url: stored.url };
 }
 

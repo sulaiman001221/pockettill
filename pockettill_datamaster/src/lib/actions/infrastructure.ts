@@ -6,6 +6,10 @@ export async function retryTwilioCosts() {
   revalidateTag("twilio-costs");
 }
 
+export async function retryGeminiCosts() {
+  revalidateTag("gemini-costs");
+}
+
 export async function retrySupabaseCosts() {
   revalidateTag("supabase-costs");
 }

@@ -29,6 +29,24 @@ export const ENHANCE_PROMPT =
 
 const TIMEOUT_MS = 55_000;
 
+/** Google's published price for one generated 1K image, in USD (checked
+ * 2026-10-02 against ai.google.dev/gemini-api/docs/pricing). The input photo
+ * adds well under $0.001, so it's left out. Used for the "estimated spend" on
+ * the Infrastructure Costs page - Google doesn't expose spend through an API
+ * key, so DataMaster counts its own calls instead. */
+const IMAGE_PRICE_USD: Record<string, number> = {
+  "gemini-3.1-flash-lite-image": 0.0336,
+  "gemini-3.1-flash-image": 0.067,
+  "gemini-3-pro-image": 0.134,
+  "gemini-2.5-flash-image": 0.039,
+};
+
+/** Price of one image from [model]. An unrecognised model name is priced at
+ * the middle tier rather than as free, so spend is never understated. */
+export function estimateImageCostUsd(model: string): number {
+  return IMAGE_PRICE_USD[model] ?? 0.067;
+}
+
 export type EnhanceResult =
   | { ok: true; bytes: Buffer; mimeType: string; model: string }
   | { ok: false; error: string };
