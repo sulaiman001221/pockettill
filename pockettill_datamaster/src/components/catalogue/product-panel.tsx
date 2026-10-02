@@ -5,6 +5,7 @@ import { toast } from "sonner";
 
 import {
   approveProduct,
+  enhanceImageWithAI,
   updateVerifiedProduct,
   uploadEnhancedCatalogueImage,
 } from "@/lib/actions/catalogue";
@@ -151,6 +152,7 @@ export function ProductPanel({
   // 2026-09-08).
   const [enhancedTouched, setEnhancedTouched] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [enhancingAI, setEnhancingAI] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -201,6 +203,23 @@ export function ProductPanel({
     }
     setEnhancedUrl(result.url ?? null);
     setEnhancedTouched(true);
+  }
+
+  async function handleEnhanceWithAI() {
+    if (!item) return;
+    setEnhancingAI(true);
+    const result = await enhanceImageWithAI(item.barcode);
+    setEnhancingAI(false);
+
+    if (result.error) {
+      toast.error(result.error);
+      return;
+    }
+    // Same state a manual upload sets: shows in the Enhanced preview and is
+    // only committed to the catalogue when the admin saves the product.
+    setEnhancedUrl(result.url ?? null);
+    setEnhancedTouched(true);
+    toast.success("Enhanced image ready — check it, then save the product.");
   }
 
   function handleConfirm(force = false) {
@@ -288,7 +307,7 @@ export function ProductPanel({
               }
             />
           </div>
-          <div>
+          <div className="flex flex-wrap gap-2">
             <input
               ref={fileInputRef}
               type="file"
@@ -298,9 +317,18 @@ export function ProductPanel({
             />
             <Button
               type="button"
+              size="sm"
+              disabled={uploading || enhancingAI || !item?.imageUrl}
+              title={item?.imageUrl ? undefined : "This product has no photo to enhance"}
+              onClick={handleEnhanceWithAI}
+            >
+              {enhancingAI ? "Enhancing… (~15s)" : "Enhance with AI"}
+            </Button>
+            <Button
+              type="button"
               variant="outline"
               size="sm"
-              disabled={uploading}
+              disabled={uploading || enhancingAI}
               onClick={() => fileInputRef.current?.click()}
             >
               {uploading ? "Uploading…" : "Upload Enhanced Image"}

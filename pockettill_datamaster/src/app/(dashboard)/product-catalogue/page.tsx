@@ -5,6 +5,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 export const metadata = { title: "Product Catalogue" };
 
+// The panel's "Enhance with AI" server action runs under this route's limits
+// and waits on a Gemini image generation (typically ~10-20s) - well past
+// Vercel's default function timeout.
+export const maxDuration = 60;
+
 export default async function ProductCataloguePage({
   searchParams,
 }: {

@@ -6,6 +6,7 @@ import { logAudit } from "@/lib/audit";
 import { canManageStores, getCurrentAdmin } from "@/lib/auth";
 import { formatProductMass, formatProductName } from "@/lib/catalogue-format";
 import { CATALOGUE_CACHE_TAG } from "@/lib/data/catalogue";
+import { enhanceProductImage } from "@/lib/gemini-image";
 import { createServiceRoleClient } from "@/lib/supabase/server";
 
 export type CatalogueActionResult = { error?: string } | undefined;
@@ -206,6 +207,18 @@ export async function uploadEnhancedCatalogueImage(
 
   const supabase = createServiceRoleClient();
   const bytes = new Uint8Array(await file.arrayBuffer());
+  return storeEnhancedImage(supabase, barcode, bytes, file.type);
+}
+
+/** Writes [bytes] to the catalogue's own storage as [barcode]'s enhanced image
+ * and returns its (cache-busted) public URL - shared by the manual upload and
+ * the AI enhancement so both land in exactly the same place. */
+async function storeEnhancedImage(
+  supabase: ReturnType<typeof createServiceRoleClient>,
+  barcode: string,
+  bytes: Uint8Array,
+  contentType: string
+): Promise<{ url?: string; error?: string }> {
   // Path always ends .jpg by convention (matching product-images), even
   // though the admin may have picked a PNG/WEBP - the stored Content-Type
   // header is what browsers/Image.network actually use to decode it, not
@@ -214,7 +227,7 @@ export async function uploadEnhancedCatalogueImage(
 
   const { error } = await supabase.storage
     .from("catalogue-images")
-    .upload(path, bytes, { contentType: file.type, upsert: true });
+    .upload(path, bytes, { contentType, upsert: true });
 
   if (error) return { error: error.message };
 
@@ -224,6 +237,94 @@ export async function uploadEnhancedCatalogueImage(
   // keep showing the previous enhanced version - same fix as
   // ProductImageService.uploadProductImage in the Flutter app.
   return { url: `${data.publicUrl}?v=${Date.now()}` };
+}
+
+/**
+ * One-click "Enhance with AI": takes this barcode's original store photo, has
+ * Gemini turn it into a clean listing image (square, white background,
+ * product filling ~85% of the height) and stores the result exactly like a
+ * manual "Upload Enhanced Image" - returning the preview URL. Like that
+ * upload, it changes nothing in `catalogue_products` by itself: the admin
+ * reviews the result in the panel and only saving the product commits it.
+ *
+ * Takes only the barcode, never an image URL - the source is looked up here
+ * from our own data, so a caller can't point the server at an arbitrary URL.
+ */
+export async function enhanceImageWithAI(
+  barcode: string
+): Promise<{ url?: string; error?: string }> {
+  let admin;
+  try {
+    admin = await requireCatalogueManager();
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Not authorized." };
+  }
+
+  const supabase = createServiceRoleClient();
+
+  // Prefer the stored original (an already-enhanced catalogue image is a
+  // worse starting point than the untouched store photo); otherwise any store
+  // submission's photo for this barcode, same "any one submission" pick the
+  // approval flow itself makes.
+  const { data: catalogue } = await supabase
+    .from("catalogue_products")
+    .select("image_url, original_image_url")
+    .eq("barcode", barcode)
+    .maybeSingle();
+  let sourceUrl: string | null = catalogue?.original_image_url ?? catalogue?.image_url ?? null;
+  if (!sourceUrl) {
+    const { data: submission } = await supabase
+      .from("products")
+      .select("image_url")
+      .eq("barcode", barcode)
+      .not("image_url", "is", null)
+      .order("image_url", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+    sourceUrl = submission?.image_url ?? null;
+  }
+  if (!sourceUrl) return { error: "This product has no photo to enhance." };
+
+  // Defence in depth: the URL comes from our own tables, but only ever fetch
+  // from our own Supabase storage host regardless.
+  const supabaseHost = new URL(process.env.NEXT_PUBLIC_SUPABASE_URL!).host;
+  let sourceHost = "";
+  try {
+    sourceHost = new URL(sourceUrl).host;
+  } catch {
+    /* falls through to the error below */
+  }
+  if (sourceHost !== supabaseHost) {
+    return { error: "This product's photo isn't stored in PocketTill storage, so it can't be enhanced." };
+  }
+
+  let sourceBytes: Uint8Array;
+  let sourceType = "image/jpeg";
+  try {
+    const res = await fetch(sourceUrl);
+    if (!res.ok) return { error: `Couldn't load the original photo (${res.status}).` };
+    sourceType = res.headers.get("content-type")?.split(";")[0] || "image/jpeg";
+    sourceBytes = new Uint8Array(await res.arrayBuffer());
+  } catch {
+    return { error: "Couldn't load the original photo." };
+  }
+  if (sourceBytes.length > MAX_ENHANCED_IMAGE_BYTES) {
+    return { error: "The original photo is too large to enhance." };
+  }
+
+  const result = await enhanceProductImage(sourceBytes, sourceType);
+  if (!result.ok) return { error: result.error };
+
+  const stored = await storeEnhancedImage(
+    supabase,
+    barcode,
+    new Uint8Array(result.bytes),
+    result.mimeType
+  );
+  if (stored.error) return { error: stored.error };
+
+  await logAudit(admin.id, "product.image_enhanced_ai", barcode, { model: result.model });
+  return { url: stored.url };
 }
 
 export async function rejectProduct(barcode: string): Promise<CatalogueActionResult> {
