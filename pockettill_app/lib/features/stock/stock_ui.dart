@@ -100,18 +100,38 @@ class _CachedProductImageState extends ConsumerState<CachedProductImage> {
   // different product. Found 2026-09-23 on Catalogue Browse.
   int _resolveId = 0;
 
+  /// True when there's an image that simply hasn't been resolved yet - a URL
+  /// to fetch and no already-known local path to read instead. Used to start
+  /// in the loading state rather than the placeholder: the placeholder means
+  /// "this product has no photo (or it couldn't be loaded)", and painting it
+  /// first for a photo that is about to appear - right after an edit, or on
+  /// a row's very first frames - reads as the upload having failed
+  /// (reported 2026-10-02: "instead of showing a placeholder, show a
+  /// spinner until it's loaded").
+  bool get _hasPendingImage =>
+      (widget.imageUrl ?? '').isNotEmpty &&
+      (widget.cachedImagePath ?? '').isEmpty;
+
   @override
   void initState() {
     super.initState();
+    _loading = _hasPendingImage;
     _resolve();
   }
 
   @override
   void didUpdateWidget(covariant CachedProductImage old) {
     super.didUpdateWidget(old);
-    if (old.cacheKey != widget.cacheKey ||
-        old.imageUrl != widget.imageUrl ||
-        old.cachedImagePath != widget.cachedImagePath) {
+    final imageChanged =
+        old.cacheKey != widget.cacheKey || old.imageUrl != widget.imageUrl;
+    if (imageChanged) {
+      // A different picture is coming - don't keep showing the old one (or
+      // the placeholder) while it loads. Plain assignment, no setState:
+      // build() runs right after this anyway.
+      _file = null;
+      _loading = _hasPendingImage;
+    }
+    if (imageChanged || old.cachedImagePath != widget.cachedImagePath) {
       _resolve();
     }
   }
@@ -120,39 +140,48 @@ class _CachedProductImageState extends ConsumerState<CachedProductImage> {
     final id = ++_resolveId;
     bool stillCurrent() => mounted && id == _resolveId;
 
+    // Every way out of this method goes through here, so the spinner can
+    // never be left running once there's nothing more to wait for.
+    void finish(File? file) {
+      if (!stillCurrent()) return;
+      setState(() {
+        _file = file;
+        _loading = false;
+      });
+    }
+
     final knownPath = widget.cachedImagePath;
     if (knownPath != null && knownPath.isNotEmpty) {
       final file = File(knownPath);
       if (await file.exists()) {
-        if (stillCurrent()) setState(() => _file = file);
+        finish(file);
         return;
       }
     }
 
     final cached = await ImageCacheService.getCachedFile(widget.cacheKey);
     if (cached != null) {
-      if (stillCurrent()) setState(() => _file = cached);
+      finish(cached);
       return;
     }
 
     final url = widget.imageUrl;
     if (url == null || url.isEmpty) {
-      if (stillCurrent()) setState(() => _file = null);
+      finish(null);
       return;
     }
 
     if (stillCurrent()) setState(() => _loading = true);
     final wifiOnly = ref.read(storeConfigProvider)?.imagesWifiOnly ?? false;
+    // fetchAndCache retries once itself (see ImageCacheService._download) -
+    // the spinner stays up across both attempts and only gives way to the
+    // placeholder if the photo genuinely couldn't be fetched.
     final downloaded = await ImageCacheService.fetchAndCache(
       cacheKey: widget.cacheKey,
       remoteUrl: url,
       wifiOnly: wifiOnly,
     );
-    if (!stillCurrent()) return;
-    setState(() {
-      _file = downloaded;
-      _loading = false;
-    });
+    finish(downloaded);
   }
 
   @override
