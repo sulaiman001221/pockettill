@@ -286,16 +286,25 @@ export async function enhanceImageWithAI(
   if (!sourceUrl) return { error: "This product has no photo to enhance." };
 
   // Defence in depth: the URL comes from our own tables, but only ever fetch
-  // from our own Supabase storage host regardless.
-  const supabaseHost = new URL(process.env.NEXT_PUBLIC_SUPABASE_URL!).host;
+  // from hosts we know photos legitimately live on - our own Supabase storage,
+  // and Open Food Facts, whose image URL the app saves straight onto a product
+  // when a barcode lookup auto-fills its photo (19 products and 4 catalogue
+  // entries at the time of writing; the first version of this check allowed
+  // only Supabase and rejected all of them).
+  const allowedHosts = new Set([
+    new URL(process.env.NEXT_PUBLIC_SUPABASE_URL!).host,
+    "images.openfoodfacts.org",
+  ]);
   let sourceHost = "";
   try {
     sourceHost = new URL(sourceUrl).host;
   } catch {
     /* falls through to the error below */
   }
-  if (sourceHost !== supabaseHost) {
-    return { error: "This product's photo isn't stored in PocketTill storage, so it can't be enhanced." };
+  if (!allowedHosts.has(sourceHost)) {
+    return {
+      error: `This product's photo is hosted somewhere PocketTill doesn't fetch from (${sourceHost || "invalid link"}), so it can't be enhanced.`,
+    };
   }
 
   let sourceBytes: Uint8Array;
