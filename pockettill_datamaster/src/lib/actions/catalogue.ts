@@ -7,6 +7,7 @@ import { canManageStores, getCurrentAdmin } from "@/lib/auth";
 import { formatProductMass, formatProductName } from "@/lib/catalogue-format";
 import { CATALOGUE_CACHE_TAG } from "@/lib/data/catalogue";
 import { enhanceProductImage, estimateImageCostUsd } from "@/lib/gemini-image";
+import { compressForCatalogue } from "@/lib/image-compress-server";
 import { createServiceRoleClient } from "@/lib/supabase/server";
 
 export type CatalogueActionResult = { error?: string } | undefined;
@@ -324,11 +325,13 @@ export async function enhanceImageWithAI(
   const result = await enhanceProductImage(sourceBytes, sourceType);
   if (!result.ok) return { error: result.error };
 
+  // Gemini's 1024px / ~400KB output is shrunk to the same 500px / ~50KB the
+  // manual upload (and the app) use before it's stored.
   const stored = await storeEnhancedImage(
     supabase,
     barcode,
-    new Uint8Array(result.bytes),
-    result.mimeType
+    new Uint8Array(await compressForCatalogue(result.bytes)),
+    "image/jpeg"
   );
   if (stored.error) return { error: stored.error };
 

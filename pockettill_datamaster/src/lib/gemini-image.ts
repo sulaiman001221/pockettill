@@ -85,6 +85,32 @@ export function extractImage(
   return found;
 }
 
+/** Turns a failed Gemini response into a message an admin can act on.
+ * Google sometimes wraps its error object in a one-element array (the
+ * out-of-credits 402 does), which a plain `json.error.message` lookup misses -
+ * the admin would otherwise see the raw JSON. */
+export function explainApiError(status: number, json: unknown, raw: string): string {
+  const first = Array.isArray(json) ? json[0] : json;
+  const message =
+    (first as { error?: { message?: string } } | null)?.error?.message ?? raw.slice(0, 200);
+
+  if (status === 402 || /prepayment credits are depleted/i.test(message)) {
+    return "Gemini credits have run out. Top up in Google AI Studio (billing), then try again.";
+  }
+  if (status === 429) {
+    return /free tier/i.test(message)
+      ? "This Gemini key is on the free tier, which can't generate images. Enable billing in Google AI Studio."
+      : "Gemini is limiting requests right now. Wait a minute and try again.";
+  }
+  if (status === 503) {
+    return "Gemini is overloaded at the moment. Try again in a few seconds.";
+  }
+  if (status === 400 && /api key not valid/i.test(message)) {
+    return "The Gemini API key isn't valid. Check GEMINI_API_KEY in the environment settings.";
+  }
+  return `Gemini request failed (${status}): ${message}`;
+}
+
 /** Any plain text the model returned - used to explain a refusal. */
 function extractText(node: unknown): string {
   const parts: string[] = [];
@@ -150,9 +176,7 @@ export async function enhanceProductImage(
     }
 
     if (!res.ok) {
-      const apiMessage =
-        (json as { error?: { message?: string } } | null)?.error?.message ?? raw.slice(0, 200);
-      return { ok: false, error: `Gemini request failed (${res.status}): ${apiMessage}` };
+      return { ok: false, error: explainApiError(res.status, json, raw) };
     }
 
     const image = extractImage(json);
