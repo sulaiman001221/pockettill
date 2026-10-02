@@ -307,6 +307,13 @@ export function ProductPanel({
               }
             />
           </div>
+          {mode === "approve" && enhancedUrl && !enhancedTouched ? (
+            <p className="text-xs text-muted-foreground">
+              This enhanced image was prepared in advance. Compare it with the original before
+              approving - AI can slightly shift colours or invent tiny print. Use Clear to leave it
+              out.
+            </p>
+          ) : null}
           <div className="flex flex-wrap gap-2">
             <input
               ref={fileInputRef}

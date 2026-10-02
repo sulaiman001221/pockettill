@@ -43,10 +43,12 @@ export function PendingList({
       mass: item.mostCommonMass ?? "",
       imageUrl: item.mostCommonImageUrl,
       // Not yet in catalogue_products by definition (this is the pending
-      // queue), so there's no existing enhanced image to show - the panel
-      // starts empty and any upload here becomes the catalogue image on
-      // approval.
-      enhancedImageUrl: null,
+      // queue), so there's no *approved* enhanced image - but a bulk "Enhance
+      // with AI" run (or an earlier upload that was never approved) may have
+      // left one in storage. The panel starts with it in the Enhanced slot,
+      // where the admin can check it against the original, Clear it, or
+      // replace it; approving commits whatever is showing there.
+      enhancedImageUrl: item.preEnhancedImageUrl,
     });
     setPanelOpen(true);
   }

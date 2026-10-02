@@ -15,6 +15,10 @@ export interface PendingCatalogueItem {
   mostCommonCategory: string | null;
   mostCommonMass: string | null;
   mostCommonImageUrl: string | null;
+  /** An enhanced image already waiting in catalogue storage for this barcode -
+   * from a bulk "Enhance with AI" run or an earlier upload that was never
+   * approved. The approval panel starts with it in the Enhanced slot. */
+  preEnhancedImageUrl: string | null;
 }
 
 export interface VerifiedCatalogueItem {
@@ -45,6 +49,27 @@ async function _getPendingCatalogueItems(): Promise<PendingCatalogueItem[]> {
 
   if (error) throw new Error(error.message);
 
+  // Enhanced images are stored as {barcode}.jpg in the catalogue-images bucket
+  // (see storeEnhancedImage). For a barcode still in this queue, one existing
+  // there means an enhancement was generated (or uploaded) but never approved
+  // - surface it so the admin reviews it instead of it sitting unseen.
+  // Best-effort: if the listing fails the queue still loads, just without them.
+  const preEnhanced = new Map<string, string>();
+  try {
+    const { data: objects } = await supabase.storage
+      .from("catalogue-images")
+      .list("", { limit: 1000 });
+    for (const obj of objects ?? []) {
+      if (!obj.name.endsWith(".jpg")) continue; // skips the "originals/" folder entry
+      const barcode = obj.name.slice(0, -4);
+      const { data: pub } = supabase.storage.from("catalogue-images").getPublicUrl(obj.name);
+      const stamp = Date.parse(obj.updated_at ?? obj.created_at ?? "") || 0;
+      preEnhanced.set(barcode, `${pub.publicUrl}?v=${stamp}`);
+    }
+  } catch {
+    /* ignore - see above */
+  }
+
   return (data ?? []).map((r) => ({
     barcode: r.barcode,
     nameVariations: r.name_variations ?? [],
@@ -55,6 +80,7 @@ async function _getPendingCatalogueItems(): Promise<PendingCatalogueItem[]> {
     mostCommonCategory: r.most_common_category,
     mostCommonMass: r.most_common_mass,
     mostCommonImageUrl: r.most_common_image_url,
+    preEnhancedImageUrl: preEnhanced.get(r.barcode) ?? null,
   }));
 }
 
