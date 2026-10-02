@@ -18,14 +18,21 @@ const ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/interactions"
  * 2 Oct 2026 - don't use it. */
 const DEFAULT_MODEL = "gemini-3.1-flash-lite-image";
 
-/** The owner's own proven prompt, verbatim, plus one guard sentence: a
+/** The owner's own proven prompt, verbatim, plus two guard sentences. A
  * catalogue photo is only useful if it still shows the real pack, and
- * generative models will sometimes "tidy up" label text or logos. */
+ * generative models will sometimes "tidy up" label text or logos - hence the
+ * first. The second exists because the first alone made the model keep a
+ * hand holding the product: in the 139-image bulk run of 2026-10-02, 7 photos
+ * of a product held in someone's hand came back still holding it. */
 export const ENHANCE_PROMPT =
   "Generate a listing ready version of this image with 1:1 Aspect Ratio and " +
   "product box spans roughly 85% of the frame's height. Use #ffffff background " +
-  "and no gradient. Keep the product exactly as photographed - do not redraw, " +
-  "add, remove or change any packaging, text, logos or colours.";
+  "and no gradient. Keep the product itself exactly as photographed - do not " +
+  "redraw, add, remove or change any of its packaging, text, logos or colours. " +
+  "Remove everything that is not the product: if a hand, fingers or any person " +
+  "is holding or touching it, remove them completely and show the whole " +
+  "product on its own. If the same product appears several times, show just " +
+  "one pack.";
 
 const TIMEOUT_MS = 55_000;
 
