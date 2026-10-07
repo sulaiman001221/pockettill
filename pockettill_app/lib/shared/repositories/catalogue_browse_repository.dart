@@ -1,4 +1,4 @@
-import 'package:isar/isar.dart';
+import 'package:isar_community/isar.dart';
 
 import '../../core/supabase/supabase_service.dart';
 import '../models/cached_catalogue_product.dart';

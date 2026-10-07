@@ -1,4 +1,4 @@
-import 'package:isar/isar.dart';
+import 'package:isar_community/isar.dart';
 
 import '../../shared/models/credit_customer.dart';
 import '../../shared/models/credit_transaction.dart';

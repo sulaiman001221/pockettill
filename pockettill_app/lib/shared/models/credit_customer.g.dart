@@ -17,11 +17,7 @@ const CreditCustomerSchema = CollectionSchema(
   name: r'CreditCustomer',
   id: 4128903322741239681,
   properties: {
-    r'balance': PropertySchema(
-      id: 0,
-      name: r'balance',
-      type: IsarType.double,
-    ),
+    r'balance': PropertySchema(id: 0, name: r'balance', type: IsarType.double),
     r'createdAt': PropertySchema(
       id: 1,
       name: r'createdAt',
@@ -37,16 +33,8 @@ const CreditCustomerSchema = CollectionSchema(
       name: r'lastActivityAt',
       type: IsarType.dateTime,
     ),
-    r'name': PropertySchema(
-      id: 4,
-      name: r'name',
-      type: IsarType.string,
-    ),
-    r'phone': PropertySchema(
-      id: 5,
-      name: r'phone',
-      type: IsarType.string,
-    ),
+    r'name': PropertySchema(id: 4, name: r'name', type: IsarType.string),
+    r'phone': PropertySchema(id: 5, name: r'phone', type: IsarType.string),
     r'serverUpdatedAt': PropertySchema(
       id: 6,
       name: r'serverUpdatedAt',
@@ -57,17 +45,10 @@ const CreditCustomerSchema = CollectionSchema(
       name: r'serverVersion',
       type: IsarType.long,
     ),
-    r'synced': PropertySchema(
-      id: 8,
-      name: r'synced',
-      type: IsarType.bool,
-    ),
-    r'uuid': PropertySchema(
-      id: 9,
-      name: r'uuid',
-      type: IsarType.string,
-    )
+    r'synced': PropertySchema(id: 8, name: r'synced', type: IsarType.bool),
+    r'uuid': PropertySchema(id: 9, name: r'uuid', type: IsarType.string),
   },
+
   estimateSize: _creditCustomerEstimateSize,
   serialize: _creditCustomerSerialize,
   deserialize: _creditCustomerDeserialize,
@@ -76,10 +57,11 @@ const CreditCustomerSchema = CollectionSchema(
   indexes: {},
   links: {},
   embeddedSchemas: {},
+
   getId: _creditCustomerGetId,
   getLinks: _creditCustomerGetLinks,
   attach: _creditCustomerAttach,
-  version: '3.1.0+1',
+  version: '3.3.2',
 );
 
 int _creditCustomerEstimateSize(
@@ -179,7 +161,10 @@ List<IsarLinkBase<dynamic>> _creditCustomerGetLinks(CreditCustomer object) {
 }
 
 void _creditCustomerAttach(
-    IsarCollection<dynamic> col, Id id, CreditCustomer object) {
+  IsarCollection<dynamic> col,
+  Id id,
+  CreditCustomer object,
+) {
   object.id = id;
 }
 
@@ -195,17 +180,16 @@ extension CreditCustomerQueryWhereSort
 extension CreditCustomerQueryWhere
     on QueryBuilder<CreditCustomer, CreditCustomer, QWhereClause> {
   QueryBuilder<CreditCustomer, CreditCustomer, QAfterWhereClause> idEqualTo(
-      Id id) {
+    Id id,
+  ) {
     return QueryBuilder.apply(this, (query) {
-      return query.addWhereClause(IdWhereClause.between(
-        lower: id,
-        upper: id,
-      ));
+      return query.addWhereClause(IdWhereClause.between(lower: id, upper: id));
     });
   }
 
   QueryBuilder<CreditCustomer, CreditCustomer, QAfterWhereClause> idNotEqualTo(
-      Id id) {
+    Id id,
+  ) {
     return QueryBuilder.apply(this, (query) {
       if (query.whereSort == Sort.asc) {
         return query
@@ -228,8 +212,9 @@ extension CreditCustomerQueryWhere
   }
 
   QueryBuilder<CreditCustomer, CreditCustomer, QAfterWhereClause> idGreaterThan(
-      Id id,
-      {bool include = false}) {
+    Id id, {
+    bool include = false,
+  }) {
     return QueryBuilder.apply(this, (query) {
       return query.addWhereClause(
         IdWhereClause.greaterThan(lower: id, includeLower: include),
@@ -238,8 +223,9 @@ extension CreditCustomerQueryWhere
   }
 
   QueryBuilder<CreditCustomer, CreditCustomer, QAfterWhereClause> idLessThan(
-      Id id,
-      {bool include = false}) {
+    Id id, {
+    bool include = false,
+  }) {
     return QueryBuilder.apply(this, (query) {
       return query.addWhereClause(
         IdWhereClause.lessThan(upper: id, includeUpper: include),
@@ -254,12 +240,14 @@ extension CreditCustomerQueryWhere
     bool includeUpper = true,
   }) {
     return QueryBuilder.apply(this, (query) {
-      return query.addWhereClause(IdWhereClause.between(
-        lower: lowerId,
-        includeLower: includeLower,
-        upper: upperId,
-        includeUpper: includeUpper,
-      ));
+      return query.addWhereClause(
+        IdWhereClause.between(
+          lower: lowerId,
+          includeLower: includeLower,
+          upper: upperId,
+          includeUpper: includeUpper,
+        ),
+      );
     });
   }
 }
@@ -267,53 +255,59 @@ extension CreditCustomerQueryWhere
 extension CreditCustomerQueryFilter
     on QueryBuilder<CreditCustomer, CreditCustomer, QFilterCondition> {
   QueryBuilder<CreditCustomer, CreditCustomer, QAfterFilterCondition>
-      balanceEqualTo(
-    double value, {
-    double epsilon = Query.epsilon,
-  }) {
+  balanceEqualTo(double value, {double epsilon = Query.epsilon}) {
     return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.equalTo(
-        property: r'balance',
-        value: value,
-        epsilon: epsilon,
-      ));
+      return query.addFilterCondition(
+        FilterCondition.equalTo(
+          property: r'balance',
+          value: value,
+
+          epsilon: epsilon,
+        ),
+      );
     });
   }
 
   QueryBuilder<CreditCustomer, CreditCustomer, QAfterFilterCondition>
-      balanceGreaterThan(
-    double value, {
-    bool include = false,
-    double epsilon = Query.epsilon,
-  }) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.greaterThan(
-        include: include,
-        property: r'balance',
-        value: value,
-        epsilon: epsilon,
-      ));
-    });
-  }
-
-  QueryBuilder<CreditCustomer, CreditCustomer, QAfterFilterCondition>
-      balanceLessThan(
+  balanceGreaterThan(
     double value, {
     bool include = false,
     double epsilon = Query.epsilon,
   }) {
     return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.lessThan(
-        include: include,
-        property: r'balance',
-        value: value,
-        epsilon: epsilon,
-      ));
+      return query.addFilterCondition(
+        FilterCondition.greaterThan(
+          include: include,
+          property: r'balance',
+          value: value,
+
+          epsilon: epsilon,
+        ),
+      );
     });
   }
 
   QueryBuilder<CreditCustomer, CreditCustomer, QAfterFilterCondition>
-      balanceBetween(
+  balanceLessThan(
+    double value, {
+    bool include = false,
+    double epsilon = Query.epsilon,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.lessThan(
+          include: include,
+          property: r'balance',
+          value: value,
+
+          epsilon: epsilon,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<CreditCustomer, CreditCustomer, QAfterFilterCondition>
+  balanceBetween(
     double lower,
     double upper, {
     bool includeLower = true,
@@ -321,139 +315,147 @@ extension CreditCustomerQueryFilter
     double epsilon = Query.epsilon,
   }) {
     return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.between(
-        property: r'balance',
-        lower: lower,
-        includeLower: includeLower,
-        upper: upper,
-        includeUpper: includeUpper,
-        epsilon: epsilon,
-      ));
+      return query.addFilterCondition(
+        FilterCondition.between(
+          property: r'balance',
+          lower: lower,
+          includeLower: includeLower,
+          upper: upper,
+          includeUpper: includeUpper,
+
+          epsilon: epsilon,
+        ),
+      );
     });
   }
 
   QueryBuilder<CreditCustomer, CreditCustomer, QAfterFilterCondition>
-      createdAtEqualTo(DateTime value) {
+  createdAtEqualTo(DateTime value) {
     return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.equalTo(
-        property: r'createdAt',
-        value: value,
-      ));
+      return query.addFilterCondition(
+        FilterCondition.equalTo(property: r'createdAt', value: value),
+      );
     });
   }
 
   QueryBuilder<CreditCustomer, CreditCustomer, QAfterFilterCondition>
-      createdAtGreaterThan(
-    DateTime value, {
-    bool include = false,
-  }) {
+  createdAtGreaterThan(DateTime value, {bool include = false}) {
     return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.greaterThan(
-        include: include,
-        property: r'createdAt',
-        value: value,
-      ));
+      return query.addFilterCondition(
+        FilterCondition.greaterThan(
+          include: include,
+          property: r'createdAt',
+          value: value,
+        ),
+      );
     });
   }
 
   QueryBuilder<CreditCustomer, CreditCustomer, QAfterFilterCondition>
-      createdAtLessThan(
-    DateTime value, {
-    bool include = false,
-  }) {
+  createdAtLessThan(DateTime value, {bool include = false}) {
     return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.lessThan(
-        include: include,
-        property: r'createdAt',
-        value: value,
-      ));
+      return query.addFilterCondition(
+        FilterCondition.lessThan(
+          include: include,
+          property: r'createdAt',
+          value: value,
+        ),
+      );
     });
   }
 
   QueryBuilder<CreditCustomer, CreditCustomer, QAfterFilterCondition>
-      createdAtBetween(
+  createdAtBetween(
     DateTime lower,
     DateTime upper, {
     bool includeLower = true,
     bool includeUpper = true,
   }) {
     return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.between(
-        property: r'createdAt',
-        lower: lower,
-        includeLower: includeLower,
-        upper: upper,
-        includeUpper: includeUpper,
-      ));
+      return query.addFilterCondition(
+        FilterCondition.between(
+          property: r'createdAt',
+          lower: lower,
+          includeLower: includeLower,
+          upper: upper,
+          includeUpper: includeUpper,
+        ),
+      );
     });
   }
 
   QueryBuilder<CreditCustomer, CreditCustomer, QAfterFilterCondition>
-      creditLimitIsNull() {
+  creditLimitIsNull() {
     return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(const FilterCondition.isNull(
-        property: r'creditLimit',
-      ));
+      return query.addFilterCondition(
+        const FilterCondition.isNull(property: r'creditLimit'),
+      );
     });
   }
 
   QueryBuilder<CreditCustomer, CreditCustomer, QAfterFilterCondition>
-      creditLimitIsNotNull() {
+  creditLimitIsNotNull() {
     return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(const FilterCondition.isNotNull(
-        property: r'creditLimit',
-      ));
+      return query.addFilterCondition(
+        const FilterCondition.isNotNull(property: r'creditLimit'),
+      );
     });
   }
 
   QueryBuilder<CreditCustomer, CreditCustomer, QAfterFilterCondition>
-      creditLimitEqualTo(
-    double? value, {
-    double epsilon = Query.epsilon,
-  }) {
+  creditLimitEqualTo(double? value, {double epsilon = Query.epsilon}) {
     return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.equalTo(
-        property: r'creditLimit',
-        value: value,
-        epsilon: epsilon,
-      ));
+      return query.addFilterCondition(
+        FilterCondition.equalTo(
+          property: r'creditLimit',
+          value: value,
+
+          epsilon: epsilon,
+        ),
+      );
     });
   }
 
   QueryBuilder<CreditCustomer, CreditCustomer, QAfterFilterCondition>
-      creditLimitGreaterThan(
-    double? value, {
-    bool include = false,
-    double epsilon = Query.epsilon,
-  }) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.greaterThan(
-        include: include,
-        property: r'creditLimit',
-        value: value,
-        epsilon: epsilon,
-      ));
-    });
-  }
-
-  QueryBuilder<CreditCustomer, CreditCustomer, QAfterFilterCondition>
-      creditLimitLessThan(
+  creditLimitGreaterThan(
     double? value, {
     bool include = false,
     double epsilon = Query.epsilon,
   }) {
     return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.lessThan(
-        include: include,
-        property: r'creditLimit',
-        value: value,
-        epsilon: epsilon,
-      ));
+      return query.addFilterCondition(
+        FilterCondition.greaterThan(
+          include: include,
+          property: r'creditLimit',
+          value: value,
+
+          epsilon: epsilon,
+        ),
+      );
     });
   }
 
   QueryBuilder<CreditCustomer, CreditCustomer, QAfterFilterCondition>
-      creditLimitBetween(
+  creditLimitLessThan(
+    double? value, {
+    bool include = false,
+    double epsilon = Query.epsilon,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.lessThan(
+          include: include,
+          property: r'creditLimit',
+          value: value,
+
+          epsilon: epsilon,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<CreditCustomer, CreditCustomer, QAfterFilterCondition>
+  creditLimitBetween(
     double? lower,
     double? upper, {
     bool includeLower = true,
@@ -461,52 +463,53 @@ extension CreditCustomerQueryFilter
     double epsilon = Query.epsilon,
   }) {
     return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.between(
-        property: r'creditLimit',
-        lower: lower,
-        includeLower: includeLower,
-        upper: upper,
-        includeUpper: includeUpper,
-        epsilon: epsilon,
-      ));
+      return query.addFilterCondition(
+        FilterCondition.between(
+          property: r'creditLimit',
+          lower: lower,
+          includeLower: includeLower,
+          upper: upper,
+          includeUpper: includeUpper,
+
+          epsilon: epsilon,
+        ),
+      );
     });
   }
 
   QueryBuilder<CreditCustomer, CreditCustomer, QAfterFilterCondition> idEqualTo(
-      Id value) {
+    Id value,
+  ) {
     return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.equalTo(
-        property: r'id',
-        value: value,
-      ));
+      return query.addFilterCondition(
+        FilterCondition.equalTo(property: r'id', value: value),
+      );
     });
   }
 
   QueryBuilder<CreditCustomer, CreditCustomer, QAfterFilterCondition>
-      idGreaterThan(
-    Id value, {
-    bool include = false,
-  }) {
+  idGreaterThan(Id value, {bool include = false}) {
     return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.greaterThan(
-        include: include,
-        property: r'id',
-        value: value,
-      ));
+      return query.addFilterCondition(
+        FilterCondition.greaterThan(
+          include: include,
+          property: r'id',
+          value: value,
+        ),
+      );
     });
   }
 
   QueryBuilder<CreditCustomer, CreditCustomer, QAfterFilterCondition>
-      idLessThan(
-    Id value, {
-    bool include = false,
-  }) {
+  idLessThan(Id value, {bool include = false}) {
     return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.lessThan(
-        include: include,
-        property: r'id',
-        value: value,
-      ));
+      return query.addFilterCondition(
+        FilterCondition.lessThan(
+          include: include,
+          property: r'id',
+          value: value,
+        ),
+      );
     });
   }
 
@@ -517,138 +520,142 @@ extension CreditCustomerQueryFilter
     bool includeUpper = true,
   }) {
     return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.between(
-        property: r'id',
-        lower: lower,
-        includeLower: includeLower,
-        upper: upper,
-        includeUpper: includeUpper,
-      ));
+      return query.addFilterCondition(
+        FilterCondition.between(
+          property: r'id',
+          lower: lower,
+          includeLower: includeLower,
+          upper: upper,
+          includeUpper: includeUpper,
+        ),
+      );
     });
   }
 
   QueryBuilder<CreditCustomer, CreditCustomer, QAfterFilterCondition>
-      lastActivityAtIsNull() {
+  lastActivityAtIsNull() {
     return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(const FilterCondition.isNull(
-        property: r'lastActivityAt',
-      ));
+      return query.addFilterCondition(
+        const FilterCondition.isNull(property: r'lastActivityAt'),
+      );
     });
   }
 
   QueryBuilder<CreditCustomer, CreditCustomer, QAfterFilterCondition>
-      lastActivityAtIsNotNull() {
+  lastActivityAtIsNotNull() {
     return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(const FilterCondition.isNotNull(
-        property: r'lastActivityAt',
-      ));
+      return query.addFilterCondition(
+        const FilterCondition.isNotNull(property: r'lastActivityAt'),
+      );
     });
   }
 
   QueryBuilder<CreditCustomer, CreditCustomer, QAfterFilterCondition>
-      lastActivityAtEqualTo(DateTime? value) {
+  lastActivityAtEqualTo(DateTime? value) {
     return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.equalTo(
-        property: r'lastActivityAt',
-        value: value,
-      ));
+      return query.addFilterCondition(
+        FilterCondition.equalTo(property: r'lastActivityAt', value: value),
+      );
     });
   }
 
   QueryBuilder<CreditCustomer, CreditCustomer, QAfterFilterCondition>
-      lastActivityAtGreaterThan(
-    DateTime? value, {
-    bool include = false,
-  }) {
+  lastActivityAtGreaterThan(DateTime? value, {bool include = false}) {
     return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.greaterThan(
-        include: include,
-        property: r'lastActivityAt',
-        value: value,
-      ));
+      return query.addFilterCondition(
+        FilterCondition.greaterThan(
+          include: include,
+          property: r'lastActivityAt',
+          value: value,
+        ),
+      );
     });
   }
 
   QueryBuilder<CreditCustomer, CreditCustomer, QAfterFilterCondition>
-      lastActivityAtLessThan(
-    DateTime? value, {
-    bool include = false,
-  }) {
+  lastActivityAtLessThan(DateTime? value, {bool include = false}) {
     return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.lessThan(
-        include: include,
-        property: r'lastActivityAt',
-        value: value,
-      ));
+      return query.addFilterCondition(
+        FilterCondition.lessThan(
+          include: include,
+          property: r'lastActivityAt',
+          value: value,
+        ),
+      );
     });
   }
 
   QueryBuilder<CreditCustomer, CreditCustomer, QAfterFilterCondition>
-      lastActivityAtBetween(
+  lastActivityAtBetween(
     DateTime? lower,
     DateTime? upper, {
     bool includeLower = true,
     bool includeUpper = true,
   }) {
     return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.between(
-        property: r'lastActivityAt',
-        lower: lower,
-        includeLower: includeLower,
-        upper: upper,
-        includeUpper: includeUpper,
-      ));
+      return query.addFilterCondition(
+        FilterCondition.between(
+          property: r'lastActivityAt',
+          lower: lower,
+          includeLower: includeLower,
+          upper: upper,
+          includeUpper: includeUpper,
+        ),
+      );
     });
   }
 
   QueryBuilder<CreditCustomer, CreditCustomer, QAfterFilterCondition>
-      nameEqualTo(
-    String value, {
-    bool caseSensitive = true,
-  }) {
+  nameEqualTo(String value, {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.equalTo(
-        property: r'name',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
+      return query.addFilterCondition(
+        FilterCondition.equalTo(
+          property: r'name',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
     });
   }
 
   QueryBuilder<CreditCustomer, CreditCustomer, QAfterFilterCondition>
-      nameGreaterThan(
-    String value, {
-    bool include = false,
-    bool caseSensitive = true,
-  }) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.greaterThan(
-        include: include,
-        property: r'name',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<CreditCustomer, CreditCustomer, QAfterFilterCondition>
-      nameLessThan(
+  nameGreaterThan(
     String value, {
     bool include = false,
     bool caseSensitive = true,
   }) {
     return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.lessThan(
-        include: include,
-        property: r'name',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
+      return query.addFilterCondition(
+        FilterCondition.greaterThan(
+          include: include,
+          property: r'name',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
     });
   }
 
   QueryBuilder<CreditCustomer, CreditCustomer, QAfterFilterCondition>
-      nameBetween(
+  nameLessThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.lessThan(
+          include: include,
+          property: r'name',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<CreditCustomer, CreditCustomer, QAfterFilterCondition>
+  nameBetween(
     String lower,
     String upper, {
     bool includeLower = true,
@@ -656,153 +663,158 @@ extension CreditCustomerQueryFilter
     bool caseSensitive = true,
   }) {
     return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.between(
-        property: r'name',
-        lower: lower,
-        includeLower: includeLower,
-        upper: upper,
-        includeUpper: includeUpper,
-        caseSensitive: caseSensitive,
-      ));
+      return query.addFilterCondition(
+        FilterCondition.between(
+          property: r'name',
+          lower: lower,
+          includeLower: includeLower,
+          upper: upper,
+          includeUpper: includeUpper,
+          caseSensitive: caseSensitive,
+        ),
+      );
     });
   }
 
   QueryBuilder<CreditCustomer, CreditCustomer, QAfterFilterCondition>
-      nameStartsWith(
-    String value, {
-    bool caseSensitive = true,
-  }) {
+  nameStartsWith(String value, {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.startsWith(
-        property: r'name',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
+      return query.addFilterCondition(
+        FilterCondition.startsWith(
+          property: r'name',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
     });
   }
 
   QueryBuilder<CreditCustomer, CreditCustomer, QAfterFilterCondition>
-      nameEndsWith(
-    String value, {
-    bool caseSensitive = true,
-  }) {
+  nameEndsWith(String value, {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.endsWith(
-        property: r'name',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
+      return query.addFilterCondition(
+        FilterCondition.endsWith(
+          property: r'name',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
     });
   }
 
   QueryBuilder<CreditCustomer, CreditCustomer, QAfterFilterCondition>
-      nameContains(String value, {bool caseSensitive = true}) {
+  nameContains(String value, {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.contains(
-        property: r'name',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
+      return query.addFilterCondition(
+        FilterCondition.contains(
+          property: r'name',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
     });
   }
 
   QueryBuilder<CreditCustomer, CreditCustomer, QAfterFilterCondition>
-      nameMatches(String pattern, {bool caseSensitive = true}) {
+  nameMatches(String pattern, {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.matches(
-        property: r'name',
-        wildcard: pattern,
-        caseSensitive: caseSensitive,
-      ));
+      return query.addFilterCondition(
+        FilterCondition.matches(
+          property: r'name',
+          wildcard: pattern,
+          caseSensitive: caseSensitive,
+        ),
+      );
     });
   }
 
   QueryBuilder<CreditCustomer, CreditCustomer, QAfterFilterCondition>
-      nameIsEmpty() {
+  nameIsEmpty() {
     return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.equalTo(
-        property: r'name',
-        value: '',
-      ));
+      return query.addFilterCondition(
+        FilterCondition.equalTo(property: r'name', value: ''),
+      );
     });
   }
 
   QueryBuilder<CreditCustomer, CreditCustomer, QAfterFilterCondition>
-      nameIsNotEmpty() {
+  nameIsNotEmpty() {
     return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.greaterThan(
-        property: r'name',
-        value: '',
-      ));
+      return query.addFilterCondition(
+        FilterCondition.greaterThan(property: r'name', value: ''),
+      );
     });
   }
 
   QueryBuilder<CreditCustomer, CreditCustomer, QAfterFilterCondition>
-      phoneIsNull() {
+  phoneIsNull() {
     return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(const FilterCondition.isNull(
-        property: r'phone',
-      ));
+      return query.addFilterCondition(
+        const FilterCondition.isNull(property: r'phone'),
+      );
     });
   }
 
   QueryBuilder<CreditCustomer, CreditCustomer, QAfterFilterCondition>
-      phoneIsNotNull() {
+  phoneIsNotNull() {
     return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(const FilterCondition.isNotNull(
-        property: r'phone',
-      ));
+      return query.addFilterCondition(
+        const FilterCondition.isNotNull(property: r'phone'),
+      );
     });
   }
 
   QueryBuilder<CreditCustomer, CreditCustomer, QAfterFilterCondition>
-      phoneEqualTo(
-    String? value, {
-    bool caseSensitive = true,
-  }) {
+  phoneEqualTo(String? value, {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.equalTo(
-        property: r'phone',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
+      return query.addFilterCondition(
+        FilterCondition.equalTo(
+          property: r'phone',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
     });
   }
 
   QueryBuilder<CreditCustomer, CreditCustomer, QAfterFilterCondition>
-      phoneGreaterThan(
-    String? value, {
-    bool include = false,
-    bool caseSensitive = true,
-  }) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.greaterThan(
-        include: include,
-        property: r'phone',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<CreditCustomer, CreditCustomer, QAfterFilterCondition>
-      phoneLessThan(
+  phoneGreaterThan(
     String? value, {
     bool include = false,
     bool caseSensitive = true,
   }) {
     return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.lessThan(
-        include: include,
-        property: r'phone',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
+      return query.addFilterCondition(
+        FilterCondition.greaterThan(
+          include: include,
+          property: r'phone',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
     });
   }
 
   QueryBuilder<CreditCustomer, CreditCustomer, QAfterFilterCondition>
-      phoneBetween(
+  phoneLessThan(
+    String? value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.lessThan(
+          include: include,
+          property: r'phone',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<CreditCustomer, CreditCustomer, QAfterFilterCondition>
+  phoneBetween(
     String? lower,
     String? upper, {
     bool includeLower = true,
@@ -810,275 +822,277 @@ extension CreditCustomerQueryFilter
     bool caseSensitive = true,
   }) {
     return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.between(
-        property: r'phone',
-        lower: lower,
-        includeLower: includeLower,
-        upper: upper,
-        includeUpper: includeUpper,
-        caseSensitive: caseSensitive,
-      ));
+      return query.addFilterCondition(
+        FilterCondition.between(
+          property: r'phone',
+          lower: lower,
+          includeLower: includeLower,
+          upper: upper,
+          includeUpper: includeUpper,
+          caseSensitive: caseSensitive,
+        ),
+      );
     });
   }
 
   QueryBuilder<CreditCustomer, CreditCustomer, QAfterFilterCondition>
-      phoneStartsWith(
-    String value, {
-    bool caseSensitive = true,
-  }) {
+  phoneStartsWith(String value, {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.startsWith(
-        property: r'phone',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
+      return query.addFilterCondition(
+        FilterCondition.startsWith(
+          property: r'phone',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
     });
   }
 
   QueryBuilder<CreditCustomer, CreditCustomer, QAfterFilterCondition>
-      phoneEndsWith(
-    String value, {
-    bool caseSensitive = true,
-  }) {
+  phoneEndsWith(String value, {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.endsWith(
-        property: r'phone',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
+      return query.addFilterCondition(
+        FilterCondition.endsWith(
+          property: r'phone',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
     });
   }
 
   QueryBuilder<CreditCustomer, CreditCustomer, QAfterFilterCondition>
-      phoneContains(String value, {bool caseSensitive = true}) {
+  phoneContains(String value, {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.contains(
-        property: r'phone',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
+      return query.addFilterCondition(
+        FilterCondition.contains(
+          property: r'phone',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
     });
   }
 
   QueryBuilder<CreditCustomer, CreditCustomer, QAfterFilterCondition>
-      phoneMatches(String pattern, {bool caseSensitive = true}) {
+  phoneMatches(String pattern, {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.matches(
-        property: r'phone',
-        wildcard: pattern,
-        caseSensitive: caseSensitive,
-      ));
+      return query.addFilterCondition(
+        FilterCondition.matches(
+          property: r'phone',
+          wildcard: pattern,
+          caseSensitive: caseSensitive,
+        ),
+      );
     });
   }
 
   QueryBuilder<CreditCustomer, CreditCustomer, QAfterFilterCondition>
-      phoneIsEmpty() {
+  phoneIsEmpty() {
     return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.equalTo(
-        property: r'phone',
-        value: '',
-      ));
+      return query.addFilterCondition(
+        FilterCondition.equalTo(property: r'phone', value: ''),
+      );
     });
   }
 
   QueryBuilder<CreditCustomer, CreditCustomer, QAfterFilterCondition>
-      phoneIsNotEmpty() {
+  phoneIsNotEmpty() {
     return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.greaterThan(
-        property: r'phone',
-        value: '',
-      ));
+      return query.addFilterCondition(
+        FilterCondition.greaterThan(property: r'phone', value: ''),
+      );
     });
   }
 
   QueryBuilder<CreditCustomer, CreditCustomer, QAfterFilterCondition>
-      serverUpdatedAtIsNull() {
+  serverUpdatedAtIsNull() {
     return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(const FilterCondition.isNull(
-        property: r'serverUpdatedAt',
-      ));
+      return query.addFilterCondition(
+        const FilterCondition.isNull(property: r'serverUpdatedAt'),
+      );
     });
   }
 
   QueryBuilder<CreditCustomer, CreditCustomer, QAfterFilterCondition>
-      serverUpdatedAtIsNotNull() {
+  serverUpdatedAtIsNotNull() {
     return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(const FilterCondition.isNotNull(
-        property: r'serverUpdatedAt',
-      ));
+      return query.addFilterCondition(
+        const FilterCondition.isNotNull(property: r'serverUpdatedAt'),
+      );
     });
   }
 
   QueryBuilder<CreditCustomer, CreditCustomer, QAfterFilterCondition>
-      serverUpdatedAtEqualTo(DateTime? value) {
+  serverUpdatedAtEqualTo(DateTime? value) {
     return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.equalTo(
-        property: r'serverUpdatedAt',
-        value: value,
-      ));
+      return query.addFilterCondition(
+        FilterCondition.equalTo(property: r'serverUpdatedAt', value: value),
+      );
     });
   }
 
   QueryBuilder<CreditCustomer, CreditCustomer, QAfterFilterCondition>
-      serverUpdatedAtGreaterThan(
-    DateTime? value, {
-    bool include = false,
-  }) {
+  serverUpdatedAtGreaterThan(DateTime? value, {bool include = false}) {
     return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.greaterThan(
-        include: include,
-        property: r'serverUpdatedAt',
-        value: value,
-      ));
+      return query.addFilterCondition(
+        FilterCondition.greaterThan(
+          include: include,
+          property: r'serverUpdatedAt',
+          value: value,
+        ),
+      );
     });
   }
 
   QueryBuilder<CreditCustomer, CreditCustomer, QAfterFilterCondition>
-      serverUpdatedAtLessThan(
-    DateTime? value, {
-    bool include = false,
-  }) {
+  serverUpdatedAtLessThan(DateTime? value, {bool include = false}) {
     return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.lessThan(
-        include: include,
-        property: r'serverUpdatedAt',
-        value: value,
-      ));
+      return query.addFilterCondition(
+        FilterCondition.lessThan(
+          include: include,
+          property: r'serverUpdatedAt',
+          value: value,
+        ),
+      );
     });
   }
 
   QueryBuilder<CreditCustomer, CreditCustomer, QAfterFilterCondition>
-      serverUpdatedAtBetween(
+  serverUpdatedAtBetween(
     DateTime? lower,
     DateTime? upper, {
     bool includeLower = true,
     bool includeUpper = true,
   }) {
     return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.between(
-        property: r'serverUpdatedAt',
-        lower: lower,
-        includeLower: includeLower,
-        upper: upper,
-        includeUpper: includeUpper,
-      ));
+      return query.addFilterCondition(
+        FilterCondition.between(
+          property: r'serverUpdatedAt',
+          lower: lower,
+          includeLower: includeLower,
+          upper: upper,
+          includeUpper: includeUpper,
+        ),
+      );
     });
   }
 
   QueryBuilder<CreditCustomer, CreditCustomer, QAfterFilterCondition>
-      serverVersionEqualTo(int value) {
+  serverVersionEqualTo(int value) {
     return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.equalTo(
-        property: r'serverVersion',
-        value: value,
-      ));
+      return query.addFilterCondition(
+        FilterCondition.equalTo(property: r'serverVersion', value: value),
+      );
     });
   }
 
   QueryBuilder<CreditCustomer, CreditCustomer, QAfterFilterCondition>
-      serverVersionGreaterThan(
-    int value, {
-    bool include = false,
-  }) {
+  serverVersionGreaterThan(int value, {bool include = false}) {
     return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.greaterThan(
-        include: include,
-        property: r'serverVersion',
-        value: value,
-      ));
+      return query.addFilterCondition(
+        FilterCondition.greaterThan(
+          include: include,
+          property: r'serverVersion',
+          value: value,
+        ),
+      );
     });
   }
 
   QueryBuilder<CreditCustomer, CreditCustomer, QAfterFilterCondition>
-      serverVersionLessThan(
-    int value, {
-    bool include = false,
-  }) {
+  serverVersionLessThan(int value, {bool include = false}) {
     return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.lessThan(
-        include: include,
-        property: r'serverVersion',
-        value: value,
-      ));
+      return query.addFilterCondition(
+        FilterCondition.lessThan(
+          include: include,
+          property: r'serverVersion',
+          value: value,
+        ),
+      );
     });
   }
 
   QueryBuilder<CreditCustomer, CreditCustomer, QAfterFilterCondition>
-      serverVersionBetween(
+  serverVersionBetween(
     int lower,
     int upper, {
     bool includeLower = true,
     bool includeUpper = true,
   }) {
     return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.between(
-        property: r'serverVersion',
-        lower: lower,
-        includeLower: includeLower,
-        upper: upper,
-        includeUpper: includeUpper,
-      ));
+      return query.addFilterCondition(
+        FilterCondition.between(
+          property: r'serverVersion',
+          lower: lower,
+          includeLower: includeLower,
+          upper: upper,
+          includeUpper: includeUpper,
+        ),
+      );
     });
   }
 
   QueryBuilder<CreditCustomer, CreditCustomer, QAfterFilterCondition>
-      syncedEqualTo(bool value) {
+  syncedEqualTo(bool value) {
     return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.equalTo(
-        property: r'synced',
-        value: value,
-      ));
+      return query.addFilterCondition(
+        FilterCondition.equalTo(property: r'synced', value: value),
+      );
     });
   }
 
   QueryBuilder<CreditCustomer, CreditCustomer, QAfterFilterCondition>
-      uuidEqualTo(
-    String value, {
-    bool caseSensitive = true,
-  }) {
+  uuidEqualTo(String value, {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.equalTo(
-        property: r'uuid',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
+      return query.addFilterCondition(
+        FilterCondition.equalTo(
+          property: r'uuid',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
     });
   }
 
   QueryBuilder<CreditCustomer, CreditCustomer, QAfterFilterCondition>
-      uuidGreaterThan(
-    String value, {
-    bool include = false,
-    bool caseSensitive = true,
-  }) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.greaterThan(
-        include: include,
-        property: r'uuid',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<CreditCustomer, CreditCustomer, QAfterFilterCondition>
-      uuidLessThan(
+  uuidGreaterThan(
     String value, {
     bool include = false,
     bool caseSensitive = true,
   }) {
     return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.lessThan(
-        include: include,
-        property: r'uuid',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
+      return query.addFilterCondition(
+        FilterCondition.greaterThan(
+          include: include,
+          property: r'uuid',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
     });
   }
 
   QueryBuilder<CreditCustomer, CreditCustomer, QAfterFilterCondition>
-      uuidBetween(
+  uuidLessThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.lessThan(
+          include: include,
+          property: r'uuid',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<CreditCustomer, CreditCustomer, QAfterFilterCondition>
+  uuidBetween(
     String lower,
     String upper, {
     bool includeLower = true,
@@ -1086,84 +1100,86 @@ extension CreditCustomerQueryFilter
     bool caseSensitive = true,
   }) {
     return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.between(
-        property: r'uuid',
-        lower: lower,
-        includeLower: includeLower,
-        upper: upper,
-        includeUpper: includeUpper,
-        caseSensitive: caseSensitive,
-      ));
+      return query.addFilterCondition(
+        FilterCondition.between(
+          property: r'uuid',
+          lower: lower,
+          includeLower: includeLower,
+          upper: upper,
+          includeUpper: includeUpper,
+          caseSensitive: caseSensitive,
+        ),
+      );
     });
   }
 
   QueryBuilder<CreditCustomer, CreditCustomer, QAfterFilterCondition>
-      uuidStartsWith(
-    String value, {
-    bool caseSensitive = true,
-  }) {
+  uuidStartsWith(String value, {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.startsWith(
-        property: r'uuid',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
+      return query.addFilterCondition(
+        FilterCondition.startsWith(
+          property: r'uuid',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
     });
   }
 
   QueryBuilder<CreditCustomer, CreditCustomer, QAfterFilterCondition>
-      uuidEndsWith(
-    String value, {
-    bool caseSensitive = true,
-  }) {
+  uuidEndsWith(String value, {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.endsWith(
-        property: r'uuid',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
+      return query.addFilterCondition(
+        FilterCondition.endsWith(
+          property: r'uuid',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
     });
   }
 
   QueryBuilder<CreditCustomer, CreditCustomer, QAfterFilterCondition>
-      uuidContains(String value, {bool caseSensitive = true}) {
+  uuidContains(String value, {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.contains(
-        property: r'uuid',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
+      return query.addFilterCondition(
+        FilterCondition.contains(
+          property: r'uuid',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
     });
   }
 
   QueryBuilder<CreditCustomer, CreditCustomer, QAfterFilterCondition>
-      uuidMatches(String pattern, {bool caseSensitive = true}) {
+  uuidMatches(String pattern, {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.matches(
-        property: r'uuid',
-        wildcard: pattern,
-        caseSensitive: caseSensitive,
-      ));
+      return query.addFilterCondition(
+        FilterCondition.matches(
+          property: r'uuid',
+          wildcard: pattern,
+          caseSensitive: caseSensitive,
+        ),
+      );
     });
   }
 
   QueryBuilder<CreditCustomer, CreditCustomer, QAfterFilterCondition>
-      uuidIsEmpty() {
+  uuidIsEmpty() {
     return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.equalTo(
-        property: r'uuid',
-        value: '',
-      ));
+      return query.addFilterCondition(
+        FilterCondition.equalTo(property: r'uuid', value: ''),
+      );
     });
   }
 
   QueryBuilder<CreditCustomer, CreditCustomer, QAfterFilterCondition>
-      uuidIsNotEmpty() {
+  uuidIsNotEmpty() {
     return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.greaterThan(
-        property: r'uuid',
-        value: '',
-      ));
+      return query.addFilterCondition(
+        FilterCondition.greaterThan(property: r'uuid', value: ''),
+      );
     });
   }
 }
@@ -1183,7 +1199,7 @@ extension CreditCustomerQuerySortBy
   }
 
   QueryBuilder<CreditCustomer, CreditCustomer, QAfterSortBy>
-      sortByBalanceDesc() {
+  sortByBalanceDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'balance', Sort.desc);
     });
@@ -1196,35 +1212,35 @@ extension CreditCustomerQuerySortBy
   }
 
   QueryBuilder<CreditCustomer, CreditCustomer, QAfterSortBy>
-      sortByCreatedAtDesc() {
+  sortByCreatedAtDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'createdAt', Sort.desc);
     });
   }
 
   QueryBuilder<CreditCustomer, CreditCustomer, QAfterSortBy>
-      sortByCreditLimit() {
+  sortByCreditLimit() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'creditLimit', Sort.asc);
     });
   }
 
   QueryBuilder<CreditCustomer, CreditCustomer, QAfterSortBy>
-      sortByCreditLimitDesc() {
+  sortByCreditLimitDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'creditLimit', Sort.desc);
     });
   }
 
   QueryBuilder<CreditCustomer, CreditCustomer, QAfterSortBy>
-      sortByLastActivityAt() {
+  sortByLastActivityAt() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'lastActivityAt', Sort.asc);
     });
   }
 
   QueryBuilder<CreditCustomer, CreditCustomer, QAfterSortBy>
-      sortByLastActivityAtDesc() {
+  sortByLastActivityAtDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'lastActivityAt', Sort.desc);
     });
@@ -1255,28 +1271,28 @@ extension CreditCustomerQuerySortBy
   }
 
   QueryBuilder<CreditCustomer, CreditCustomer, QAfterSortBy>
-      sortByServerUpdatedAt() {
+  sortByServerUpdatedAt() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'serverUpdatedAt', Sort.asc);
     });
   }
 
   QueryBuilder<CreditCustomer, CreditCustomer, QAfterSortBy>
-      sortByServerUpdatedAtDesc() {
+  sortByServerUpdatedAtDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'serverUpdatedAt', Sort.desc);
     });
   }
 
   QueryBuilder<CreditCustomer, CreditCustomer, QAfterSortBy>
-      sortByServerVersion() {
+  sortByServerVersion() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'serverVersion', Sort.asc);
     });
   }
 
   QueryBuilder<CreditCustomer, CreditCustomer, QAfterSortBy>
-      sortByServerVersionDesc() {
+  sortByServerVersionDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'serverVersion', Sort.desc);
     });
@@ -1289,7 +1305,7 @@ extension CreditCustomerQuerySortBy
   }
 
   QueryBuilder<CreditCustomer, CreditCustomer, QAfterSortBy>
-      sortBySyncedDesc() {
+  sortBySyncedDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'synced', Sort.desc);
     });
@@ -1317,7 +1333,7 @@ extension CreditCustomerQuerySortThenBy
   }
 
   QueryBuilder<CreditCustomer, CreditCustomer, QAfterSortBy>
-      thenByBalanceDesc() {
+  thenByBalanceDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'balance', Sort.desc);
     });
@@ -1330,21 +1346,21 @@ extension CreditCustomerQuerySortThenBy
   }
 
   QueryBuilder<CreditCustomer, CreditCustomer, QAfterSortBy>
-      thenByCreatedAtDesc() {
+  thenByCreatedAtDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'createdAt', Sort.desc);
     });
   }
 
   QueryBuilder<CreditCustomer, CreditCustomer, QAfterSortBy>
-      thenByCreditLimit() {
+  thenByCreditLimit() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'creditLimit', Sort.asc);
     });
   }
 
   QueryBuilder<CreditCustomer, CreditCustomer, QAfterSortBy>
-      thenByCreditLimitDesc() {
+  thenByCreditLimitDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'creditLimit', Sort.desc);
     });
@@ -1363,14 +1379,14 @@ extension CreditCustomerQuerySortThenBy
   }
 
   QueryBuilder<CreditCustomer, CreditCustomer, QAfterSortBy>
-      thenByLastActivityAt() {
+  thenByLastActivityAt() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'lastActivityAt', Sort.asc);
     });
   }
 
   QueryBuilder<CreditCustomer, CreditCustomer, QAfterSortBy>
-      thenByLastActivityAtDesc() {
+  thenByLastActivityAtDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'lastActivityAt', Sort.desc);
     });
@@ -1401,28 +1417,28 @@ extension CreditCustomerQuerySortThenBy
   }
 
   QueryBuilder<CreditCustomer, CreditCustomer, QAfterSortBy>
-      thenByServerUpdatedAt() {
+  thenByServerUpdatedAt() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'serverUpdatedAt', Sort.asc);
     });
   }
 
   QueryBuilder<CreditCustomer, CreditCustomer, QAfterSortBy>
-      thenByServerUpdatedAtDesc() {
+  thenByServerUpdatedAtDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'serverUpdatedAt', Sort.desc);
     });
   }
 
   QueryBuilder<CreditCustomer, CreditCustomer, QAfterSortBy>
-      thenByServerVersion() {
+  thenByServerVersion() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'serverVersion', Sort.asc);
     });
   }
 
   QueryBuilder<CreditCustomer, CreditCustomer, QAfterSortBy>
-      thenByServerVersionDesc() {
+  thenByServerVersionDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'serverVersion', Sort.desc);
     });
@@ -1435,7 +1451,7 @@ extension CreditCustomerQuerySortThenBy
   }
 
   QueryBuilder<CreditCustomer, CreditCustomer, QAfterSortBy>
-      thenBySyncedDesc() {
+  thenBySyncedDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'synced', Sort.desc);
     });
@@ -1463,49 +1479,51 @@ extension CreditCustomerQueryWhereDistinct
   }
 
   QueryBuilder<CreditCustomer, CreditCustomer, QDistinct>
-      distinctByCreatedAt() {
+  distinctByCreatedAt() {
     return QueryBuilder.apply(this, (query) {
       return query.addDistinctBy(r'createdAt');
     });
   }
 
   QueryBuilder<CreditCustomer, CreditCustomer, QDistinct>
-      distinctByCreditLimit() {
+  distinctByCreditLimit() {
     return QueryBuilder.apply(this, (query) {
       return query.addDistinctBy(r'creditLimit');
     });
   }
 
   QueryBuilder<CreditCustomer, CreditCustomer, QDistinct>
-      distinctByLastActivityAt() {
+  distinctByLastActivityAt() {
     return QueryBuilder.apply(this, (query) {
       return query.addDistinctBy(r'lastActivityAt');
     });
   }
 
-  QueryBuilder<CreditCustomer, CreditCustomer, QDistinct> distinctByName(
-      {bool caseSensitive = true}) {
+  QueryBuilder<CreditCustomer, CreditCustomer, QDistinct> distinctByName({
+    bool caseSensitive = true,
+  }) {
     return QueryBuilder.apply(this, (query) {
       return query.addDistinctBy(r'name', caseSensitive: caseSensitive);
     });
   }
 
-  QueryBuilder<CreditCustomer, CreditCustomer, QDistinct> distinctByPhone(
-      {bool caseSensitive = true}) {
+  QueryBuilder<CreditCustomer, CreditCustomer, QDistinct> distinctByPhone({
+    bool caseSensitive = true,
+  }) {
     return QueryBuilder.apply(this, (query) {
       return query.addDistinctBy(r'phone', caseSensitive: caseSensitive);
     });
   }
 
   QueryBuilder<CreditCustomer, CreditCustomer, QDistinct>
-      distinctByServerUpdatedAt() {
+  distinctByServerUpdatedAt() {
     return QueryBuilder.apply(this, (query) {
       return query.addDistinctBy(r'serverUpdatedAt');
     });
   }
 
   QueryBuilder<CreditCustomer, CreditCustomer, QDistinct>
-      distinctByServerVersion() {
+  distinctByServerVersion() {
     return QueryBuilder.apply(this, (query) {
       return query.addDistinctBy(r'serverVersion');
     });
@@ -1517,8 +1535,9 @@ extension CreditCustomerQueryWhereDistinct
     });
   }
 
-  QueryBuilder<CreditCustomer, CreditCustomer, QDistinct> distinctByUuid(
-      {bool caseSensitive = true}) {
+  QueryBuilder<CreditCustomer, CreditCustomer, QDistinct> distinctByUuid({
+    bool caseSensitive = true,
+  }) {
     return QueryBuilder.apply(this, (query) {
       return query.addDistinctBy(r'uuid', caseSensitive: caseSensitive);
     });
@@ -1546,14 +1565,14 @@ extension CreditCustomerQueryProperty
   }
 
   QueryBuilder<CreditCustomer, double?, QQueryOperations>
-      creditLimitProperty() {
+  creditLimitProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'creditLimit');
     });
   }
 
   QueryBuilder<CreditCustomer, DateTime?, QQueryOperations>
-      lastActivityAtProperty() {
+  lastActivityAtProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'lastActivityAt');
     });
@@ -1572,7 +1591,7 @@ extension CreditCustomerQueryProperty
   }
 
   QueryBuilder<CreditCustomer, DateTime?, QQueryOperations>
-      serverUpdatedAtProperty() {
+  serverUpdatedAtProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'serverUpdatedAt');
     });
