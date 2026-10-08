@@ -44,6 +44,33 @@ class ImageCacheService {
     return dir;
   }
 
+  /// Bump when cached files may be wrong in a way nothing else can detect (the
+  /// cache is keyed by barcode, so a file holding the wrong picture looks
+  /// valid forever).
+  static const _cacheEpoch = 2;
+
+  /// One-time wipe of every cached photo after an app update that changes
+  /// [_cacheEpoch]. Epoch 2: before the image-sync fix, a catalogue photo that
+  /// replaced a product's own photo could be overwritten in the cache by the
+  /// OLD photo, leaving the new picture on the product but the old one on
+  /// screen until the cache was cleared by hand. Photos simply re-download
+  /// (~50KB each). The marker lives beside - not inside - the cache folder so
+  /// Settings > Clear image cache doesn't remove it.
+  static Future<void> resetIfStale() async {
+    try {
+      final docs = await getApplicationDocumentsDirectory();
+      final marker = File('${docs.path}/product_images_epoch');
+      if (await marker.exists() &&
+          await marker.readAsString() == '$_cacheEpoch') {
+        return;
+      }
+      await clearCache();
+      await marker.writeAsString('$_cacheEpoch', flush: true);
+    } catch (_) {
+      // Best-effort: worst case the stale files stay until the next launch.
+    }
+  }
+
   static Future<File> _fileFor(String cacheKey) async {
     final dir = await _dir();
     return File('${dir.path}/$cacheKey.jpg');

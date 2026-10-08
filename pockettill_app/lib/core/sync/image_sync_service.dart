@@ -116,7 +116,16 @@ class ImageSyncService {
       // row happened to scroll into view (found 2026-09-08 - the point of
       // a background sync step is exactly to fill this in proactively,
       // not leave it to chance display timing).
-      for (final product in products) {
+      //
+      // Re-read the products: step 1 may just have swapped a photo's
+      // imageUrl, and iterating the pre-step-1 list here would re-download the
+      // *old* URL into the barcode-keyed cache the instant step 1 deleted it,
+      // then record that path - leaving the new URL on the product but the
+      // old picture on screen, forever (alreadyCached is true from then on).
+      // That is what kept a replaced catalogue photo showing the old image
+      // until the cache was cleared by hand (reported 2026-10-08).
+      final currentProducts = await _productRepository.getAll();
+      for (final product in currentProducts) {
         final url = product.imageUrl;
         if (url == null || url.isEmpty) continue;
 

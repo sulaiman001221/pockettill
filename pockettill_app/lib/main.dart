@@ -7,6 +7,7 @@ import 'package:isar_community/isar.dart';
 
 import 'app.dart';
 import 'core/database/isar_service.dart';
+import 'core/storage/image_cache_service.dart';
 import 'core/hardware/camera_scanner_service.dart';
 import 'core/hardware/hardware_detector.dart';
 import 'core/hardware/noop_printer_service.dart';
@@ -50,6 +51,7 @@ Future<void> main() async {
 
   await HardwareDetector.init();
   await IsarService.init();
+  await ImageCacheService.resetIfStale();
   await SupabaseService.init();
 
   final isSunmi = HardwareDetector.isSunmiDevice();
