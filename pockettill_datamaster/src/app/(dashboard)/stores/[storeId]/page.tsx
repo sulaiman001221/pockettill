@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/table";
 import { canManageStores, getCurrentAdmin } from "@/lib/auth";
 import { getStoreDetail } from "@/lib/data/stores";
+import { INACTIVE_AFTER_DAYS } from "@/lib/store-status";
 import { formatCurrency, formatDate, formatDateTime, formatMaskedPhone, formatRelativeTime } from "@/lib/format";
 
 export const metadata = { title: "Store detail" };
@@ -69,10 +70,17 @@ export default async function StoreDetailPage({
           </div>
           <div>
             <p className="text-sm text-muted-foreground">Status</p>
-            {store.active ? (
+            {store.status === "active" ? (
               <Badge className="border-transparent bg-emerald-500/10 text-emerald-500">Active</Badge>
             ) : (
-              <Badge variant="outline">Inactive</Badge>
+              <div className="flex flex-col items-start gap-1">
+                <Badge variant="outline">Inactive</Badge>
+                <span className="text-xs text-muted-foreground">
+                  {store.status === "deactivated"
+                    ? "Deactivated by an admin"
+                    : `No sync in ${INACTIVE_AFTER_DAYS}+ days - returns to Active after its next sync`}
+                </span>
+              </div>
             )}
           </div>
         </CardContent>

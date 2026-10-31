@@ -1,6 +1,7 @@
 import "server-only";
 import { unstable_cache } from "next/cache";
 import { createServiceRoleClient } from "@/lib/supabase/server";
+import { getStoreStatus, type StoreStatus } from "@/lib/store-status";
 
 /** Tag used to bust every cached read in this file after a store mutation. */
 export const STORES_CACHE_TAG = "stores";
@@ -30,14 +31,16 @@ async function _getOverviewStats(): Promise<OverviewStats> {
   const last24hIso = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
 
   const [
-    { count: activeStores },
+    { data: storeRows },
+    { data: lastSyncRows },
     { count: totalStores },
     { count: newThisMonth },
     { count: foundingStores },
     { count: syncedLast24hCount },
     { count: verifiedProducts },
   ] = await Promise.all([
-    supabase.from("stores").select("*", { count: "exact", head: true }).eq("active", true),
+    supabase.from("stores").select("uuid, active, created_at"),
+    supabase.from("store_sync_status").select("store_id, last_synced_at"),
     supabase.from("stores").select("*", { count: "exact", head: true }),
     supabase.from("stores").select("*", { count: "exact", head: true }).gte("created_at", startOfCurrentMonthIso()),
     supabase.from("stores").select("*", { count: "exact", head: true }).eq("is_beta_adopter", true),
@@ -49,9 +52,14 @@ async function _getOverviewStats(): Promise<OverviewStats> {
   ]);
 
   const total = totalStores ?? 0;
+  // "Active" = switched on AND synced within INACTIVE_AFTER_DAYS (see store-status.ts).
+  const lastSyncByStore = new Map((lastSyncRows ?? []).map((r) => [r.store_id, r.last_synced_at]));
+  const activeStores = (storeRows ?? []).filter(
+    (s) => getStoreStatus(s.active, lastSyncByStore.get(s.uuid) ?? null, s.created_at) === "active"
+  ).length;
 
   return {
-    activeStores: activeStores ?? 0,
+    activeStores,
     totalStores: total,
     newThisMonth: newThisMonth ?? 0,
     foundingStores: foundingStores ?? 0,
@@ -116,7 +124,9 @@ export interface StoreListRow {
   phone: string;
   createdAt: string;
   isFounding: boolean;
+  /** Effective status: switched on AND synced within the last 30 days. */
   active: boolean;
+  status: StoreStatus;
   lastSyncedAt: string | null;
 }
 
@@ -135,8 +145,7 @@ async function _getStoresList(params: {
     query = query.or(`name.ilike.%${search}%,owner_phone.ilike.%${search}%`);
   }
 
-  if (params.filter === "active") query = query.eq("active", true);
-  if (params.filter === "inactive") query = query.eq("active", false);
+  // "active"/"inactive" depend on the last sync, so they're applied below.
   if (params.filter === "founding") query = query.eq("is_beta_adopter", true);
 
   query = query.order("created_at", { ascending: false });
@@ -152,15 +161,24 @@ async function _getStoresList(params: {
 
   const syncMap = new Map((syncRows ?? []).map((r) => [r.store_id, r.last_synced_at]));
 
-  return (stores ?? []).map((s) => ({
-    id: s.uuid,
-    name: s.name,
-    phone: s.owner_phone,
-    createdAt: s.created_at,
-    isFounding: s.is_beta_adopter,
-    active: s.active,
-    lastSyncedAt: syncMap.get(s.uuid) ?? null,
-  }));
+  const rows = (stores ?? []).map((s) => {
+    const lastSyncedAt = syncMap.get(s.uuid) ?? null;
+    const status = getStoreStatus(s.active, lastSyncedAt, s.created_at);
+    return {
+      id: s.uuid,
+      name: s.name,
+      phone: s.owner_phone,
+      createdAt: s.created_at,
+      isFounding: s.is_beta_adopter,
+      active: status === "active",
+      status,
+      lastSyncedAt,
+    };
+  });
+
+  if (params.filter === "active") return rows.filter((r) => r.active);
+  if (params.filter === "inactive") return rows.filter((r) => !r.active);
+  return rows;
 }
 
 export const getStoresList = unstable_cache(_getStoresList, ["stores-list"], {
@@ -174,7 +192,10 @@ export interface StoreDetail {
     name: string;
     phone: string;
     createdAt: string;
+    /** The admin on/off switch (stores.active) - what Deactivate/Reactivate flips. */
     active: boolean;
+    /** Effective status shown as the badge: also Inactive after 30 days without a sync. */
+    status: StoreStatus;
     isFounding: boolean;
   };
   syncHistory: {
@@ -222,6 +243,11 @@ async function _getStoreDetail(storeId: string): Promise<StoreDetail | null> {
       phone: storeRes.data.owner_phone,
       createdAt: storeRes.data.created_at,
       active: storeRes.data.active,
+      status: getStoreStatus(
+        storeRes.data.active,
+        syncRes.data?.[0]?.created_at ?? null,
+        storeRes.data.created_at
+      ),
       isFounding: storeRes.data.is_beta_adopter,
     },
     syncHistory: (syncRes.data ?? []).map((r) => ({
