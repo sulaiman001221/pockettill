@@ -5,7 +5,7 @@ export const siteConfig = {
     "Free POS app for spaza shops. Manage stock, track sales, run credit — works offline. Built for South African informal retailers.",
   url: "https://pockettill.co.za",
   playStoreUrl:
-    "https://play.google.com/store/apps/details?id=co.pockettill.app",
+    "https://play.google.com/store/apps/details?id=com.pockettill.app",
   whatsappNumber: "27625631968",
   whatsappUrl:
     "https://wa.me/27625631968?text=I%20want%20to%20be%20notified%20about%20the%20PocketTill%20terminal",
